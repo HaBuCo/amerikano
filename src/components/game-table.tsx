@@ -1,20 +1,52 @@
-import { useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { palette as p } from '@/constants/palette';
 import { CARD_HEIGHT, CARD_WIDTH, PlayingCard } from './playing-card';
 import { PrivateGameView } from '@/game/view';
-import { GameAction, MeldType } from '@/game/types';
+import { Card, GameAction, MeldType } from '@/game/types';
 import { ROUND_CONTRACTS } from '@/game/contracts';
 import { isValidMeld } from '@/game/engine';
 import { GameSound, useGameSounds } from '@/audio/game-sounds';
-import { arrangeHand, loadHandOrder, moveCardBefore, reconcileHandOrder, saveHandOrder } from '@/game/hand-order';
+import { arrangeHand, loadHandOrder, moveCardToIndex, reconcileHandOrder, saveHandOrder } from '@/game/hand-order';
 
 type Props = {
   game: PrivateGameView; viewerId: string; modeLabel: string; blocked?: boolean;
   canAdvance?: boolean; error?: string; onAction: (a: GameAction) => void; onExit: () => void;
 };
 type Pending = { type: MeldType; cardIds: string[] };
+type DraggableCardProps = {
+  card: Card; index: number; step: number; cardsPerRow: number;
+  arranging: boolean; selected: boolean; onPress?: () => void; onDragStart: () => void;
+  onDrop: (cardId: string, targetIndex: number) => void;
+};
+
+function DraggableHandCard({ card, index, step, cardsPerRow, arranging, selected, onPress, onDragStart, onDrop }: DraggableCardProps) {
+  const [movement] = useState(() => new Animated.ValueXY());
+  const [dragging, setDragging] = useState(false);
+  const responder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gesture) => arranging && Math.abs(gesture.dx) + Math.abs(gesture.dy) > 8,
+    onPanResponderGrant: () => { movement.setValue({ x: 0, y: 0 }); setDragging(true); onDragStart(); },
+    onPanResponderMove: Animated.event([null, { dx: movement.x, dy: movement.y }], { useNativeDriver: false }),
+    onPanResponderRelease: (_, gesture) => {
+      const columnMove = Math.round(gesture.dx / step);
+      const rowMove = Math.round(gesture.dy / (CARD_HEIGHT + 8));
+      onDrop(card.id, index + columnMove + rowMove * cardsPerRow);
+      movement.setValue({ x: 0, y: 0 }); setDragging(false);
+    },
+    onPanResponderTerminate: () => { movement.setValue({ x: 0, y: 0 }); setDragging(false); },
+    onPanResponderTerminationRequest: () => false,
+  }), [arranging, card.id, cardsPerRow, index, movement, onDragStart, onDrop, step]);
+  return <Animated.View {...responder.panHandlers} style={{
+    marginLeft: index % cardsPerRow ? step - CARD_WIDTH : 0,
+    zIndex: dragging ? 999 : index % cardsPerRow,
+    opacity: dragging ? 0.9 : 1,
+    transform: [...movement.getTranslateTransform(), { scale: dragging ? 1.06 : 1 }],
+  }}>
+    <PlayingCard card={card} selected={selected || dragging} onPress={arranging ? undefined : onPress} />
+  </Animated.View>;
+}
+
 export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = true, error, onAction, onExit }: Props) {
   const [selected, setSelected] = useState<string[]>([]);
   const [pending, setPending] = useState<Pending[]>([]);
@@ -22,7 +54,6 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   const [exitOpen, setExitOpen] = useState(false);
   const [scoresOpen, setScoresOpen] = useState(false);
   const [arranging, setArranging] = useState(false);
-  const [pickedCardId, setPickedCardId] = useState<string | null>(null);
   const { enabled: soundEnabled, toggle: toggleSound, play: playSound } = useGameSounds();
   const previousPhase = useRef(game.phase);
   const { width } = useWindowDimensions();
@@ -59,7 +90,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     let active = true;
     if (loadedOrderKey.current !== orderKey) {
       loadedOrderKey.current = orderKey;
-      setArranging(false); setPickedCardId(null);
+      setArranging(false);
       void loadHandOrder(orderKey).then((saved) => {
         if (active) setHandOrder(reconcileHandOrder(saved, me.hand));
       });
@@ -70,12 +101,9 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     // handSignature tracks draws/discards without depending on the mutable array.
   }, [orderKey, handSignature, me.hand]);
 
-  function arrangeCard(cardId: string) {
-    playSound('tap');
-    if (!pickedCardId) { setPickedCardId(cardId); return; }
-    if (pickedCardId === cardId) { setPickedCardId(null); return; }
-    const next = moveCardBefore(arrangedHand.map((card) => card.id), pickedCardId, cardId);
-    setHandOrder(next); setPickedCardId(null);
+  function dropCard(cardId: string, targetIndex: number) {
+    const next = moveCardToIndex(arrangedHand.map((card) => card.id), cardId, targetIndex);
+    setHandOrder(next);
     void saveHandOrder(orderKey, next);
   }
 
@@ -85,7 +113,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       setNotice('Elini dizmeden önce hazırladığın grupları geri al.');
       return;
     }
-    setSelected([]); setPickedCardId(null); setNotice(''); setArranging((current) => !current);
+    setSelected([]); setNotice(''); setArranging((current) => !current);
   }
 
   function actionSound(action: GameAction): GameSound {
@@ -188,13 +216,13 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
         <View style={s.handMeta}><Text style={s.small}>{me.score} puan</Text><Pressable accessibilityRole="button" accessibilityLabel={arranging ? 'Kart dizmeyi bitir' : 'Eli istediğin gibi diz'} onPress={toggleArrange} style={[s.arrangeButton, arranging && s.arrangeButtonActive]}><Text style={s.gold}>{arranging ? 'Bitti' : 'Eli diz'}</Text></Pressable></View>
       </View>
       {!!(notice || error) && <Text accessibilityLiveRegion="polite" style={s.notice}>{error || notice}</Text>}
-      {arranging && <Text accessibilityLiveRegion="polite" style={s.arrangeHint}>{pickedCardId ? 'Şimdi taşımak istediğin konumdaki karta dokun.' : 'Taşımak için bir karta dokun.'}</Text>}
+      {arranging && <Text accessibilityLiveRegion="polite" style={s.arrangeHint}>Kartı tutup istediğin konuma sürükle ve bırak.</Text>}
       {!!pending.length && <View style={s.pending}><ScrollView horizontal>{pending.map((g, i) => <Text key={i} style={s.pendingLabel}>{g.cardIds.length}’lü {g.type === 'set' ? 'küt' : 'seri'}  </Text>)}</ScrollView><Pressable onPress={() => { setPending([]); setSelected([]); }}><Text style={s.gold}>Geri al</Text></Pressable></View>}
       <ScrollView style={s.handCards} contentContainerStyle={s.handScroll}>
         <View style={s.rows}>{rows.map((row, index) => <View key={index} style={s.cardRow}>
-          {row.map((c, i) => <View key={c.id} style={{ marginLeft: i ? step - CARD_WIDTH : 0, zIndex: i }}>
-            <PlayingCard card={c} selected={arranging ? pickedCardId === c.id : validSelected.includes(c.id)} onPress={arranging ? () => arrangeCard(c.id) : playing ? () => { playSound('tap'); setSelected(old => old.includes(c.id) ? old.filter(id => id !== c.id) : [...old, c.id]); } : undefined} />
-          </View>)}
+          {row.map((c, i) => <DraggableHandCard key={c.id} card={c} index={index * cardsPerRow + i} step={step} cardsPerRow={cardsPerRow}
+            arranging={arranging} selected={validSelected.includes(c.id)} onDragStart={() => playSound('tap')} onDrop={dropCard}
+            onPress={playing ? () => { playSound('tap'); setSelected(old => old.includes(c.id) ? old.filter(id => id !== c.id) : [...old, c.id]); } : undefined} />)}
         </View>)}</View>
       </ScrollView>
       <View style={[s.actions, arranging && s.actionsMuted]}>

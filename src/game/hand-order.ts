@@ -29,9 +29,8 @@ export function arrangeHand(cards: Card[], order: string[]) {
   return reconcileHandOrder(order, cards).map((id) => byId.get(id)!);
 }
 
-export function moveCardBefore(order: string[], movingId: string, targetId: string) {
+export function moveCardToIndex(order: string[], movingId: string, targetIndex: number) {
   const next = order.filter((id) => id !== movingId);
-  const targetIndex = next.indexOf(targetId);
-  next.splice(targetIndex < 0 ? next.length : targetIndex, 0, movingId);
+  next.splice(Math.max(0, Math.min(targetIndex, next.length)), 0, movingId);
   return next;
 }
