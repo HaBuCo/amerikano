@@ -8,6 +8,7 @@ import { GameAction, MeldType } from '@/game/types';
 import { ROUND_CONTRACTS } from '@/game/contracts';
 import { isValidMeld } from '@/game/engine';
 import { GameSound, useGameSounds } from '@/audio/game-sounds';
+import { arrangeHand, loadHandOrder, moveCardBefore, reconcileHandOrder, saveHandOrder } from '@/game/hand-order';
 
 type Props = {
   game: PrivateGameView; viewerId: string; modeLabel: string; blocked?: boolean;
@@ -20,11 +21,17 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   const [notice, setNotice] = useState('');
   const [exitOpen, setExitOpen] = useState(false);
   const [scoresOpen, setScoresOpen] = useState(false);
+  const [arranging, setArranging] = useState(false);
+  const [pickedCardId, setPickedCardId] = useState<string | null>(null);
   const { enabled: soundEnabled, toggle: toggleSound, play: playSound } = useGameSounds();
   const previousPhase = useRef(game.phase);
   const { width, height } = useWindowDimensions();
   const landscape = width > height;
   const me = game.players.find(player => player.id === viewerId)!;
+  const orderKey = `${modeLabel}:${game.roundIndex}:${viewerId}`;
+  const handSignature = me.hand.map((card) => card.id).join('|');
+  const [handOrder, setHandOrder] = useState(() => me.hand.map((card) => card.id));
+  const loadedOrderKey = useRef('');
   const current = game.players[game.currentPlayerIndex];
   const myTurn = current.id === viewerId && !blocked;
   const playing = myTurn && game.phase === 'play';
@@ -33,7 +40,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   const claimPlayer = game.players.find(pl => pl.id === game.claim?.playerIds[0]);
   const openedThisTurn = me.openedTurn === game.turnCount;
   const stagedIds = new Set(pending.flatMap(g => g.cardIds));
-  const cards = me.hand.filter(c => !stagedIds.has(c.id));
+  const arrangedHand = arrangeHand(me.hand, handOrder);
+  const cards = arrangedHand.filter(c => !stagedIds.has(c.id));
   const validSelected = selected.filter(id => cards.some(c => c.id === id));
   const contract = ROUND_CONTRACTS[game.roundIndex];
   const over = game.phase === 'round-over' || game.phase === 'game-over';
@@ -46,6 +54,39 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     if (previousPhase.current !== game.phase && (game.phase === 'round-over' || game.phase === 'game-over')) playSound('win');
     previousPhase.current = game.phase;
   }, [game.phase, playSound]);
+
+  useEffect(() => {
+    let active = true;
+    if (loadedOrderKey.current !== orderKey) {
+      loadedOrderKey.current = orderKey;
+      setArranging(false); setPickedCardId(null);
+      void loadHandOrder(orderKey).then((saved) => {
+        if (active) setHandOrder(reconcileHandOrder(saved, me.hand));
+      });
+    } else {
+      setHandOrder((current) => reconcileHandOrder(current, me.hand));
+    }
+    return () => { active = false; };
+    // handSignature tracks draws/discards without depending on the mutable array.
+  }, [orderKey, handSignature, me.hand]);
+
+  function arrangeCard(cardId: string) {
+    playSound('tap');
+    if (!pickedCardId) { setPickedCardId(cardId); return; }
+    if (pickedCardId === cardId) { setPickedCardId(null); return; }
+    const next = moveCardBefore(arrangedHand.map((card) => card.id), pickedCardId, cardId);
+    setHandOrder(next); setPickedCardId(null);
+    void saveHandOrder(orderKey, next);
+  }
+
+  function toggleArrange() {
+    playSound('tap');
+    if (!arranging && pending.length) {
+      setNotice('Elini dizmeden önce hazırladığın grupları geri al.');
+      return;
+    }
+    setSelected([]); setPickedCardId(null); setNotice(''); setArranging((current) => !current);
+  }
 
   function actionSound(action: GameAction): GameSound {
     switch (action.type) {
@@ -143,20 +184,24 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       </View> : <Text style={s.emptyTable}>Açılan gruplar burada görünecek.</Text>}
     </ScrollView>
     <View style={[s.hand, landscape && s.handLandscape]}>
-      <View style={s.handHeading}><Text style={s.handName}>{me.name} <Text style={s.small}>· {me.hand.length} kart</Text></Text><Text style={s.small}>{me.score} puan</Text></View>
+      <View style={s.handHeading}>
+        <Text style={s.handName}>{me.name} <Text style={s.small}>· {me.hand.length} kart</Text></Text>
+        <View style={s.handMeta}><Text style={s.small}>{me.score} puan</Text><Pressable accessibilityRole="button" accessibilityLabel={arranging ? 'Kart dizmeyi bitir' : 'Eli istediğin gibi diz'} onPress={toggleArrange} style={[s.arrangeButton, arranging && s.arrangeButtonActive]}><Text style={s.gold}>{arranging ? 'Bitti' : 'Eli diz'}</Text></Pressable></View>
+      </View>
       {!!(notice || error) && <Text accessibilityLiveRegion="polite" style={s.notice}>{error || notice}</Text>}
+      {arranging && <Text accessibilityLiveRegion="polite" style={s.arrangeHint}>{pickedCardId ? 'Şimdi taşımak istediğin konumdaki karta dokun.' : 'Taşımak için bir karta dokun.'}</Text>}
       {!!pending.length && <View style={s.pending}><ScrollView horizontal>{pending.map((g, i) => <Text key={i} style={s.pendingLabel}>{g.cardIds.length}’lü {g.type === 'set' ? 'küt' : 'seri'}  </Text>)}</ScrollView><Pressable onPress={() => { setPending([]); setSelected([]); }}><Text style={s.gold}>Geri al</Text></Pressable></View>}
       <ScrollView style={landscape ? s.handCardsLandscape : s.handCardsPortrait} contentContainerStyle={[s.handScroll, landscape && s.handScrollLandscape]}>
         <View style={s.rows}>{rows.map((row, index) => <View key={index} style={s.cardRow}>
           {row.map((c, i) => <View key={c.id} style={{ marginLeft: i ? step - 72 : 0, zIndex: i }}>
-            <PlayingCard card={c} selected={validSelected.includes(c.id)} onPress={playing ? () => { playSound('tap'); setSelected(old => old.includes(c.id) ? old.filter(id => id !== c.id) : [...old, c.id]); } : undefined} />
+            <PlayingCard card={c} selected={arranging ? pickedCardId === c.id : validSelected.includes(c.id)} onPress={arranging ? () => arrangeCard(c.id) : playing ? () => { playSound('tap'); setSelected(old => old.includes(c.id) ? old.filter(id => id !== c.id) : [...old, c.id]); } : undefined} />
           </View>)}
         </View>)}</View>
       </ScrollView>
-      <View style={s.actions}>
-        <Pressable accessibilityRole="button" disabled={!playing} onPress={() => stage('set')} style={[s.secondary, !playing && s.disabled]}><Text style={s.actionText}>Küt yap</Text></Pressable>
-        <Pressable accessibilityRole="button" disabled={!playing} onPress={() => stage('run')} style={[s.secondary, !playing && s.disabled]}><Text style={s.actionText}>Seri yap</Text></Pressable>
-        <Pressable accessibilityRole="button" disabled={!playing} onPress={pending.length ? open : discard} style={[s.primary, !playing && s.disabled]}><Text style={s.primaryText}>{pending.length ? contract.final ? 'Elden bit' : 'Yere aç' : 'Kart at'}</Text></Pressable>
+      <View style={[s.actions, arranging && s.actionsMuted]}>
+        <Pressable accessibilityRole="button" disabled={!playing || arranging} onPress={() => stage('set')} style={[s.secondary, (!playing || arranging) && s.disabled]}><Text style={s.actionText}>Küt yap</Text></Pressable>
+        <Pressable accessibilityRole="button" disabled={!playing || arranging} onPress={() => stage('run')} style={[s.secondary, (!playing || arranging) && s.disabled]}><Text style={s.actionText}>Seri yap</Text></Pressable>
+        <Pressable accessibilityRole="button" disabled={!playing || arranging} onPress={pending.length ? open : discard} style={[s.primary, (!playing || arranging) && s.disabled]}><Text style={s.primaryText}>{pending.length ? contract.final ? 'Elden bit' : 'Yere aç' : 'Kart at'}</Text></Pressable>
       </View>
     </View>
     </View>
@@ -203,13 +248,14 @@ const s = StyleSheet.create({
   hand: { paddingTop: 10, paddingBottom: 8, borderTopWidth: 1, borderColor: '#dab77b50', backgroundColor: '#071d17' },
   handLandscape: { width: '46%', height: '100%', borderTopWidth: 0, paddingTop: 7 },
   handHeading: { flexDirection: 'row', paddingHorizontal: 18, justifyContent: 'space-between', alignItems: 'center' }, handName: { color: p.cream, fontSize: 15, fontWeight: '700' },
+  handMeta: { flexDirection: 'row', alignItems: 'center', gap: 9 }, arrangeButton: { minHeight: 30, paddingHorizontal: 10, borderWidth: 1, borderColor: p.line, borderRadius: 9, justifyContent: 'center' }, arrangeButtonActive: { backgroundColor: '#d9a44120', borderColor: p.gold },
   handCardsPortrait: { maxHeight: 244 }, handCardsLandscape: { flex: 1 },
   handScroll: { paddingHorizontal: 18, paddingTop: 20, paddingBottom: 4, flexGrow: 1, justifyContent: 'center' }, handScrollLandscape: { paddingTop: 8 },
   rows: { gap: 8 }, cardRow: { flexDirection: 'row' }, actions: { flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingTop: 10 },
   secondary: { minHeight: 44, borderWidth: 1, borderColor: p.line, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flex: 1 },
   primary: { minHeight: 44, borderRadius: 11, backgroundColor: p.gold, alignItems: 'center', justifyContent: 'center', flex: 1.2 },
   actionText: { color: p.cream, fontSize: 13, fontWeight: '700' }, primaryText: { color: p.ink, fontSize: 14, fontWeight: '800' }, disabled: { opacity: 0.35 },
-  notice: { color: '#ffc88a', paddingHorizontal: 18, marginTop: 6, fontSize: 12 }, pending: { flexDirection: 'row', marginHorizontal: 18, marginTop: 8, padding: 8, backgroundColor: '#d9a44118', borderRadius: 8 },
+  notice: { color: '#ffc88a', paddingHorizontal: 18, marginTop: 6, fontSize: 12 }, arrangeHint: { color: p.gold, paddingHorizontal: 18, marginTop: 6, fontSize: 11 }, actionsMuted: { opacity: 0.35 }, pending: { flexDirection: 'row', marginHorizontal: 18, marginTop: 8, padding: 8, backgroundColor: '#d9a44118', borderRadius: 8 },
   pendingLabel: { color: p.cream, fontSize: 12 }, gold: { color: p.gold, fontSize: 12 },
   backdrop: { flex: 1, backgroundColor: '#000b', justifyContent: 'center', padding: 24 }, sheet: { width: '100%', maxWidth: 480, alignSelf: 'center', backgroundColor: '#f5eedf', borderRadius: 23, padding: 25, gap: 14 },
   resultIcon: { textAlign: 'center', color: '#997431', fontSize: 36 }, resultTitle: { color: '#142c22', fontWeight: '800', fontSize: 25, textAlign: 'center' }, resultCaption: { color: '#59675f', fontSize: 13, lineHeight: 20, textAlign: 'center' },
