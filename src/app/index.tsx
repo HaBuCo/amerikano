@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlayingCard } from '@/components/playing-card';
 import { palette } from '@/constants/palette';
 import { Card } from '@/game/types';
+import { useAuth } from '@/network/auth';
 
 const sampleCards: Card[] = [
   { id: 'hero-1', rank: 'Q', suit: 'hearts', isJoker: false },
@@ -13,12 +14,17 @@ const sampleCards: Card[] = [
 ];
 
 export default function HomeScreen() {
+  const auth = useAuth();
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.brandRow}>
           <View style={styles.brandMark}><Text style={styles.brandLetter}>A</Text></View>
           <Text style={styles.brand}>AMERİKANO</Text>
+          <View style={{ flex: 1 }} />
+          <Pressable accessibilityRole="button" onPress={() => router.push('/login')}>
+            <Text style={styles.account}>{auth.status === 'signed-in' ? 'Hesabım' : 'Giriş yap'}</Text>
+          </Pressable>
         </View>
 
         <View style={styles.hero}>
@@ -60,6 +66,7 @@ const styles = StyleSheet.create({
   brandMark: { width: 30, height: 38, borderRadius: 5, backgroundColor: palette.cream, alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-6deg' }] },
   brandLetter: { color: palette.felt, fontSize: 20, fontWeight: '900' },
   brand: { color: palette.cream, fontSize: 16, fontWeight: '900', letterSpacing: 3 },
+  account: { color: palette.gold, fontSize: 13, fontWeight: '700', paddingVertical: 8, paddingLeft: 12 },
   hero: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 36, paddingBottom: 30 },
   cardFan: { width: 290, height: 198, marginBottom: 22 },
   fanCard: { position: 'absolute' },

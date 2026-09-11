@@ -10,7 +10,8 @@
     "ios": {
       "icon": "./assets/expo.icon",
       "supportsTablet": true,
-      "bundleIdentifier": "com.amerikano.game"
+      "bundleIdentifier": "com.amerikano.game",
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {
@@ -44,6 +45,13 @@
           "recordAudioAndroid": false,
           "enableBackgroundPlayback": false,
           "enableBackgroundRecording": false
+        }
+      ],
+      "expo-apple-authentication",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.REPLACE_WITH_IOS_CLIENT_ID"
         }
       ]
     ],
