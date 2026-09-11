@@ -24,6 +24,7 @@ Terminalde görünen QR kodunu Expo Go ile tarayın. Android emülatörü için 
 - 14/13 dağıtım, ters yönde sıra, ceza kartıyla sıra dışı alma
 - Açılış sırası işleme kilidi, atomik final ve kapalı bitiş kartı
 - Tek oyunculu oyunu cihazda otomatik saklama, devam etme veya yeni oyun başlatma
+- Kart çekme, atma, açma, joker ve kazanma için özgün kısa sesler; kalıcı sessize alma
 - Kart çekme, grup hazırlama, yere açma ve kart atma akışı
 - El sonu ceza puanları ve oyun sonu sıralaması
 

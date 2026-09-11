@@ -2,10 +2,11 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { palette } from '@/constants/palette';
+import { GameSoundsProvider } from '@/audio/game-sounds';
 
 export default function RootLayout() {
   return (
-    <>
+    <GameSoundsProvider>
       <StatusBar style="light" />
       <Stack
         screenOptions={{
@@ -21,6 +22,6 @@ export default function RootLayout() {
         <Stack.Screen name="game" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="online" options={{ headerShown: false }} />
       </Stack>
-    </>
+    </GameSoundsProvider>
   );
 }

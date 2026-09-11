@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { palette as p } from '@/constants/palette';
@@ -7,6 +7,7 @@ import { PrivateGameView } from '@/game/view';
 import { GameAction, MeldType } from '@/game/types';
 import { ROUND_CONTRACTS } from '@/game/contracts';
 import { isValidMeld } from '@/game/engine';
+import { GameSound, useGameSounds } from '@/audio/game-sounds';
 
 type Props = {
   game: PrivateGameView; viewerId: string; modeLabel: string; blocked?: boolean;
@@ -19,6 +20,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   const [notice, setNotice] = useState('');
   const [exitOpen, setExitOpen] = useState(false);
   const [scoresOpen, setScoresOpen] = useState(false);
+  const { enabled: soundEnabled, toggle: toggleSound, play: playSound } = useGameSounds();
+  const previousPhase = useRef(game.phase);
   const { width } = useWindowDimensions();
   const me = game.players.find(player => player.id === viewerId)!;
   const current = game.players[game.currentPlayerIndex];
@@ -37,9 +40,28 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   const step = Math.max(27, Math.min(55, (Math.min(width, 760) - 40 - 72) / 6));
   const rows = Array.from({ length: Math.ceil(cards.length / 7) }, (_, i) => cards.slice(i * 7, i * 7 + 7));
 
-  function act(action: GameAction) { setNotice(''); onAction(action); }
+  useEffect(() => {
+    if (previousPhase.current !== game.phase && (game.phase === 'round-over' || game.phase === 'game-over')) playSound('win');
+    previousPhase.current = game.phase;
+  }, [game.phase, playSound]);
+
+  function actionSound(action: GameAction): GameSound {
+    switch (action.type) {
+      case 'draw': return 'draw';
+      case 'discard': return 'place';
+      case 'open':
+      case 'finish': return 'meld';
+      case 'replaceJoker': return 'joker';
+      case 'layoff': return 'place';
+      case 'claim': return action.take ? 'draw' : 'tap';
+      case 'next': return 'shuffle';
+      default: return 'tap';
+    }
+  }
+  function act(action: GameAction) { setNotice(''); playSound(actionSound(action)); onAction(action); }
   function stage(type: MeldType) {
     if (!playing) return;
+    playSound('tap');
     const group = me.hand.filter(c => validSelected.includes(c.id));
     if (!isValidMeld(group, type)) {
       setNotice(type === 'set' ? 'Küt: aynı değer, farklı türler; 3 veya 4 kart.' : 'Seri: aynı türden ardışık en az 3 kart.'); return;
@@ -75,7 +97,10 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     <View style={s.header}>
       <Pressable accessibilityRole="button" accessibilityLabel="Masadan çık" onPress={() => setExitOpen(true)} style={s.iconButton}><Text style={s.white}>←</Text></Pressable>
       <View style={s.center}><Text style={s.eyebrow}>{modeLabel}</Text><Text style={s.round}>EL {game.roundIndex + 1} / 12 · {contract.shortTitle}</Text></View>
-      <Pressable accessibilityRole="button" accessibilityLabel="Puan tablosu" style={s.iconButton} onPress={() => setScoresOpen(true)}><Text style={s.white}>≡</Text></Pressable>
+      <View style={s.headerActions}>
+        <Pressable accessibilityRole="button" accessibilityLabel={soundEnabled ? 'Sesi kapat' : 'Sesi aç'} style={s.iconButton} onPress={toggleSound}><Text style={s.soundIcon}>{soundEnabled ? '♪' : '×'}</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Puan tablosu" style={s.iconButton} onPress={() => { playSound('tap'); setScoresOpen(true); }}><Text style={s.white}>≡</Text></Pressable>
+      </View>
     </View>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.playersBar} contentContainerStyle={s.players}>
       {game.players.filter(pl => pl.id !== viewerId).map(pl => <View key={pl.id} style={[s.opponent, current.id === pl.id && s.activeOpponent]}>
@@ -121,7 +146,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       <ScrollView style={{ maxHeight: 244 }} contentContainerStyle={s.handScroll}>
         <View style={s.rows}>{rows.map((row, index) => <View key={index} style={s.cardRow}>
           {row.map((c, i) => <View key={c.id} style={{ marginLeft: i ? step - 72 : 0, zIndex: i }}>
-            <PlayingCard card={c} selected={validSelected.includes(c.id)} onPress={playing ? () => setSelected(old => old.includes(c.id) ? old.filter(id => id !== c.id) : [...old, c.id]) : undefined} />
+            <PlayingCard card={c} selected={validSelected.includes(c.id)} onPress={playing ? () => { playSound('tap'); setSelected(old => old.includes(c.id) ? old.filter(id => id !== c.id) : [...old, c.id]); } : undefined} />
           </View>)}
         </View>)}</View>
       </ScrollView>
@@ -154,7 +179,8 @@ const s = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#09271e', width: '100%', maxWidth: 760, alignSelf: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 9 },
   iconButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: p.line, borderRadius: 20 },
-  white: { color: p.cream, fontSize: 20 }, center: { alignItems: 'center', gap: 4 }, eyebrow: { color: p.gold, fontSize: 9, letterSpacing: 2, fontWeight: '800' },
+  headerActions: { flexDirection: 'row', gap: 7 }, soundIcon: { color: p.gold, fontSize: 19, fontWeight: '800' },
+  white: { color: p.cream, fontSize: 20 }, center: { alignItems: 'center', gap: 4, marginLeft: 45 }, eyebrow: { color: p.gold, fontSize: 9, letterSpacing: 2, fontWeight: '800' },
   round: { color: p.cream, fontWeight: '700', fontSize: 13 }, playersBar: { flexGrow: 0, maxHeight: 80, borderBottomWidth: 1, borderColor: p.line },
   players: { gap: 10, paddingHorizontal: 14, paddingVertical: 6 }, opponent: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 6, borderRadius: 12, borderWidth: 1, borderColor: 'transparent' },
   activeOpponent: { borderColor: p.gold, backgroundColor: '#d9a44115' }, avatar: { width: 31, height: 31, borderRadius: 16, backgroundColor: '#dcc48e', justifyContent: 'center', alignItems: 'center' },
