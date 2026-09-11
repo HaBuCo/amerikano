@@ -26,6 +26,7 @@ Terminalde görünen QR kodunu Expo Go ile tarayın. Android emülatörü için 
 - Tek oyunculu oyunu cihazda otomatik saklama, devam etme veya yeni oyun başlatma
 - Kart çekme, atma, açma, joker ve kazanma için özgün kısa sesler; kalıcı sessize alma
 - Kartları sürükleyip istenen konuma bırakan, tur değişince korunan kişisel el dizilimi
+- Mobil bellek kullanımı için 300×420 boyutuna optimize edilmiş kart görselleri ve hafif masa gölgeleri
 - Kart çekme, grup hazırlama, yere açma ve kart atma akışı
 - El sonu ceza puanları ve oyun sonu sıralaması
 
@@ -54,3 +55,6 @@ dönüş seçeneği olarak korunmaktadır; mobil istemci artık onu kullanmaz.
 `npm test`, `npm run typecheck`, `npm run lint`.
 Yayınlanan Supabase oda akışının kısa kontrolü için `node scripts/smoke-supabase.mjs`
 kullanılabilir; test geçici odasını tamamlandığında siler.
+
+Kaynak kart görselleri değiştirilirse mobil boyutları yeniden üretmek için
+`powershell -ExecutionPolicy Bypass -File scripts/optimize-card-assets.ps1` çalıştırılabilir.
