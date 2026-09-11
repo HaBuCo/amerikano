@@ -22,7 +22,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   const [scoresOpen, setScoresOpen] = useState(false);
   const { enabled: soundEnabled, toggle: toggleSound, play: playSound } = useGameSounds();
   const previousPhase = useRef(game.phase);
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+  const landscape = width > height;
   const me = game.players.find(player => player.id === viewerId)!;
   const current = game.players[game.currentPlayerIndex];
   const myTurn = current.id === viewerId && !blocked;
@@ -37,7 +38,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   const contract = ROUND_CONTRACTS[game.roundIndex];
   const over = game.phase === 'round-over' || game.phase === 'game-over';
   const winners = game.players.filter(player => player.score === Math.min(...game.players.map(pl => pl.score)));
-  const step = Math.max(27, Math.min(55, (Math.min(width, 760) - 40 - 72) / 6));
+  const handWidth = landscape ? width * 0.46 - 36 : Math.min(width, 760) - 40;
+  const step = Math.max(23, Math.min(55, (handWidth - 72) / 6));
   const rows = Array.from({ length: Math.ceil(cards.length / 7) }, (_, i) => cards.slice(i * 7, i * 7 + 7));
 
   useEffect(() => {
@@ -93,7 +95,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     if (validSelected.length !== 1 || pending.length) { setNotice('Elindeki tam karşılık kartını seç, sonra yerdeki jokere dokun.'); return; }
     act({ type: 'replaceJoker', meldId, jokerId, cardId: validSelected[0] }); setSelected([]);
   }
-  return <SafeAreaView style={s.page}>
+  return <SafeAreaView style={[s.page, landscape && s.pageLandscape]}>
     <View style={s.header}>
       <Pressable accessibilityRole="button" accessibilityLabel="Masadan çık" onPress={() => setExitOpen(true)} style={s.iconButton}><Text style={s.white}>←</Text></Pressable>
       <View style={s.center}><Text style={s.eyebrow}>{modeLabel}</Text><Text style={s.round}>EL {game.roundIndex + 1} / 12 · {contract.shortTitle}</Text></View>
@@ -109,7 +111,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
         <View style={{ marginLeft: 5 }}><PlayingCard hidden compact /></View>
       </View>)}
     </ScrollView>
-    <ScrollView style={s.tableScroll} contentContainerStyle={s.table}>
+    <View style={[s.playArea, landscape && s.playAreaLandscape]}>
+    <ScrollView style={[s.tableScroll, landscape && s.tableScrollLandscape]} contentContainerStyle={s.table}>
       <View style={s.task}><Text style={s.eyebrow}>AÇILIŞ GÖREVİ</Text><Text style={s.taskTitle}>{contract.title}</Text>
         <Text style={s.small}>{me.hasOpened ? openedThisTurn ? 'Görev açıldı · İşleme sonraki sıranda' : 'Elini açtın · Masaya kart işleyebilirsin' : game.roundIndex < 5 ? 'Açılışta joker kullanılamaz' : 'Açılışta joker kullanılabilir'}</Text>
       </View>
@@ -139,11 +142,11 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
         </View>)}
       </View> : <Text style={s.emptyTable}>Açılan gruplar burada görünecek.</Text>}
     </ScrollView>
-    <View style={s.hand}>
+    <View style={[s.hand, landscape && s.handLandscape]}>
       <View style={s.handHeading}><Text style={s.handName}>{me.name} <Text style={s.small}>· {me.hand.length} kart</Text></Text><Text style={s.small}>{me.score} puan</Text></View>
       {!!(notice || error) && <Text accessibilityLiveRegion="polite" style={s.notice}>{error || notice}</Text>}
       {!!pending.length && <View style={s.pending}><ScrollView horizontal>{pending.map((g, i) => <Text key={i} style={s.pendingLabel}>{g.cardIds.length}’lü {g.type === 'set' ? 'küt' : 'seri'}  </Text>)}</ScrollView><Pressable onPress={() => { setPending([]); setSelected([]); }}><Text style={s.gold}>Geri al</Text></Pressable></View>}
-      <ScrollView style={{ maxHeight: 244 }} contentContainerStyle={s.handScroll}>
+      <ScrollView style={landscape ? s.handCardsLandscape : s.handCardsPortrait} contentContainerStyle={[s.handScroll, landscape && s.handScrollLandscape]}>
         <View style={s.rows}>{rows.map((row, index) => <View key={index} style={s.cardRow}>
           {row.map((c, i) => <View key={c.id} style={{ marginLeft: i ? step - 72 : 0, zIndex: i }}>
             <PlayingCard card={c} selected={validSelected.includes(c.id)} onPress={playing ? () => { playSound('tap'); setSelected(old => old.includes(c.id) ? old.filter(id => id !== c.id) : [...old, c.id]); } : undefined} />
@@ -155,6 +158,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
         <Pressable accessibilityRole="button" disabled={!playing} onPress={() => stage('run')} style={[s.secondary, !playing && s.disabled]}><Text style={s.actionText}>Seri yap</Text></Pressable>
         <Pressable accessibilityRole="button" disabled={!playing} onPress={pending.length ? open : discard} style={[s.primary, !playing && s.disabled]}><Text style={s.primaryText}>{pending.length ? contract.final ? 'Elden bit' : 'Yere aç' : 'Kart at'}</Text></Pressable>
       </View>
+    </View>
     </View>
     <Modal visible={over || scoresOpen} transparent animationType="fade" onRequestClose={() => setScoresOpen(false)}>
       <View style={s.backdrop}><View style={s.sheet}>
@@ -177,6 +181,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
 }
 const s = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#09271e', width: '100%', maxWidth: 760, alignSelf: 'center' },
+  pageLandscape: { maxWidth: '100%' }, playArea: { flex: 1 }, playAreaLandscape: { flexDirection: 'row' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 9 },
   iconButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: p.line, borderRadius: 20 },
   headerActions: { flexDirection: 'row', gap: 7 }, soundIcon: { color: p.gold, fontSize: 19, fontWeight: '800' },
@@ -185,7 +190,7 @@ const s = StyleSheet.create({
   players: { gap: 10, paddingHorizontal: 14, paddingVertical: 6 }, opponent: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 6, borderRadius: 12, borderWidth: 1, borderColor: 'transparent' },
   activeOpponent: { borderColor: p.gold, backgroundColor: '#d9a44115' }, avatar: { width: 31, height: 31, borderRadius: 16, backgroundColor: '#dcc48e', justifyContent: 'center', alignItems: 'center' },
   avatarText: { fontWeight: '800', color: p.felt }, opponentName: { color: p.cream, fontSize: 12, fontWeight: '700', maxWidth: 85 }, small: { fontSize: 10, color: '#adc4b6', lineHeight: 16 },
-  tableScroll: { flex: 1 }, table: { padding: 14, gap: 10, flexGrow: 1 }, task: { alignItems: 'center', gap: 4 },
+  tableScroll: { flex: 1 }, tableScrollLandscape: { borderRightWidth: 1, borderRightColor: '#dab77b50' }, table: { padding: 14, gap: 10, flexGrow: 1 }, task: { alignItems: 'center', gap: 4 },
   taskTitle: { color: p.cream, fontSize: 16, fontWeight: '700' },
   feltOval: { borderRadius: 110, backgroundColor: '#155a40', borderWidth: 5, borderColor: '#775935', paddingVertical: 13, boxShadow: 'inset 0 0 25px #0005, 0 5px 8px #0003' },
   piles: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16 }, pile: { alignItems: 'center', gap: 6, borderRadius: 8, padding: 5 }, pileReady: { backgroundColor: '#ffe1a410' },
@@ -196,8 +201,10 @@ const s = StyleSheet.create({
   melds: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, meld: { padding: 8, borderWidth: 1, borderColor: p.line, borderRadius: 10, gap: 4 }, meldCards: { flexDirection: 'row' },
   meldAction: { paddingTop: 3, minHeight: 25, justifyContent: 'center' },
   hand: { paddingTop: 10, paddingBottom: 8, borderTopWidth: 1, borderColor: '#dab77b50', backgroundColor: '#071d17' },
+  handLandscape: { width: '46%', height: '100%', borderTopWidth: 0, paddingTop: 7 },
   handHeading: { flexDirection: 'row', paddingHorizontal: 18, justifyContent: 'space-between', alignItems: 'center' }, handName: { color: p.cream, fontSize: 15, fontWeight: '700' },
-  handScroll: { paddingHorizontal: 18, paddingTop: 20, paddingBottom: 4, flexGrow: 1, justifyContent: 'center' },
+  handCardsPortrait: { maxHeight: 244 }, handCardsLandscape: { flex: 1 },
+  handScroll: { paddingHorizontal: 18, paddingTop: 20, paddingBottom: 4, flexGrow: 1, justifyContent: 'center' }, handScrollLandscape: { paddingTop: 8 },
   rows: { gap: 8 }, cardRow: { flexDirection: 'row' }, actions: { flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingTop: 10 },
   secondary: { minHeight: 44, borderWidth: 1, borderColor: p.line, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flex: 1 },
   primary: { minHeight: 44, borderRadius: 11, backgroundColor: p.gold, alignItems: 'center', justifyContent: 'center', flex: 1.2 },
