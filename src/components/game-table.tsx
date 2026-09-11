@@ -10,6 +10,7 @@ import { ROUND_CONTRACTS } from '@/game/contracts';
 import { isValidMeld } from '@/game/engine';
 import { GameSound, useGameSounds } from '@/audio/game-sounds';
 import { arrangeHand, loadHandOrder, moveCardToIndex, reconcileHandOrder, saveHandOrder } from '@/game/hand-order';
+import { autoArrangeHand } from '@/game/auto-arrange';
 
 type Props = {
   game: PrivateGameView; viewerId: string; modeLabel: string; blocked?: boolean;
@@ -352,6 +353,20 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     setNotice(''); setArranging((current) => !current);
   }
 
+  function autoArrange() {
+    const next = autoArrangeHand(me.hand, {
+      contract,
+      prioritizeContract: !me.hasOpened,
+      allowJokersInGroups: me.hasOpened || game.roundIndex >= 5,
+    });
+    setPending([]);
+    setArranging(false);
+    setHandOrder(next);
+    void saveHandOrder(orderKey, next);
+    playSound('shuffle');
+    setNotice('Elin göreve ve en güçlü gruplara göre dizildi. İstersen elle değiştirebilirsin.');
+  }
+
   function actionSound(action: GameAction): GameSound {
     switch (action.type) {
       case 'draw': return 'draw';
@@ -433,8 +448,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     </ScrollView>
     <View ref={(node) => registerDropZone('hand', node)} style={[s.hand, (activeDrag === 'stock' || activeDrag === 'discard' || activeDrag === 'staged') && s.handDropActive]}>
       <View style={s.handHeading}>
-        <Text style={s.handName}>{me.name} <Text style={s.small}>· {me.hand.length} kart{myMissedTurns ? ` · ${myMissedTurns}/3 süre kaçtı` : ''}</Text></Text>
-        <View style={s.handMeta}><Text style={s.small}>{me.score} puan</Text><Pressable accessibilityRole="button" accessibilityLabel={arranging ? 'Kart dizmeyi bitir' : 'Eli istediğin gibi diz'} onPress={toggleArrange} style={[s.arrangeButton, arranging && s.arrangeButtonActive]}><Text style={s.gold}>{arranging ? 'Bitti' : 'Eli diz'}</Text></Pressable></View>
+        <Text numberOfLines={1} style={s.handName}>{me.name} <Text style={s.small}>· {me.hand.length} kart{myMissedTurns ? ` · ${myMissedTurns}/3 süre kaçtı` : ''}</Text></Text>
+        <View style={s.handMeta}><Text style={s.small}>{me.score} puan</Text><Pressable accessibilityRole="button" accessibilityLabel="Eli otomatik diz" disabled={Boolean(activeDrag)} onPress={autoArrange} style={[s.arrangeButton, activeDrag && s.disabled]}><Text style={s.gold}>Oto diz</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={arranging ? 'Kart dizmeyi bitir' : 'Eli istediğin gibi diz'} onPress={toggleArrange} style={[s.arrangeButton, arranging && s.arrangeButtonActive]}><Text style={s.gold}>{arranging ? 'Bitti' : 'Elle diz'}</Text></Pressable></View>
       </View>
       {!!(notice || error) && <Text accessibilityLiveRegion="polite" style={s.notice}>{error || notice}</Text>}
       {arranging && <Text accessibilityLiveRegion="polite" style={s.arrangeHint}>Kartı tutup istediğin konuma sürükle ve bırak.</Text>}
@@ -444,7 +459,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
             arranging={arranging} gameplayEnabled={playing} onDragStart={() => beginDrag(arranging ? 'arranging' : 'hand')} onReorder={reorderCard} onGameplayDrop={dropHandCard} />)}
         </View>)}</View>
       </ScrollView>
-      {!arranging && <Text style={s.dragGuide}>{drawing ? 'Kart çekmek için üstteki desteden eline sürükle.' : playing ? 'Atmak için kartı açık kartın üstüne; işlemek için gruba sürükle.' : 'Sıranı beklerken elini “Eli diz” ile düzenleyebilirsin.'}</Text>}
+      {!arranging && <Text style={s.dragGuide}>{drawing ? 'Kart çekmek için üstteki desteden eline sürükle.' : playing ? 'Atmak için kartı açık kartın üstüne; işlemek için gruba sürükle.' : 'Sıranı beklerken “Oto diz” veya “Elle diz” ile elini düzenleyebilirsin.'}</Text>}
     </View>
     <Modal visible={over || scoresOpen} transparent animationType="fade" onRequestClose={() => setScoresOpen(false)}>
       <View style={s.backdrop}><View style={s.sheet}>
@@ -497,8 +512,8 @@ const s = StyleSheet.create({
   melds: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, meld: { padding: 8, borderWidth: 1, borderColor: p.line, borderRadius: 10, gap: 4 }, meldCards: { flexDirection: 'row' },
   meldDropHint: { color: p.gold, fontSize: 9, fontWeight: '700' },
   hand: { paddingTop: 10, paddingBottom: 8, borderTopWidth: 1, borderColor: '#dab77b50', backgroundColor: '#071d17', overflow: 'visible' }, handDropActive: { borderTopWidth: 3, borderTopColor: p.gold, backgroundColor: '#0d3327' },
-  handHeading: { flexDirection: 'row', paddingHorizontal: 18, justifyContent: 'space-between', alignItems: 'center' }, handName: { color: p.cream, fontSize: 15, fontWeight: '700' },
-  handMeta: { flexDirection: 'row', alignItems: 'center', gap: 9 }, arrangeButton: { minHeight: 30, paddingHorizontal: 10, borderWidth: 1, borderColor: p.line, borderRadius: 9, justifyContent: 'center' }, arrangeButtonActive: { backgroundColor: '#d9a44120', borderColor: p.gold },
+  handHeading: { flexDirection: 'row', paddingHorizontal: 18, justifyContent: 'space-between', alignItems: 'center' }, handName: { color: p.cream, fontSize: 15, fontWeight: '700', flexShrink: 1, marginRight: 6 },
+  handMeta: { flexDirection: 'row', alignItems: 'center', gap: 5 }, arrangeButton: { minHeight: 30, paddingHorizontal: 8, borderWidth: 1, borderColor: p.line, borderRadius: 9, justifyContent: 'center' }, arrangeButtonActive: { backgroundColor: '#d9a44120', borderColor: p.gold },
   handCards: { maxHeight: 210, overflow: 'visible' },
   handScroll: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 4, flexGrow: 1, justifyContent: 'center' },
   rows: { gap: 8 }, cardRow: { flexDirection: 'row' }, actions: { flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingTop: 10 },
