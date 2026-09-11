@@ -26,6 +26,7 @@ Terminalde görünen QR kodunu Expo Go ile tarayın. Android emülatörü için 
 - Tek oyunculu oyunu cihazda otomatik saklama, devam etme veya yeni oyun başlatma
 - Kart çekme, atma, açma, joker ve kazanma için özgün kısa sesler; kalıcı sessize alma
 - Kartları sürükleyip istenen konuma bırakan, tur değişince korunan kişisel el dizilimi
+- Kart çekme, ortaya atma, görev açma, gruba işleme ve joker değiştirme için doğrudan sürükle-bırak masa hareketleri
 - Mobil bellek kullanımı için 300×420 boyutuna optimize edilmiş kart görselleri ve hafif masa gölgeleri
 - Kalıcı oyuncu adı, avatar, seviye, maç ve galibiyet istatistikleri
 - Çevrim içi masaya otomatik dönüş, bağlantı durumu ve sunucu kontrollü 45 saniyelik sıra süresi

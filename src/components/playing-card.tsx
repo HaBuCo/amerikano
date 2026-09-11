@@ -11,7 +11,7 @@ export const CARD_HEIGHT = 87;
 export function PlayingCard({ card, selected, hidden, compact, large, onPress }: Props) {
   const key = hidden || !card ? 'back' : card.isJoker ? 'joker' : `${card.rank}-${card.suit}`;
   const label = hidden || !card ? 'Kapalı kart' : card.isJoker ? 'Joker' : `${suits[card.suit!]} ${card.rank}`;
-  const content = <Image source={cardArt[key]} style={styles.image} contentFit="fill" recyclingKey={key} transition={0} />;
+  const content = <Image pointerEvents="none" source={cardArt[key]} style={styles.image} contentFit="fill" recyclingKey={key} transition={0} />;
   const style = [styles.card, compact && styles.compact, large && styles.large, selected && styles.selected];
   return <Pressable disabled={!onPress} accessibilityRole={onPress ? 'button' : 'image'} accessibilityLabel={label} accessibilityState={{ selected: !!selected }} onPress={onPress} style={({ pressed }) => [...style, pressed && { opacity: 0.85 }]}>{content}</Pressable>;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Animated, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { palette as p } from '@/constants/palette';
@@ -17,37 +18,56 @@ type Props = {
   botControlled?: boolean; onReclaim?: () => void;
   onAction: (a: GameAction) => void; onRematch?: () => void; onExit: () => void;
 };
-type Pending = { type: MeldType; cardIds: string[] };
-type DraggableCardProps = {
-  card: Card; index: number; step: number; cardsPerRow: number;
-  arranging: boolean; selected: boolean; onPress?: () => void; onDragStart: () => void;
-  onDrop: (cardId: string, targetIndex: number) => void;
-};
+type Pending = { type: MeldType | null; cardIds: string[] };
+type DropRect = { x: number; y: number; width: number; height: number };
+type DropPoint = { x: number; y: number; dx: number; dy: number };
+type DropSlot = { type: MeldType | null; length?: number; label: string };
+type Measurable = { measureInWindow: (callback: (x: number, y: number, width: number, height: number) => void) => void };
 
-function DraggableHandCard({ card, index, step, cardsPerRow, arranging, selected, onPress, onDragStart, onDrop }: DraggableCardProps) {
+function DragSurface({ active, children, onDragStart, onDrop, style }: {
+  active: boolean; children: ReactNode; onDragStart: () => void; onDrop: (point: DropPoint) => void; style?: object;
+}) {
   const [movement] = useState(() => new Animated.ValueXY());
   const [dragging, setDragging] = useState(false);
   const responder = useMemo(() => PanResponder.create({
-    onMoveShouldSetPanResponder: (_, gesture) => arranging && Math.abs(gesture.dx) + Math.abs(gesture.dy) > 8,
+    onStartShouldSetPanResponder: () => active,
+    onMoveShouldSetPanResponder: (_, gesture) => active && Math.abs(gesture.dx) + Math.abs(gesture.dy) > 7,
     onPanResponderGrant: () => { movement.setValue({ x: 0, y: 0 }); setDragging(true); onDragStart(); },
     onPanResponderMove: Animated.event([null, { dx: movement.x, dy: movement.y }], { useNativeDriver: false }),
     onPanResponderRelease: (_, gesture) => {
-      const columnMove = Math.round(gesture.dx / step);
-      const rowMove = Math.round(gesture.dy / (CARD_HEIGHT + 8));
-      onDrop(card.id, index + columnMove + rowMove * cardsPerRow);
+      onDrop({ x: gesture.moveX || gesture.x0 + gesture.dx, y: gesture.moveY || gesture.y0 + gesture.dy, dx: gesture.dx, dy: gesture.dy });
       movement.setValue({ x: 0, y: 0 }); setDragging(false);
     },
-    onPanResponderTerminate: () => { movement.setValue({ x: 0, y: 0 }); setDragging(false); },
+    onPanResponderTerminate: () => {
+      onDrop({ x: Number.NaN, y: Number.NaN, dx: 0, dy: 0 });
+      movement.setValue({ x: 0, y: 0 }); setDragging(false);
+    },
     onPanResponderTerminationRequest: () => false,
-  }), [arranging, card.id, cardsPerRow, index, movement, onDragStart, onDrop, step]);
-  return <Animated.View {...responder.panHandlers} style={{
-    marginLeft: index % cardsPerRow ? step - CARD_WIDTH : 0,
-    zIndex: dragging ? 999 : index % cardsPerRow,
+  }), [active, movement, onDragStart, onDrop]);
+  return <Animated.View {...responder.panHandlers} style={[style, {
+    zIndex: dragging ? 999 : 1,
     opacity: dragging ? 0.9 : 1,
     transform: [...movement.getTranslateTransform(), { scale: dragging ? 1.06 : 1 }],
-  }}>
-    <PlayingCard card={card} selected={selected || dragging} onPress={arranging ? undefined : onPress} />
-  </Animated.View>;
+  }]}>{children}</Animated.View>;
+}
+
+type DraggableCardProps = {
+  card: Card; index: number; step: number; cardsPerRow: number;
+  arranging: boolean; gameplayEnabled: boolean; onDragStart: () => void;
+  onReorder: (cardId: string, targetIndex: number) => void;
+  onGameplayDrop: (cardId: string, point: DropPoint) => void;
+};
+
+function DraggableHandCard({ card, index, step, cardsPerRow, arranging, gameplayEnabled, onDragStart, onReorder, onGameplayDrop }: DraggableCardProps) {
+  return <DragSurface active={arranging || gameplayEnabled} onDragStart={onDragStart} onDrop={(point) => {
+    if (arranging) {
+      const columnMove = Math.round(point.dx / step);
+      const rowMove = Math.round(point.dy / (CARD_HEIGHT + 8));
+      onReorder(card.id, index + columnMove + rowMove * cardsPerRow);
+    } else onGameplayDrop(card.id, point);
+  }} style={{ marginLeft: index % cardsPerRow ? step - CARD_WIDTH : 0, zIndex: index % cardsPerRow }}>
+    <PlayingCard card={card} />
+  </DragSurface>;
 }
 
 function TurnCountdown({ deadline }: { deadline?: number }) {
@@ -64,12 +84,14 @@ function TurnCountdown({ deadline }: { deadline?: number }) {
 }
 
 export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = true, canRematch = false, error, playerMeta, botControlled = false, onReclaim, onAction, onRematch, onExit }: Props) {
-  const [selected, setSelected] = useState<string[]>([]);
-  const [pending, setPending] = useState<Pending[]>([]);
+  const [pendingState, setPendingState] = useState<{ key: string; groups: Pending[] }>({ key: '', groups: [] });
   const [notice, setNotice] = useState('');
   const [exitOpen, setExitOpen] = useState(false);
   const [scoresOpen, setScoresOpen] = useState(false);
   const [arranging, setArranging] = useState(false);
+  const [activeDrag, setActiveDrag] = useState<'hand' | 'stock' | 'discard' | 'staged' | 'arranging' | null>(null);
+  const dropNodes = useRef<Record<string, Measurable | null>>({});
+  const dropRects = useRef<Record<string, DropRect>>({});
   const { enabled: soundEnabled, toggle: toggleSound, play: playSound } = useGameSounds();
   const previousPhase = useRef(game.phase);
   const { width } = useWindowDimensions();
@@ -80,6 +102,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   const [handOrder, setHandOrder] = useState(() => me.hand.map((card) => card.id));
   const loadedOrderKey = useRef('');
   const current = game.players[game.currentPlayerIndex];
+  const pendingKey = `${game.roundIndex}:${game.turnCount}:${current.id}:${game.phase}`;
+  const pending = pendingState.key === pendingKey ? pendingState.groups : [];
   const myTurn = current.id === viewerId && !blocked && !botControlled;
   const playing = myTurn && game.phase === 'play';
   const drawing = myTurn && game.phase === 'draw';
@@ -89,8 +113,15 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   const stagedIds = new Set(pending.flatMap(g => g.cardIds));
   const arrangedHand = arrangeHand(me.hand, handOrder);
   const cards = arrangedHand.filter(c => !stagedIds.has(c.id));
-  const validSelected = selected.filter(id => cards.some(c => c.id === id));
   const contract = ROUND_CONTRACTS[game.roundIndex];
+  const dropSlots: DropSlot[] = me.hasOpened
+    ? [{ type: 'set', length: 3, label: 'Yeni küt' }, { type: 'run', length: 3, label: 'Yeni seri' }]
+    : contract.final
+      ? Array.from({ length: Math.max(4, Math.ceil((me.hand.length - 1) / 3)) }, (_, index) => ({ type: null, label: `Grup ${index + 1}` }))
+      : contract.parts.flatMap(part => Array.from({ length: part.count }, (_, index) => ({
+          type: part.type, length: part.length,
+          label: `${part.type === 'set' ? 'Küt' : 'Seri'}${part.count > 1 ? ` ${index + 1}` : ''}`,
+        })));
   const over = game.phase === 'round-over' || game.phase === 'game-over';
   const winners = game.players.filter(player => player.score === Math.min(...game.players.map(pl => pl.score)));
   const cardsPerRow = width >= 430 ? 9 : 8;
@@ -118,19 +149,207 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     // handSignature tracks draws/discards without depending on the mutable array.
   }, [orderKey, handSignature, me.hand]);
 
-  function dropCard(cardId: string, targetIndex: number) {
+  function setPending(next: Pending[] | ((current: Pending[]) => Pending[])) {
+    const groups = typeof next === 'function' ? next(pending) : next;
+    setPendingState({ key: pendingKey, groups });
+  }
+
+  function reorderCard(cardId: string, targetIndex: number) {
+    setActiveDrag(null);
     const next = moveCardToIndex(arrangedHand.map((card) => card.id), cardId, targetIndex);
     setHandOrder(next);
     void saveHandOrder(orderKey, next);
   }
 
+  function measureDropZones() {
+    for (const [key, node] of Object.entries(dropNodes.current)) {
+      node?.measureInWindow((x, y, measuredWidth, measuredHeight) => {
+        dropRects.current[key] = { x, y, width: measuredWidth, height: measuredHeight };
+      });
+    }
+  }
+
+  function registerDropZone(key: string, node: Measurable | null) {
+    dropNodes.current[key] = node;
+    node?.measureInWindow((x, y, measuredWidth, measuredHeight) => {
+      dropRects.current[key] = { x, y, width: measuredWidth, height: measuredHeight };
+    });
+  }
+
+  function beginDrag(kind: typeof activeDrag) {
+    measureDropZones();
+    setActiveDrag(kind);
+    playSound('tap');
+  }
+
+  function isInside(key: string, point: DropPoint) {
+    const rect = dropRects.current[key];
+    return Boolean(rect && point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height);
+  }
+
+  function targetIndex(prefix: string, point: DropPoint) {
+    const hit = Object.entries(dropRects.current).find(([key, rect]) => key.startsWith(prefix) &&
+      point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height);
+    return hit ? Number(hit[0].slice(prefix.length)) : -1;
+  }
+
+  function inferType(cardIds: string[]): MeldType | null {
+    const group = cardIds.map(id => me.hand.find(card => card.id === id)).filter((card): card is Card => Boolean(card));
+    if (isValidMeld(group, 'set')) return 'set';
+    if (isValidMeld(group, 'run')) return 'run';
+    return null;
+  }
+
+  function readyGroups(groups: Pending[]) {
+    const ready: { type: MeldType; cardIds: string[] }[] = [];
+    for (const group of groups.filter(item => item.cardIds.length)) {
+      const type = group.type ?? inferType(group.cardIds);
+      const cardsInGroup = group.cardIds.map(id => me.hand.find(card => card.id === id)).filter((card): card is Card => Boolean(card));
+      if (!type || !isValidMeld(cardsInGroup, type)) return null;
+      ready.push({ type, cardIds: group.cardIds });
+    }
+    return ready;
+  }
+
+  function groupsWithSlots(source = pending) {
+    return dropSlots.map((slot, index) => source[index] ?? { type: slot.type, cardIds: [] });
+  }
+
+  function addCardToSlot(cardId: string, slotIndex: number, source = pending) {
+    if (!playing || slotIndex < 0 || slotIndex >= dropSlots.length) return;
+    let groups = groupsWithSlots(source).map(group => ({ ...group, cardIds: group.cardIds.filter(id => id !== cardId) }));
+    const slot = dropSlots[slotIndex];
+    if (slot.length && groups[slotIndex].cardIds.length >= slot.length) {
+      setNotice(`${slot.label} dolu. Önce bir kartı eline geri sürükle.`);
+      setPending(groups);
+      return;
+    }
+    groups = groups.map((group, index) => index === slotIndex
+      ? { type: slot.type, cardIds: [...group.cardIds, cardId] }
+      : group);
+    setPending(groups);
+    setNotice('');
+
+    if (contract.final && !me.hasOpened) return;
+    if (me.hasOpened) {
+      if (groups[slotIndex].cardIds.length !== slot.length) return;
+      const ready = readyGroups([groups[slotIndex]]);
+      if (!ready) {
+        setNotice(`${slot.label} henüz geçerli değil. Kartı eline geri sürükleyebilirsin.`);
+        return;
+      }
+      groups = groups.map((group, index) => index === slotIndex ? { type: slot.type, cardIds: [] } : group);
+      setPending(groups);
+      act({ type: 'open', groups: ready });
+      return;
+    }
+
+    const complete = groups.every((group, index) => group.cardIds.length === dropSlots[index].length);
+    if (!complete) return;
+    const ready = readyGroups(groups);
+    if (!ready) {
+      setNotice('Görev tepsilerinden biri geçerli değil. Kartları eline geri sürükleyip düzelt.');
+      return;
+    }
+    if (game.roundIndex < 5 && ready.some(group => group.cardIds.some(id => me.hand.find(card => card.id === id)?.isJoker))) {
+      setNotice('Bu elde açılış tepsilerinde joker kullanılamaz.');
+      return;
+    }
+    setPending([]);
+    act({ type: 'open', groups: ready });
+  }
+
+  function removeStaged(cardId: string, source = pending) {
+    return groupsWithSlots(source).map(group => ({ ...group, cardIds: group.cardIds.filter(id => id !== cardId) }));
+  }
+
+  function finishFinal(discardId: string, groups: Pending[]) {
+    const ready = readyGroups(groups);
+    const groupedCount = groups.reduce((total, group) => total + group.cardIds.length, 0);
+    if (!ready?.length || groupedCount !== me.hand.length - 1 || groups.some(group => group.cardIds.length > 0 && group.cardIds.length < 3)) {
+      setPending(groups);
+      setNotice('Final için bir kartı atmalık bırak; diğer tüm kartları geçerli gruplara sürükle.');
+      return;
+    }
+    setPending([]);
+    act({ type: 'finish', groups: ready, discardId });
+  }
+
+  function dropOnMeld(cardId: string, meldIndex: number) {
+    const meld = game.melds[meldIndex];
+    const card = me.hand.find(item => item.id === cardId);
+    if (!meld || !card || !me.hasOpened) {
+      setNotice('Kart işlemek için önce kendi görevini açmalısın.');
+      return;
+    }
+    if (openedThisTurn) {
+      setNotice('İşleme, açılıştan sonraki sıranda serbest.');
+      return;
+    }
+    const matchingJoker = meld.cards.find(joker => joker.isJoker && isValidMeld(
+      meld.cards.map(item => item.id === joker.id ? card : item), meld.type,
+    ));
+    if (matchingJoker) act({ type: 'replaceJoker', meldId: meld.id, jokerId: matchingJoker.id, cardId });
+    else if (isValidMeld([...meld.cards, card], meld.type)) act({ type: 'layoff', meldId: meld.id, cardId });
+    else setNotice('Bu kart bıraktığın gruba işlenemiyor.');
+  }
+
+  function dropHandCard(cardId: string, point: DropPoint) {
+    setActiveDrag(null);
+    if (!Number.isFinite(point.x) || !playing) return;
+    const slot = targetIndex('slot:', point);
+    if (slot >= 0) return addCardToSlot(cardId, slot);
+    const meld = targetIndex('meld:', point);
+    if (meld >= 0) return dropOnMeld(cardId, meld);
+    if (isInside('discard', point)) {
+      if (contract.final && !me.hasOpened) return finishFinal(cardId, removeStaged(cardId));
+      if (pending.some(group => group.cardIds.length)) {
+        setNotice('Önce tepsideki kartları eline geri al veya grubu tamamla.');
+        return;
+      }
+      act({ type: 'discard', cardId });
+      return;
+    }
+    setNotice('Kartı açık karta, görev tepsisine veya yerdeki bir gruba bırak.');
+  }
+
+  function dropStagedCard(cardId: string, point: DropPoint) {
+    setActiveDrag(null);
+    if (!Number.isFinite(point.x) || !playing) return;
+    const withoutCard = removeStaged(cardId);
+    if (Math.abs(point.dx) + Math.abs(point.dy) < 7) {
+      setPending(withoutCard);
+      setNotice('Kart eline geri döndü.');
+      return;
+    }
+    const slot = targetIndex('slot:', point);
+    if (slot >= 0) return addCardToSlot(cardId, slot, withoutCard);
+    if (contract.final && !me.hasOpened && isInside('discard', point)) return finishFinal(cardId, withoutCard);
+    if (isInside('hand', point)) {
+      setPending(withoutCard);
+      setNotice('Kart eline geri döndü.');
+      return;
+    }
+    setNotice('Kartı başka bir tepsiye veya eline geri bırak.');
+  }
+
+  function dropPile(source: 'stock' | 'discard', point: DropPoint) {
+    setActiveDrag(null);
+    if (!Number.isFinite(point.x) || !isInside('hand', point)) {
+      setNotice('Kartı almak için desteden elinin üzerine sürükle.');
+      return;
+    }
+    if (source === 'discard' && claiming) act({ type: 'claim', take: true });
+    else if (drawing) act({ type: 'draw', source });
+  }
+
   function toggleArrange() {
     playSound('tap');
-    if (!arranging && pending.length) {
+    if (!arranging && pending.some(group => group.cardIds.length)) {
       setNotice('Elini dizmeden önce hazırladığın grupları geri al.');
       return;
     }
-    setSelected([]); setNotice(''); setArranging((current) => !current);
+    setNotice(''); setArranging((current) => !current);
   }
 
   function actionSound(action: GameAction): GameSound {
@@ -147,40 +366,6 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     }
   }
   function act(action: GameAction) { setNotice(''); playSound(actionSound(action)); onAction(action); }
-  function stage(type: MeldType) {
-    if (!playing) return;
-    playSound('tap');
-    const group = me.hand.filter(c => validSelected.includes(c.id));
-    if (!isValidMeld(group, type)) {
-      setNotice(type === 'set' ? 'Küt: aynı değer, farklı türler; 3 veya 4 kart.' : 'Seri: aynı türden ardışık en az 3 kart.'); return;
-    }
-    setPending([...pending, { type, cardIds: validSelected }]); setSelected([]); setNotice('');
-  }
-  function open() {
-    if (!playing || !pending.length) return;
-    if (contract.final) {
-      if (cards.length !== 1) { setNotice('Final: tüm kartları gruplara ayır, ters atmak için yalnızca bir kart bırak.'); return; }
-      act({ type: 'finish', groups: pending, discardId: cards[0].id });
-    } else act({ type: 'open', groups: pending });
-    setPending([]); setSelected([]);
-  }
-  function discard() {
-    if (pending.length) { setNotice('Önce hazırladığın grupları aç veya geri al.'); return; }
-    if (validSelected.length !== 1) { setNotice('Atmak için tek kart seç.'); return; }
-    act({ type: 'discard', cardId: validSelected[0] }); setSelected([]);
-  }
-  function layoff(meldId: string) {
-    if (!playing || !me.hasOpened) { setNotice('Kart işlemek için önce el görevini açmalısın.'); return; }
-    if (openedThisTurn) { setNotice('Bu tur yalnızca görevini açabilirsin. İşleme sonraki sıranda serbest.'); return; }
-    if (validSelected.length !== 1 || pending.length) { setNotice('Elinden bir kart seç, ardından masadaki gruba dokun.'); return; }
-    act({ type: 'layoff', meldId, cardId: validSelected[0] }); setSelected([]);
-  }
-  function replaceJoker(meldId: string, jokerId: string) {
-    if (!playing || !me.hasOpened) { setNotice('Jokeri almak için önce kendi görevini açmalısın.'); return; }
-    if (openedThisTurn) { setNotice('Joker değiştirme işlemini açılıştan sonraki sıranda yapabilirsin.'); return; }
-    if (validSelected.length !== 1 || pending.length) { setNotice('Elindeki tam karşılık kartını seç, sonra yerdeki jokere dokun.'); return; }
-    act({ type: 'replaceJoker', meldId, jokerId, cardId: validSelected[0] }); setSelected([]);
-  }
   return <SafeAreaView style={s.page}>
     <View style={s.header}>
       <Pressable accessibilityRole="button" accessibilityLabel="Masadan çık" onPress={() => setExitOpen(true)} style={s.iconButton}><Text style={s.white}>←</Text></Pressable>
@@ -197,57 +382,69 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
         <View style={{ marginLeft: 5 }}><PlayingCard hidden compact /></View>
       </View>)}
     </ScrollView>
-    <ScrollView style={s.tableScroll} contentContainerStyle={s.table}>
+    <ScrollView scrollEnabled={!activeDrag} style={s.tableScroll} contentContainerStyle={s.table}>
       <View style={s.task}><Text style={s.eyebrow}>AÇILIŞ GÖREVİ</Text><Text style={s.taskTitle}>{contract.title}</Text>
         <Text style={s.small}>{me.hasOpened ? openedThisTurn ? 'Görev açıldı · İşleme sonraki sıranda' : 'Elini açtın · Masaya kart işleyebilirsin' : game.roundIndex < 5 ? 'Açılışta joker kullanılamaz' : 'Açılışta joker kullanılabilir'}</Text>
       </View>
       <View style={s.feltOval}>
         <View style={s.piles}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Desteden kart çek" disabled={!drawing || (!game.stockCount && !game.discard.length)} style={[s.pile, drawing && s.pileReady]} onPress={() => act({ type: 'draw', source: 'stock' })}>
-            <View style={s.stackShadow} /><PlayingCard hidden /><Text style={s.pileLabel}>DESTE · {game.stockCount}</Text>
-          </Pressable>
+          <View style={[s.pile, drawing && s.pileReady]}>
+            <DragSurface active={drawing && Boolean(game.stockCount || game.discard.length)} onDragStart={() => beginDrag('stock')} onDrop={(point) => dropPile('stock', point)}>
+              <View style={s.pile}><View style={s.stackShadow} /><PlayingCard hidden /><Text style={s.pileLabel}>DESTE · {game.stockCount}</Text></View>
+            </DragSurface>
+          </View>
           <View style={s.tableMark}><Text style={s.tableA}>A</Text><Text style={s.tableBrand}>AMERİKANO</Text></View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Yerdeki kartı al" disabled={!drawing || !game.discard.length} style={[s.pile, drawing && s.pileReady]} onPress={() => act({ type: 'draw', source: 'discard' })}>
-            {game.discardFaceDown ? <PlayingCard hidden /> : game.discard.length ? <PlayingCard card={game.discard.at(-1)} /> : <View style={s.empty} />}
-            <Text style={s.pileLabel}>{game.discardFaceDown ? 'BİTİŞ KARTI · KAPALI' : 'AÇIK KART'}</Text>
-          </Pressable>
+          <View ref={(node) => registerDropZone('discard', node)} style={[s.pile, (drawing || claiming || activeDrag === 'hand') && s.pileReady, activeDrag === 'hand' && s.dropTargetActive]}>
+            <DragSurface active={(drawing || claiming) && Boolean(game.discard.length) && !game.discardFaceDown} onDragStart={() => beginDrag('discard')} onDrop={(point) => dropPile('discard', point)}>
+              <View style={s.pile}>{game.discardFaceDown ? <PlayingCard hidden /> : game.discard.length ? <PlayingCard card={game.discard.at(-1)} /> : <View style={s.empty} />}
+                <Text style={s.pileLabel}>{game.discardFaceDown ? 'BİTİŞ KARTI · KAPALI' : activeDrag === 'hand' ? 'KARTI BURAYA AT' : 'AÇIK KART'}</Text></View>
+            </DragSurface>
+          </View>
         </View>
       </View>
-      <View style={s.turnRow}><Text style={s.turn}>{blocked ? 'Bağlantı / hamle bekleniyor…' : game.phase === 'claim' ? claiming ? 'Açık kartı 1 ceza kartıyla almak ister misin?' : `${claimPlayer?.name} açık kartı değerlendiriyor…` : myTurn ? drawing ? 'Sıra sende. Bir kart çek.' : 'Kartlarını seç, aç veya bir kart at.' : `${current.name} oynuyor…`}</Text><TurnCountdown deadline={game.turnDeadline} /></View>
+      <View style={s.turnRow}><Text style={s.turn}>{blocked ? 'Bağlantı / hamle bekleniyor…' : game.phase === 'claim' ? claiming ? 'Almak için açık kartı eline sürükle; istemiyorsan pas geç.' : `${claimPlayer?.name} açık kartı değerlendiriyor…` : myTurn ? drawing ? 'Desteden veya açık karttan eline sürükle.' : 'Kartını hedefe sürükle ve bırak.' : `${current.name} oynuyor…`}</Text><TurnCountdown deadline={game.turnDeadline} /></View>
       {botControlled && <View style={s.botNotice}><Text style={s.botNoticeText}>Üç süre kaçırdığın için bot senin yerine oynuyor.</Text><Pressable accessibilityRole="button" disabled={blocked} onPress={onReclaim} style={[s.reclaimButton, blocked && s.disabled]}><Text style={s.reclaimText}>Koltuğu geri al</Text></Pressable></View>}
       {claiming && <View style={s.actions}>
         <Pressable accessibilityRole="button" onPress={() => act({ type: 'claim', take: false })} style={s.secondary}><Text style={s.actionText}>Pas geç</Text></Pressable>
-        <Pressable accessibilityRole="button" onPress={() => act({ type: 'claim', take: true })} style={s.primary}><Text style={s.primaryText}>Al · +1 ceza kartı</Text></Pressable>
       </View>}
       {game.phase === 'claim' && modeLabel.includes('ÇEVRİM') && <Text style={s.small}>Yanıt süresi 8 saniye; yanıt verilmezse pas geçilir.</Text>}
+      {playing && !arranging && <View style={s.trayArea}>
+        <Text style={s.trayHint}>{me.hasOpened ? 'Yeni grup için kartları tepsiye sürükle.' : contract.final ? 'Kartlarını gruplara ayır; son kartı açık kart alanına at.' : 'Görevi açmak için kartları tepsilere sürükle.'}</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} scrollEnabled={!activeDrag} contentContainerStyle={s.trays}>
+          {dropSlots.map((slot, index) => {
+            const group = groupsWithSlots()[index];
+            const groupCards = group.cardIds.map(id => me.hand.find(card => card.id === id)).filter((card): card is Card => Boolean(card));
+            const valid = groupCards.length >= 3 && Boolean(group.type ? isValidMeld(groupCards, group.type) : inferType(group.cardIds));
+            return <View key={index} ref={(node) => registerDropZone(`slot:${index}`, node)} style={[s.dropSlot, activeDrag === 'hand' && s.dropTargetActive, valid && s.dropSlotValid]}>
+              <Text style={s.dropSlotLabel}>{slot.label} · {group.cardIds.length}{slot.length ? `/${slot.length}` : ''}</Text>
+              <View style={s.slotCards}>{groupCards.map((card, cardIndex) => <DragSurface key={card.id} active={playing} onDragStart={() => beginDrag('staged')} onDrop={(point) => dropStagedCard(card.id, point)} style={{ marginLeft: cardIndex ? -10 : 0 }}><PlayingCard card={card} compact /></DragSurface>)}</View>
+              {!groupCards.length && <Text style={s.dropSlotEmpty}>Buraya bırak</Text>}
+            </View>;
+          })}
+        </ScrollView>
+      </View>}
       {game.melds.length > 0 ? <View style={s.melds}>
-        {game.melds.map(m => <View key={m.id} style={s.meld}>
+        {game.melds.map((m, index) => <View key={m.id} ref={(node) => registerDropZone(`meld:${index}`, node)} style={[s.meld, activeDrag === 'hand' && me.hasOpened && !openedThisTurn && s.dropTargetActive]}>
           <Text style={s.small}>{game.players.find(pl => pl.id === m.ownerId)?.name} · {m.type === 'set' ? 'Küt' : 'Seri'}</Text>
-          <View style={s.meldCards}>{m.cards.map((c, i) => <View key={c.id} style={{ marginLeft: i ? -16 : 0 }}><PlayingCard card={c} compact onPress={c.isJoker ? () => replaceJoker(m.id, c.id) : undefined} /></View>)}</View>
-          <Pressable accessibilityRole="button" accessibilityLabel={`${m.type === 'set' ? 'Küt' : 'Seri'} grubuna kart işle`} onPress={() => layoff(m.id)} style={s.meldAction}><Text style={s.gold}>Seçili kartı işle</Text></Pressable>
+          <View style={s.meldCards}>{m.cards.map((c, i) => <View key={c.id} style={{ marginLeft: i ? -16 : 0 }}><PlayingCard card={c} compact /></View>)}</View>
+          {activeDrag === 'hand' && <Text style={s.meldDropHint}>İşlemek için buraya bırak</Text>}
         </View>)}
       </View> : <Text style={s.emptyTable}>Açılan gruplar burada görünecek.</Text>}
     </ScrollView>
-    <View style={s.hand}>
+    <View ref={(node) => registerDropZone('hand', node)} style={[s.hand, (activeDrag === 'stock' || activeDrag === 'discard' || activeDrag === 'staged') && s.handDropActive]}>
       <View style={s.handHeading}>
         <Text style={s.handName}>{me.name} <Text style={s.small}>· {me.hand.length} kart{myMissedTurns ? ` · ${myMissedTurns}/3 süre kaçtı` : ''}</Text></Text>
         <View style={s.handMeta}><Text style={s.small}>{me.score} puan</Text><Pressable accessibilityRole="button" accessibilityLabel={arranging ? 'Kart dizmeyi bitir' : 'Eli istediğin gibi diz'} onPress={toggleArrange} style={[s.arrangeButton, arranging && s.arrangeButtonActive]}><Text style={s.gold}>{arranging ? 'Bitti' : 'Eli diz'}</Text></Pressable></View>
       </View>
       {!!(notice || error) && <Text accessibilityLiveRegion="polite" style={s.notice}>{error || notice}</Text>}
       {arranging && <Text accessibilityLiveRegion="polite" style={s.arrangeHint}>Kartı tutup istediğin konuma sürükle ve bırak.</Text>}
-      {!!pending.length && <View style={s.pending}><ScrollView horizontal>{pending.map((g, i) => <Text key={i} style={s.pendingLabel}>{g.cardIds.length}’lü {g.type === 'set' ? 'küt' : 'seri'}  </Text>)}</ScrollView><Pressable onPress={() => { setPending([]); setSelected([]); }}><Text style={s.gold}>Geri al</Text></Pressable></View>}
-      <ScrollView style={s.handCards} contentContainerStyle={s.handScroll}>
+      <ScrollView scrollEnabled={!activeDrag} removeClippedSubviews={false} style={s.handCards} contentContainerStyle={s.handScroll}>
         <View style={s.rows}>{rows.map((row, index) => <View key={index} style={s.cardRow}>
           {row.map((c, i) => <DraggableHandCard key={c.id} card={c} index={index * cardsPerRow + i} step={step} cardsPerRow={cardsPerRow}
-            arranging={arranging} selected={validSelected.includes(c.id)} onDragStart={() => playSound('tap')} onDrop={dropCard}
-            onPress={playing ? () => { playSound('tap'); setSelected(old => old.includes(c.id) ? old.filter(id => id !== c.id) : [...old, c.id]); } : undefined} />)}
+            arranging={arranging} gameplayEnabled={playing} onDragStart={() => beginDrag(arranging ? 'arranging' : 'hand')} onReorder={reorderCard} onGameplayDrop={dropHandCard} />)}
         </View>)}</View>
       </ScrollView>
-      <View style={[s.actions, arranging && s.actionsMuted]}>
-        <Pressable accessibilityRole="button" disabled={!playing || arranging} onPress={() => stage('set')} style={[s.secondary, (!playing || arranging) && s.disabled]}><Text style={s.actionText}>Küt yap</Text></Pressable>
-        <Pressable accessibilityRole="button" disabled={!playing || arranging} onPress={() => stage('run')} style={[s.secondary, (!playing || arranging) && s.disabled]}><Text style={s.actionText}>Seri yap</Text></Pressable>
-        <Pressable accessibilityRole="button" disabled={!playing || arranging} onPress={pending.length ? open : discard} style={[s.primary, (!playing || arranging) && s.disabled]}><Text style={s.primaryText}>{pending.length ? contract.final ? 'Elden bit' : 'Yere aç' : 'Kart at'}</Text></Pressable>
-      </View>
+      {!arranging && <Text style={s.dragGuide}>{drawing ? 'Kart çekmek için üstteki desteden eline sürükle.' : playing ? 'Atmak için kartı açık kartın üstüne; işlemek için gruba sürükle.' : 'Sıranı beklerken elini “Eli diz” ile düzenleyebilirsin.'}</Text>}
     </View>
     <Modal visible={over || scoresOpen} transparent animationType="fade" onRequestClose={() => setScoresOpen(false)}>
       <View style={s.backdrop}><View style={s.sheet}>
@@ -259,7 +456,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
             ? <Pressable disabled={blocked} style={[s.resultButton, blocked && s.disabled]} onPress={onRematch}><Text style={s.actionText}>Tekrar oyna</Text></Pressable>
             : <Text style={s.resultCaption}>Oda sahibinin yeniden başlatması bekleniyor.</Text>)}
           <Pressable style={s.resultButtonSecondary} onPress={onExit}><Text style={s.resultButtonSecondaryText}>Ana menü</Text></Pressable></>
-          : canAdvance ? <Pressable disabled={blocked} style={s.resultButton} onPress={() => { setPending([]); setSelected([]); act({ type: 'next' }); }}><Text style={s.actionText}>{game.roundIndex === 11 ? 'Sonucu gör' : 'Sonraki el'}</Text></Pressable>
+          : canAdvance ? <Pressable disabled={blocked} style={s.resultButton} onPress={() => { setPending([]); act({ type: 'next' }); }}><Text style={s.actionText}>{game.roundIndex === 11 ? 'Sonucu gör' : 'Sonraki el'}</Text></Pressable>
           : <Text style={s.resultCaption}>Oda sahibinin sonraki eli başlatması bekleniyor.</Text>
           : <Pressable style={s.resultButton} onPress={() => setScoresOpen(false)}><Text style={s.actionText}>Masaya dön</Text></Pressable>}
       </View></View>
@@ -285,6 +482,7 @@ const s = StyleSheet.create({
   taskTitle: { color: p.cream, fontSize: 14, fontWeight: '700' },
   feltOval: { borderRadius: 90, backgroundColor: '#155a40', borderWidth: 3, borderColor: '#775935', paddingVertical: 8, elevation: 2 },
   piles: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 }, pile: { alignItems: 'center', gap: 4, borderRadius: 8, padding: 3 }, pileReady: { backgroundColor: '#ffe1a410' },
+  dropTargetActive: { borderColor: p.gold, borderWidth: 2, backgroundColor: '#d9a44122' },
   stackShadow: { position: 'absolute', width: CARD_WIDTH, height: CARD_HEIGHT, borderRadius: 5, backgroundColor: '#bda886', left: 7, top: 7, borderWidth: 1, borderColor: '#624a32' },
   pileLabel: { color: '#e1d2ad', fontSize: 8, letterSpacing: 1, fontWeight: '700' }, empty: { width: CARD_WIDTH, height: CARD_HEIGHT, borderWidth: 1, borderColor: '#ffffff25', borderRadius: 5 },
   tableMark: { alignItems: 'center', opacity: 0.25 }, tableA: { color: '#e1d2ad', fontFamily: 'serif', fontSize: 25 }, tableBrand: { color: '#e1d2ad', fontSize: 6, letterSpacing: 1.5 },
@@ -292,19 +490,23 @@ const s = StyleSheet.create({
   timer: { minWidth: 28, height: 23, paddingHorizontal: 5, borderRadius: 12, backgroundColor: '#d9a44130', alignItems: 'center', justifyContent: 'center' }, timerUrgent: { backgroundColor: '#a64048' }, timerText: { color: p.cream, fontSize: 11, fontWeight: '900' }, emptyTable: { color: '#7f9d8c', textAlign: 'center', fontSize: 11, marginTop: 3 },
   botNotice: { marginHorizontal: 12, padding: 9, borderRadius: 10, backgroundColor: '#d9a44122', borderWidth: 1, borderColor: '#d9a44166', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   botNoticeText: { color: p.cream, fontSize: 11, flex: 1 }, reclaimButton: { paddingVertical: 7, paddingHorizontal: 10, borderRadius: 8, backgroundColor: p.gold }, reclaimText: { color: p.ink, fontSize: 11, fontWeight: '800' },
+  trayArea: { gap: 4, paddingVertical: 2 }, trayHint: { color: '#d9c89f', fontSize: 10, textAlign: 'center' }, trays: { gap: 7, paddingHorizontal: 3 },
+  dropSlot: { minWidth: 92, minHeight: 72, padding: 6, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: '#ffffff38', backgroundColor: '#ffffff08' },
+  dropSlotValid: { borderColor: '#79c99a', backgroundColor: '#3b9b6922' }, dropSlotLabel: { color: p.gold, fontSize: 9, fontWeight: '800' }, dropSlotEmpty: { color: '#789b88', fontSize: 10, textAlign: 'center', paddingTop: 15 },
+  slotCards: { minHeight: 53, flexDirection: 'row', alignItems: 'center', paddingTop: 3 },
   melds: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, meld: { padding: 8, borderWidth: 1, borderColor: p.line, borderRadius: 10, gap: 4 }, meldCards: { flexDirection: 'row' },
-  meldAction: { paddingTop: 3, minHeight: 25, justifyContent: 'center' },
-  hand: { paddingTop: 10, paddingBottom: 8, borderTopWidth: 1, borderColor: '#dab77b50', backgroundColor: '#071d17' },
+  meldDropHint: { color: p.gold, fontSize: 9, fontWeight: '700' },
+  hand: { paddingTop: 10, paddingBottom: 8, borderTopWidth: 1, borderColor: '#dab77b50', backgroundColor: '#071d17', overflow: 'visible' }, handDropActive: { borderTopWidth: 3, borderTopColor: p.gold, backgroundColor: '#0d3327' },
   handHeading: { flexDirection: 'row', paddingHorizontal: 18, justifyContent: 'space-between', alignItems: 'center' }, handName: { color: p.cream, fontSize: 15, fontWeight: '700' },
   handMeta: { flexDirection: 'row', alignItems: 'center', gap: 9 }, arrangeButton: { minHeight: 30, paddingHorizontal: 10, borderWidth: 1, borderColor: p.line, borderRadius: 9, justifyContent: 'center' }, arrangeButtonActive: { backgroundColor: '#d9a44120', borderColor: p.gold },
-  handCards: { maxHeight: 210 },
+  handCards: { maxHeight: 210, overflow: 'visible' },
   handScroll: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 4, flexGrow: 1, justifyContent: 'center' },
   rows: { gap: 8 }, cardRow: { flexDirection: 'row' }, actions: { flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingTop: 10 },
   secondary: { minHeight: 44, borderWidth: 1, borderColor: p.line, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flex: 1 },
   primary: { minHeight: 44, borderRadius: 11, backgroundColor: p.gold, alignItems: 'center', justifyContent: 'center', flex: 1.2 },
   actionText: { color: p.cream, fontSize: 13, fontWeight: '700' }, primaryText: { color: p.ink, fontSize: 14, fontWeight: '800' }, disabled: { opacity: 0.35 },
-  notice: { color: '#ffc88a', paddingHorizontal: 18, marginTop: 6, fontSize: 12 }, arrangeHint: { color: p.gold, paddingHorizontal: 18, marginTop: 6, fontSize: 11 }, actionsMuted: { opacity: 0.35 }, pending: { flexDirection: 'row', marginHorizontal: 18, marginTop: 8, padding: 8, backgroundColor: '#d9a44118', borderRadius: 8 },
-  pendingLabel: { color: p.cream, fontSize: 12 }, gold: { color: p.gold, fontSize: 12 },
+  notice: { color: '#ffc88a', paddingHorizontal: 18, marginTop: 6, fontSize: 12 }, arrangeHint: { color: p.gold, paddingHorizontal: 18, marginTop: 6, fontSize: 11 },
+  dragGuide: { color: '#90aa9b', fontSize: 10, textAlign: 'center', paddingHorizontal: 18, paddingTop: 5 }, gold: { color: p.gold, fontSize: 12 },
   backdrop: { flex: 1, backgroundColor: '#000b', justifyContent: 'center', padding: 24 }, sheet: { width: '100%', maxWidth: 480, alignSelf: 'center', backgroundColor: '#f5eedf', borderRadius: 23, padding: 25, gap: 14 },
   resultIcon: { textAlign: 'center', color: '#997431', fontSize: 36 }, resultTitle: { color: '#142c22', fontWeight: '800', fontSize: 25, textAlign: 'center' }, resultCaption: { color: '#59675f', fontSize: 13, lineHeight: 20, textAlign: 'center' },
   score: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderColor: '#d5cdbb' }, scoreName: { color: '#253a2e', fontSize: 15 }, scoreValue: { fontWeight: '800', color: '#80602b' },
