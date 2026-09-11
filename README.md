@@ -15,6 +15,21 @@ npm start
 
 Terminalde görünen QR kodunu Expo Go ile tarayın. Android emülatörü için `npm run android`; macOS üzerindeki iOS simülatörü için `npm run ios` kullanılabilir.
 
+## iOS / TestFlight
+
+TestFlight derlemeleri EAS'in `production` profiliyle hazırlanır. İlk kurulumda Expo
+hesabına giriş yaptıktan sonra proje EAS'e bağlanır ve `production` ortamına
+`EXPO_PUBLIC_SUPABASE_URL` ile `EXPO_PUBLIC_SUPABASE_KEY` eklenir. Ardından:
+
+```powershell
+npx eas-cli build --platform ios --profile production --auto-submit
+```
+
+Komut Apple dağıtım sertifikası ve provisioning profile oluşturma adımlarında yönlendirir.
+Derleme App Store Connect tarafından işlendikten sonra TestFlight'ta iç test grubuna
+eklenebilir. Google ile iOS girişini açmadan önce gerçek Google iOS Client ID değeri hem
+EAS ortamına eklenmeli hem de `app.json` içindeki Google URL şemasına yazılmalıdır.
+
 ## İlk sürümde olanlar
 
 - 3–6 oyunculu aynı cihaz modu
