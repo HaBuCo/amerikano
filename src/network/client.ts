@@ -1,112 +1,160 @@
-import Constants from 'expo-constants';
-import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { useSyncExternalStore } from 'react';
-import { ClientMessage, RoomView, ServerMessage } from './types';
 import { GameAction } from '../game/types';
+import { isSupabaseConfigured, supabase } from './supabase';
+import { ClientMessage, RoomView } from './types';
 
 type State = { status: 'offline' | 'connecting' | 'online'; room: RoomView | null; error: string; busy: boolean };
+type FunctionResult = { roomId?: string; room?: RoomView; left?: boolean; error?: string };
+
 let snapshot: State = { status: 'offline', room: null, error: '', busy: false };
-let ws: WebSocket | null = null;
-let session: { token: string; code: string } | null = null;
-let retry: ReturnType<typeof setTimeout> | undefined;
-let responseTimer: ReturnType<typeof setTimeout> | undefined;
-let wanted = false;
-let loaded = false;
-let pending: ClientMessage | null = null;
+let roomId: string | null = null;
+let roomChannel: RealtimeChannel | null = null;
+let connecting: Promise<void> | null = null;
 let sequence = 0;
 const listeners = new Set<() => void>();
-const storageKey = 'amerikano-room-v1';
-function update(patch: Partial<State>) { snapshot = { ...snapshot, ...patch }; listeners.forEach(f => f()); }
-const subscribe = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
+const storageKey = 'amerikano-supabase-room-v1';
+
+function update(patch: Partial<State>) {
+  snapshot = { ...snapshot, ...patch };
+  listeners.forEach((listener) => listener());
+}
+const subscribe = (listener: () => void) => {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
+};
 export const useRoom = () => useSyncExternalStore(subscribe, () => snapshot, () => snapshot);
 
-function endpoint() {
-  const configured = process.env.EXPO_PUBLIC_ROOM_SERVER;
-  if (configured) return configured;
-  if (!__DEV__) return '';
-  const host = Platform.OS === 'web' ? globalThis.location?.hostname : Constants.expoConfig?.hostUri?.split(':')[0];
-  return host ? `ws://${host}:8090` : 'ws://localhost:8090';
-}
-async function persist() {
-  const value = session ? JSON.stringify(session) : null;
-  if (Platform.OS === 'web') {
-    if (value) sessionStorage.setItem(storageKey, value); else sessionStorage.removeItem(storageKey);
-  } else {
-    if (value) await SecureStore.setItemAsync(storageKey, value); else await SecureStore.deleteItemAsync(storageKey);
-  }
-}
-export async function connectRoom() {
-  wanted = true;
-  if (!loaded) {
-    loaded = true;
+async function functionError(error: unknown) {
+  if (error && typeof error === 'object' && 'context' in error) {
     try {
-      const raw = Platform.OS === 'web' ? sessionStorage.getItem(storageKey) : await SecureStore.getItemAsync(storageKey);
-      if (raw) session = JSON.parse(raw);
-    } catch { session = null; }
+      const response = (error as { context: Response }).context;
+      const body = await response.clone().json() as { error?: string };
+      if (body.error) return body.error;
+    } catch { /* Use the SDK message below. */ }
   }
-  if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
-  const url = endpoint();
-  if (!url) { update({ error: 'Çevrim içi sunucu henüz yapılandırılmadı.', status: 'offline' }); return; }
-  update({ status: 'connecting' });
-  try { ws = new WebSocket(url); }
-  catch { update({ status: 'offline', error: 'Sunucu adresi geçersiz.' }); return; }
-  const current = ws;
-  current.onopen = () => {
-    if (current !== ws) return;
-    update({ status: 'online', error: '' });
-    if (session) current.send(JSON.stringify({ type: 'resume', ...session }));
-    else if (pending) { current.send(JSON.stringify(pending)); pending = null; }
-  };
-  current.onmessage = event => {
-    if (current !== ws) return;
-    const message = JSON.parse(event.data) as ServerMessage;
-    clearTimeout(responseTimer);
-    if (message.type === 'session') {
-      session = { token: message.token, code: message.code };
-      void persist().catch(() => update({ error: 'Oturum bu cihazda saklanamadı.' }));
-    } else if (message.type === 'state') update({ room: message.room, busy: false, error: '' });
-    else if (message.type === 'error') {
-      update({ error: message.message, busy: false });
-    } else if (message.type === 'left') {
-      session = null; void persist(); update({ room: null, busy: false });
-    }
-  };
-  current.onerror = () => update({ error: 'Sunucuya ulaşılamıyor. Bağlantı yeniden denenecek.' });
-  current.onclose = event => {
-    if (current !== ws) return;
-    ws = null;
-    update({ status: 'offline', busy: false });
-    if (event.code === 4001) { wanted = false; update({ error: 'Bu oturum başka bir cihazda açıldı.' }); }
-    if (wanted) { clearTimeout(retry); retry = setTimeout(() => void connectRoom(), 2500); }
-  };
+  return error instanceof Error ? error.message : 'Sunucuya ulaşılamadı.';
 }
+
+async function invoke(body: Record<string, unknown>): Promise<FunctionResult> {
+  if (!supabase) throw new Error('Supabase bağlantısı yapılandırılmadı.');
+  const { data, error } = await supabase.functions.invoke<FunctionResult>('room', { body });
+  if (error) throw new Error(await functionError(error));
+  if (data?.error) throw new Error(data.error);
+  return data ?? {};
+}
+
+async function persistRoom() {
+  if (roomId) await AsyncStorage.setItem(storageKey, roomId);
+  else await AsyncStorage.removeItem(storageKey);
+}
+
+async function refreshRoom() {
+  if (!roomId) return;
+  try {
+    const result = await invoke({ type: 'fetch', roomId });
+    if (result.room) update({ room: result.room, error: '', status: 'online' });
+  } catch (error) {
+    update({ error: error instanceof Error ? error.message : 'Masa yenilenemedi.' });
+  }
+}
+
+function listenToRoom(nextRoomId: string) {
+  if (!supabase) return;
+  if (roomChannel) void supabase.removeChannel(roomChannel);
+  roomChannel = supabase
+    .channel(`room:${nextRoomId}`, { config: { private: true } })
+    .on('broadcast', { event: 'room_changed' }, () => { void refreshRoom(); })
+    .subscribe((status) => {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        update({ error: 'Masa bağlantısı yenileniyor…' });
+      }
+    });
+}
+
+async function accept(result: FunctionResult) {
+  if (result.left) {
+    if (supabase && roomChannel) await supabase.removeChannel(roomChannel);
+    roomChannel = null;
+    roomId = null;
+    await persistRoom();
+    update({ room: null, busy: false, error: '' });
+    return;
+  }
+  if (!result.room || !result.roomId) throw new Error('Sunucudan oda bilgisi alınamadı.');
+  if (result.roomId !== roomId) {
+    roomId = result.roomId;
+    await persistRoom();
+    listenToRoom(roomId);
+  }
+  update({ room: result.room, busy: false, error: '', status: 'online' });
+}
+
+export async function connectRoom() {
+  if (connecting) return connecting;
+  connecting = (async () => {
+    if (!isSupabaseConfigured || !supabase) {
+      update({ status: 'offline', error: 'Supabase bağlantısı yapılandırılmadı.' });
+      return;
+    }
+    update({ status: 'connecting', error: '' });
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+    if (!sessionData.session) {
+      const { error } = await supabase.auth.signInAnonymously();
+      if (error) throw error;
+    }
+    roomId = await AsyncStorage.getItem(storageKey);
+    update({ status: 'online' });
+    if (roomId) {
+      listenToRoom(roomId);
+      await refreshRoom();
+    }
+  })().catch((error) => {
+    const message = error instanceof Error && /anonymous/i.test(error.message)
+      ? 'Supabase panelinden anonim girişi açmamız gerekiyor.'
+      : error instanceof Error ? error.message : 'Supabase bağlantısı kurulamadı.';
+    update({ status: 'offline', busy: false, error: message });
+  }).finally(() => { connecting = null; });
+  return connecting;
+}
+
 export function sendRoom(message: ClientMessage) {
   if (snapshot.busy) return;
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
-    update({ error: 'Bağlantı kurulmasını bekle.' }); return;
+  if (!supabase || snapshot.status !== 'online') {
+    update({ error: 'Bağlantı kurulmasını bekle.' });
+    return;
+  }
+  if (!roomId && message.type !== 'create' && message.type !== 'join') {
+    update({ error: 'Önce bir odaya katıl.' });
+    return;
   }
   update({ busy: true, error: '' });
-  ws.send(JSON.stringify(message));
-  responseTimer = setTimeout(() => {
-    update({ busy: false, error: 'Yanıt bekleniyor; masaya yeniden bağlanılıyor.' });
-    ws?.close();
-  }, 8000);
+  const body = message.type === 'create' || message.type === 'join' ? message : { ...message, roomId };
+  void invoke(body).then(accept).catch((error) => {
+    update({ busy: false, error: error instanceof Error ? error.message : 'İşlem tamamlanamadı.' });
+  });
 }
+
 export function enterRoom(name: string, code?: string) {
-  const msg: ClientMessage = code ? { type: 'join', name, code: code.toUpperCase() } : { type: 'create', name };
-  if (snapshot.status === 'online') sendRoom(msg);
-  else { pending = msg; void connectRoom(); }
+  sendRoom(code ? { type: 'join', name, code: code.toUpperCase() } : { type: 'create', name });
 }
+
 export function sendAction(action: GameAction) {
   if (!snapshot.room) return;
-  sendRoom({ type: 'action', requestId: `${Date.now()}-${++sequence}`, revision: snapshot.room.revision, action });
+  sendRoom({
+    type: 'action', requestId: `${Date.now()}-${++sequence}`,
+    revision: snapshot.room.revision, action,
+  });
 }
+
 export function clearRoomError() { update({ error: '' }); }
+
 export function forgetRoom() {
-  wanted = false; clearTimeout(retry); clearTimeout(responseTimer);
-  const old = ws; ws = null; old?.close();
-  session = null; pending = null; void persist();
-  update({ room: null, status: 'offline', error: '', busy: false });
-  void connectRoom();
+  if (supabase && roomChannel) void supabase.removeChannel(roomChannel);
+  roomChannel = null;
+  roomId = null;
+  void persistRoom();
+  update({ room: null, status: isSupabaseConfigured ? 'online' : 'offline', error: '', busy: false });
 }

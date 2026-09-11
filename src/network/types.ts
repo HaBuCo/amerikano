@@ -12,6 +12,7 @@ export type RoomView = {
 export type ClientMessage =
   | { type: 'create'; name: string }
   | { type: 'join'; code: string; name: string }
+  // Kept while the legacy self-hosted server remains available as a fallback.
   | { type: 'resume'; code: string; token: string }
   | { type: 'ready'; ready: boolean }
   | { type: 'start' }

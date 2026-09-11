@@ -1,0 +1,10 @@
+project_id = "amerikano"
+
+[auth]
+enabled = true
+enable_anonymous_sign_ins = true
+
+[functions.room]
+# Authentication is checked inside the function with auth.getUser(). This keeps
+# the function compatible with Supabase's current JWT signing-key transition.
+verify_jwt = false

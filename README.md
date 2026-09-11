@@ -33,20 +33,22 @@ Oyun kuralları `src/game` altında arayüzden bağımsızdır; botlar ve sunucu
 
 ## Arkadaş odaları
 
-İkinci terminalde `npm run server` çalıştırın (varsayılan port 8090).
-Geliştirmede istemci Expo sunucusunun adresini kullanır; telefonlar aynı ağda olmalıdır.
-İnternet erişimi için sunucunun ayrıca barındırılması ve TLS kurulması gerekir:
-`EXPO_PUBLIC_ROOM_SERVER=wss://sunucunuz` ile istemciyi yeniden derleyin.
-Bu depo henüz herkese açık bir sunucuya veya mağazalara yayımlanmamıştır.
+Üretim altyapısı Supabase Auth, Postgres, Realtime ve `room` Edge Function'ını kullanır.
+`.env.example` dosyasındaki iki public değer `.env.local` içine eklenmelidir. Service-role
+anahtarı mobil uygulamaya veya GitHub'a kesinlikle eklenmez.
 
-Sunucu SQLite'a odaları kaydeder; kart dağıtımı ve hamleler sunucu otoritesindedir.
-Rakip eller ve kapalı deste istemcilere gönderilmez. Yeniden bağlanma oturumu,
-hamle tekrarı engeli ve sürüm kontrolü vardır. Çevrim içi ceza teklifi zaman aşımı
-sunucuda uygulanır. Bağlantısı kesilen asıl sıra oyuncusunun yerine henüz bot geçmez.
-PORT, ROOM_DB ve ALLOWED_ORIGINS ortam değişkenleri desteklenir.
-Sunucu için `server/Dockerfile` bulunur; üretimde SQLite verisini kalıcı diske bağlayın.
+Veritabanı migration'ları ve kurulum notları `supabase/` altındadır. Oyuncular hesap
+formu görmeden anonim bir Supabase kimliği alır. RLS sayesinde yalnızca üye oldukları
+odayı okuyabilirler; rakip elleri ve kapalı deste istemcinin okuyamadığı `room_states`
+tablosunda tutulur. Hamleler Edge Function içinde ortak oyun motoruyla doğrulanır.
+Revision kontrolü aynı anda gelen hamlelerin birbirini ezmesini engeller ve Realtime
+özel oda kanalındaki değişiklikleri üyelere bildirir.
+
+`server/` altındaki eski WebSocket + SQLite sunucusu yalnızca yerel referans ve geriye
+dönüş seçeneği olarak korunmaktadır; mobil istemci artık onu kullanmaz.
 
 ## Kontroller
 
 `npm test`, `npm run typecheck`, `npm run lint`.
-Testler kural motorunu ve gerçek WebSocket istemcileriyle oda/yeniden bağlanma akışını kapsar.
+Yayınlanan Supabase oda akışının kısa kontrolü için `node scripts/smoke-supabase.mjs`
+kullanılabilir; test geçici odasını tamamlandığında siler.

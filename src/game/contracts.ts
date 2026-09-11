@@ -1,4 +1,4 @@
-import { RoundContract } from './types';
+import { RoundContract } from './types.ts';
 
 export const ROUND_CONTRACTS: RoundContract[] = [
   { title: 'Bir üçlü küt', shortTitle: '3’lü küt', parts: [{ type: 'set', length: 3, count: 1 }] },

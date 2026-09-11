@@ -43,3 +43,6 @@ example
 /android
 # Local room database / scratch data
 work/
+
+# Supabase CLI machine-local state
+supabase/.temp/
