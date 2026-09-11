@@ -1,56 +1,52 @@
-# Welcome to your Expo app 👋
+# Amerikano
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+iOS ve Android için Expo + React Native Amerikano: botlara karşı tek oyunculu,
+3–6 kişilik aynı cihaz modu ve kodla katılınan çevrim içi arkadaş odaları.
+Klasik resimli kartların CC0 lisansı ve kaynağı assets/cards altında bulunur.
 
-## Get started
+## Çalıştırma
 
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+Gereksinimler: Node.js 24 ve SDK 57 uyumlu Expo geliştirme ortamı.
 
 ```bash
-npm run reset-project
+npm install
+npm start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Terminalde görünen QR kodunu Expo Go ile tarayın. Android emülatörü için `npm run android`; macOS üzerindeki iOS simülatörü için `npm run ios` kullanılabilir.
 
-### Other setup steps
+## İlk sürümde olanlar
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+- 3–6 oyunculu aynı cihaz modu
+- Mevcut 12 el ve açılış görevleri (ayrıntılar: [RULES.md](RULES.md))
+- 106 kartlık deste, seri/küt ve joker doğrulaması
+- İlk beş elde açılışta joker yasağı; yalnızca yüksek As
+- 14/13 dağıtım, ters yönde sıra, ceza kartıyla sıra dışı alma
+- Açılış sırası işleme kilidi, atomik final ve kapalı bitiş kartı
+- Tek oyunculu oyunu cihazda otomatik saklama, devam etme veya yeni oyun başlatma
+- Kart çekme, grup hazırlama, yere açma ve kart atma akışı
+- El sonu ceza puanları ve oyun sonu sıralaması
 
-## Learn more
+## Mimari
 
-To learn more about developing your project with Expo, look at the following resources:
+Oyun kuralları `src/game` altında arayüzden bağımsızdır; botlar ve sunucu aynı motoru kullanır.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Arkadaş odaları
 
-## Join the community
+İkinci terminalde `npm run server` çalıştırın (varsayılan port 8090).
+Geliştirmede istemci Expo sunucusunun adresini kullanır; telefonlar aynı ağda olmalıdır.
+İnternet erişimi için sunucunun ayrıca barındırılması ve TLS kurulması gerekir:
+`EXPO_PUBLIC_ROOM_SERVER=wss://sunucunuz` ile istemciyi yeniden derleyin.
+Bu depo henüz herkese açık bir sunucuya veya mağazalara yayımlanmamıştır.
 
-Join our community of developers creating universal apps.
+Sunucu SQLite'a odaları kaydeder; kart dağıtımı ve hamleler sunucu otoritesindedir.
+Rakip eller ve kapalı deste istemcilere gönderilmez. Yeniden bağlanma oturumu,
+hamle tekrarı engeli ve sürüm kontrolü vardır. Çevrim içi ceza teklifi zaman aşımı
+sunucuda uygulanır. Bağlantısı kesilen asıl sıra oyuncusunun yerine henüz bot geçmez.
+PORT, ROOM_DB ve ALLOWED_ORIGINS ortam değişkenleri desteklenir.
+Sunucu için `server/Dockerfile` bulunur; üretimde SQLite verisini kalıcı diske bağlayın.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Kontroller
+
+`npm test`, `npm run typecheck`, `npm run lint`.
+Testler kural motorunu ve gerçek WebSocket istemcileriyle oda/yeniden bağlanma akışını kapsar.

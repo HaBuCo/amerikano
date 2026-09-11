@@ -41,3 +41,5 @@ example
 # generated native folders
 /ios
 /android
+# Local room database / scratch data
+work/
