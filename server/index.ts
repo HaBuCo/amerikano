@@ -4,7 +4,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { applyAction, armTurnTimer, createGame, expireTurn, RULESET_ID } from '../src/game/engine';
+import { actingPlayerId, applyAction, armTurnTimer, createGame, expireTurn, reclaimBotSeat, resetMissedTurns, RULESET_ID } from '../src/game/engine';
+import { botAction } from '../src/game/bot';
 import { GameState } from '../src/game/types';
 import { projectGame } from '../src/game/view';
 import { ClientMessage, ServerMessage } from '../src/network/types';
@@ -31,13 +32,27 @@ const save = (room: Room) => {
 const secureRandom = () => randomInt(0, 0x100000000) / 0x100000000;
 const send = (ws: WebSocket, data: ServerMessage) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data)); };
 const connected = (code: string, id: string) => [...sockets.entries()].some(([ws, s]) => ws.readyState === WebSocket.OPEN && s.code === code && s.id === id);
+function advanceBots(state: GameState) {
+  let current = state;
+  for (let step = 0; step < 50; step++) {
+    if (current.phase === 'round-over' || current.phase === 'game-over') break;
+    const actorId = actingPlayerId(current);
+    if (!current.botControlledPlayerIds?.includes(actorId)) break;
+    const action = botAction(current);
+    if (!action) break;
+    const next = applyAction(current, actorId, action, secureRandom);
+    if (next === current) break;
+    current = armTurnTimer(next);
+  }
+  return current;
+}
 function publish(room: Room) {
   for (const [ws, s] of sockets) {
     if (s.code !== room.code) continue;
     send(ws, { type: 'state', room: {
       code: room.code, hostId: room.hostId, you: s.id, revision: room.revision,
       status: !room.game ? 'waiting' : room.game.phase === 'game-over' ? 'finished' : 'playing',
-      members: room.members.map(m => ({ id: m.id, name: m.name, ready: m.ready, connected: connected(room.code, m.id), avatarKey: 'emerald', level: 1, gamesPlayed: 0, wins: 0 })),
+      members: room.members.map(m => ({ id: m.id, name: m.name, ready: m.ready, connected: connected(room.code, m.id), avatarKey: 'emerald', level: 1, gamesPlayed: 0, wins: 0, missedTurns: room.game?.missedTurns?.[m.id] ?? 0, botControlled: room.game?.botControlledPlayerIds?.includes(m.id) ?? false })),
       game: room.game ? projectGame(room.game, s.id) : null,
     } });
   }
@@ -49,7 +64,7 @@ function promote(room: Room) {
 }
 function expireRoomTurn(room: Room) {
   if (!room.game) return;
-  const next = expireTurn(room.game, Date.now(), secureRandom);
+  const next = advanceBots(expireTurn(room.game, Date.now(), secureRandom));
   if (next !== room.game) { room.game = next; room.revision++; save(room); publish(room); }
 }
 function nameOf(value: unknown) {
@@ -138,20 +153,26 @@ wss.on('connection', (ws, req) => {
         room.game = armTurnTimer(createGame(room.members.map(m => m.name), secureRandom));
         room.game.players = room.game.players.map((p, i) => ({ ...p, id: room.members[i].id }));
       } else if (msg.type === 'rematch') {
-        if (room.hostId !== session.id) throw new Error('Yeni maçı oda sahibi başlatabilir.');
+        if (room.hostId !== session.id && !room.game?.botControlledPlayerIds?.includes(room.hostId)) throw new Error('Yeni maçı oda sahibi başlatabilir.');
         if (room.game?.phase !== 'game-over') throw new Error('Maç henüz tamamlanmadı.');
         room.game = armTurnTimer(createGame(room.members.map(m => m.name), secureRandom));
         room.game.players = room.game.players.map((p, i) => ({ ...p, id: room.members[i].id }));
+      } else if (msg.type === 'reclaim') {
+        if (!room.game) throw new Error('Oyun henüz başlamadı.');
+        const next = reclaimBotSeat(room.game, session.id);
+        if (next === room.game) throw new Error('Koltuğun zaten sende.');
+        room.game = next;
       } else if (msg.type === 'action') {
         expireRoomTurn(room);
         if (!room.game || !msg.action || typeof msg.requestId !== 'string' || msg.requestId.length > 100) throw new Error('Geçersiz hamle.');
         const requestKey = session.id + ':' + msg.requestId;
         if (room.requests.includes(requestKey)) { publish(room); return; }
         if (msg.revision !== room.revision) { publish(room); throw new Error('Masa güncellendi; hamleni yeniden seç.'); }
-        if (msg.action.type === 'next' && room.hostId !== session.id) throw new Error('Sonraki eli oda sahibi başlatır.');
+        if (msg.action.type === 'next' && room.hostId !== session.id && !room.game.botControlledPlayerIds?.includes(room.hostId)) throw new Error('Sonraki eli oda sahibi başlatır.');
+        if (room.game.botControlledPlayerIds?.includes(session.id)) throw new Error('Önce koltuğunu bottan geri al.');
         const next = applyAction(room.game, session.id, msg.action, secureRandom);
         if (next === room.game) throw new Error('Hamle geçersiz: sıranı, kartlarını ve el görevini kontrol et.');
-        room.game = armTurnTimer(next);
+        room.game = advanceBots(armTurnTimer(resetMissedTurns(next, session.id)));
         room.requests.push(requestKey);
         room.requests = room.requests.slice(-256);
       } else throw new Error('Bilinmeyen işlem.');

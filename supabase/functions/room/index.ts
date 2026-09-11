@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { applyAction, armTurnTimer, createGame, expireTurn, RULESET_ID } from '../../../src/game/engine.ts';
+import { actingPlayerId, applyAction, armTurnTimer, createGame, expireTurn, reclaimBotSeat, resetMissedTurns, RULESET_ID } from '../../../src/game/engine.ts';
+import { botAction } from '../../../src/game/bot.ts';
 import { projectGame } from '../../../src/game/view.ts';
 import type { GameAction, GameState } from '../../../src/game/types.ts';
 
@@ -15,6 +16,7 @@ type Command =
   | { type: 'ready'; roomId: string; ready: boolean }
   | { type: 'start'; roomId: string }
   | { type: 'rematch'; roomId: string }
+  | { type: 'reclaim'; roomId: string }
   | { type: 'leave'; roomId: string }
   | { type: 'action'; roomId: string; requestId: string; revision: number; action: GameAction };
 
@@ -40,6 +42,21 @@ function roomCode() {
 
 function secureRandom() {
   return crypto.getRandomValues(new Uint32Array(1))[0] / 0x100000000;
+}
+
+function advanceBots(state: GameState) {
+  let current = state;
+  for (let step = 0; step < 50; step += 1) {
+    if (current.phase === 'round-over' || current.phase === 'game-over') break;
+    const actorId = actingPlayerId(current);
+    if (!current.botControlledPlayerIds?.includes(actorId)) break;
+    const action = botAction(current);
+    if (!action) break;
+    const next = applyAction(current, actorId, action, secureRandom);
+    if (next === current) break;
+    current = armTurnTimer(next);
+  }
+  return current;
 }
 
 Deno.serve(async (request) => {
@@ -102,6 +119,8 @@ Deno.serve(async (request) => {
           name: member.display_name,
           ready: member.ready,
           connected: Date.now() - Date.parse(member.last_seen_at) < 45_000,
+          missedTurns: state?.missedTurns?.[member.user_id] ?? 0,
+          botControlled: state?.botControlledPlayerIds?.includes(member.user_id) ?? false,
         })),
         game: state ? projectGame(state, user.id) : null,
       };
@@ -153,7 +172,7 @@ Deno.serve(async (request) => {
       const before = stored?.state as GameState | undefined;
       if (before) {
         await recordResult(command.roomId, before);
-        const after = expireTurn(before, Date.now(), secureRandom);
+        const after = advanceBots(expireTurn(before, Date.now(), secureRandom));
         if (after !== before) {
           await admin.rpc('commit_room_state', {
             target_room: command.roomId,
@@ -161,7 +180,7 @@ Deno.serve(async (request) => {
             next_state: after,
             actor_id: user.id,
             command_id: `timeout-${crypto.randomUUID()}`,
-            next_status: null,
+            next_status: after.phase === 'game-over' ? 'finished' : null,
           });
           return json({ roomId: command.roomId, room: await roomView(command.roomId) });
         }
@@ -212,7 +231,8 @@ Deno.serve(async (request) => {
     }
 
     if (command.type === 'rematch') {
-      if (currentView.hostId !== user.id) throw new Error('Yeni maçı yalnızca oda sahibi başlatabilir.');
+      const hostIsBot = (roomState?.state as GameState | undefined)?.botControlledPlayerIds?.includes(currentView.hostId);
+      if (currentView.hostId !== user.id && !hostIsBot) throw new Error('Yeni maçı yalnızca oda sahibi başlatabilir.');
       if (currentView.status !== 'finished' || currentView.game?.phase !== 'game-over') throw new Error('Maç henüz tamamlanmadı.');
       await recordResult(command.roomId, roomState?.state as GameState);
       const game = armTurnTimer(createGame(currentView.members.map((member) => member.name), secureRandom));
@@ -229,14 +249,33 @@ Deno.serve(async (request) => {
       return json({ roomId: command.roomId, room: await roomView(command.roomId) });
     }
 
+    if (command.type === 'reclaim') {
+      if (stateError || !roomState?.state) throw new Error('Oyun henüz başlamadı.');
+      const stored = roomState.state as GameState;
+      const after = reclaimBotSeat(stored, user.id);
+      if (after === stored) throw new Error('Koltuğun zaten sende.');
+      const commit = await admin.rpc('commit_room_state', {
+        target_room: command.roomId,
+        expected_revision: currentView.revision,
+        next_state: after,
+        actor_id: user.id,
+        command_id: `reclaim-${crypto.randomUUID()}`,
+        next_status: null,
+      });
+      if (commit.error || commit.data === null) throw new Error('Masa güncellendi; yeniden dene.');
+      return json({ roomId: command.roomId, room: await roomView(command.roomId) });
+    }
+
     if (command.type === 'action') {
       if (stateError || !roomState?.state) throw new Error('Oyun henüz başlamadı.');
       if (!Number.isSafeInteger(command.revision) || typeof command.requestId !== 'string') throw new Error('Geçersiz hamle.');
-      if (command.action.type === 'next' && currentView.hostId !== user.id) {
+      const stored = roomState.state as GameState;
+      const hostIsBot = stored.botControlledPlayerIds?.includes(currentView.hostId);
+      if (command.action.type === 'next' && currentView.hostId !== user.id && !hostIsBot) {
         throw new Error('Sonraki eli yalnızca oda sahibi başlatabilir.');
       }
-      const stored = roomState.state as GameState;
-      const timed = expireTurn(stored, Date.now(), secureRandom);
+      if (stored.botControlledPlayerIds?.includes(user.id)) throw new Error('Önce koltuğunu bottan geri al.');
+      const timed = advanceBots(expireTurn(stored, Date.now(), secureRandom));
       if (timed !== stored) {
         await admin.rpc('commit_room_state', {
           target_room: command.roomId,
@@ -244,13 +283,13 @@ Deno.serve(async (request) => {
           next_state: timed,
           actor_id: user.id,
           command_id: `timeout-${crypto.randomUUID()}`,
-          next_status: null,
+          next_status: timed.phase === 'game-over' ? 'finished' : null,
         });
         return json({ roomId: command.roomId, room: await roomView(command.roomId) });
       }
       const applied = applyAction(stored, user.id, command.action, secureRandom);
       if (applied === stored) throw new Error('Hamle geçersiz: sıranı, kartlarını ve el görevini kontrol et.');
-      const after = armTurnTimer(applied);
+      const after = advanceBots(armTurnTimer(resetMissedTurns(applied, user.id)));
       const commit = await admin.rpc('commit_room_state', {
         target_room: command.roomId,
         expected_revision: command.revision,

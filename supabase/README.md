@@ -13,6 +13,8 @@ Security model:
 - an Edge Function validates commands and returns a player-specific game view;
 - a revision check prevents concurrent moves from overwriting each other;
 - turn expiry and match statistics are decided by the Edge Function, never by a client;
+- three consecutive 45-second action expiries hand that seat to a server-run bot until the player reclaims it;
+- the separate 8-second discard-claim window auto-passes and never counts toward bot takeover;
 - private Realtime broadcasts only tell room members that a new view is ready.
 
 Never add a service-role key to an Expo environment variable. It belongs only in

@@ -1,6 +1,6 @@
-import { ROUND_CONTRACTS } from './contracts';
-import { actingPlayerId, applyAction, cardPoints, isValidMeld } from './engine';
-import { Card, GameAction, GameState, MeldType, RANKS, SUITS } from './types';
+import { ROUND_CONTRACTS } from './contracts.ts';
+import { actingPlayerId, applyAction, cardPoints, isValidMeld } from './engine.ts';
+import { Card, GameAction, GameState, MeldType, RANKS, SUITS } from './types.ts';
 
 type Group = { type: MeldType; cardIds: string[]; points: number };
 const rankValue = (c: Card) => c.rank === 'A' ? 14 : RANKS.indexOf(c.rank!) + 1;

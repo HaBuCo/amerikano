@@ -211,6 +211,7 @@ export function expireClaim(state: GameState, now = Date.now()): GameState {
 }
 
 export const TURN_TIMEOUT_MS = 45_000;
+export const MISSED_TURNS_BEFORE_BOT = 3;
 
 export function armTurnTimer(state: GameState, now = Date.now()): GameState {
   if (state.phase === 'claim' && state.claim) {
@@ -231,11 +232,36 @@ export function expireTurn(state: GameState, now = Date.now(), random = Math.ran
     return expired === state ? state : armTurnTimer(expired, now);
   }
   if ((state.phase !== 'draw' && state.phase !== 'play') || !state.turnDeadline || now < state.turnDeadline) return state;
-  if (state.phase === 'draw') return armTurnTimer(drawCard(state, 'stock', random, now), now);
   const player = state.players[state.currentPlayerIndex];
-  const card = player.hand.reduce<Card | undefined>((lowest, candidate) =>
-    !lowest || cardPoints(candidate) < cardPoints(lowest) ? candidate : lowest, undefined);
-  return card ? armTurnTimer(discardCard(state, card.id), now) : state;
+  let advanced: GameState;
+  if (state.phase === 'draw') {
+    advanced = drawCard(state, 'stock', random, now);
+  } else {
+    const card = player.hand.reduce<Card | undefined>((lowest, candidate) =>
+      !lowest || cardPoints(candidate) < cardPoints(lowest) ? candidate : lowest, undefined);
+    advanced = card ? discardCard(state, card.id) : state;
+  }
+  if (advanced === state) return state;
+  const missedTurns = { ...state.missedTurns, [player.id]: (state.missedTurns?.[player.id] ?? 0) + 1 };
+  const botControlledPlayerIds = missedTurns[player.id] >= MISSED_TURNS_BEFORE_BOT
+    ? [...new Set([...(state.botControlledPlayerIds ?? []), player.id])]
+    : state.botControlledPlayerIds;
+  return { ...armTurnTimer(advanced, now), missedTurns, botControlledPlayerIds };
+}
+
+export function resetMissedTurns(state: GameState, playerId: string): GameState {
+  if (!state.missedTurns?.[playerId]) return state;
+  return { ...state, missedTurns: { ...state.missedTurns, [playerId]: 0 } };
+}
+
+export function reclaimBotSeat(state: GameState, playerId: string, now = Date.now()): GameState {
+  if (!state.botControlledPlayerIds?.includes(playerId)) return state;
+  const reclaimed = {
+    ...state,
+    missedTurns: { ...state.missedTurns, [playerId]: 0 },
+    botControlledPlayerIds: state.botControlledPlayerIds.filter((id) => id !== playerId),
+  };
+  return actingPlayerId(reclaimed) === playerId ? armTurnTimer(reclaimed, now) : reclaimed;
 }
 
 export function discardCard(state: GameState, cardId: string): GameState {
@@ -380,10 +406,15 @@ export function nextRound(state: GameState, random = Math.random): GameState {
   if (state.phase !== 'round-over') return state;
   const roundIndex = state.roundIndex + 1;
   if (roundIndex >= ROUND_CONTRACTS.length) return { ...state, phase: 'game-over' };
-  return dealRound(
+  const next = dealRound(
     state.players,
     roundIndex,
     nextSeat(state.startingPlayerIndex, state.players.length),
     random,
   );
+  return {
+    ...next,
+    missedTurns: { ...state.missedTurns },
+    botControlledPlayerIds: [...(state.botControlledPlayerIds ?? [])],
+  };
 }

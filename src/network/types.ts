@@ -10,6 +10,7 @@ export type RoomView = {
   members: {
     id: string; name: string; connected: boolean; ready: boolean;
     avatarKey: string; level: number; gamesPlayed: number; wins: number;
+    missedTurns: number; botControlled: boolean;
   }[];
   game: PrivateGameView | null;
 };
@@ -21,6 +22,7 @@ export type ClientMessage =
   | { type: 'ready'; ready: boolean }
   | { type: 'start' }
   | { type: 'rematch' }
+  | { type: 'reclaim' }
   | { type: 'leave' }
   | { type: 'action'; requestId: string; revision: number; action: GameAction };
 export type ServerMessage =

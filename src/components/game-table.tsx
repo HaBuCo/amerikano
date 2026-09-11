@@ -13,7 +13,8 @@ import { arrangeHand, loadHandOrder, moveCardToIndex, reconcileHandOrder, saveHa
 type Props = {
   game: PrivateGameView; viewerId: string; modeLabel: string; blocked?: boolean;
   canAdvance?: boolean; canRematch?: boolean; error?: string;
-  playerMeta?: Record<string, { avatarColor: string; avatarSymbol: string; level: number; connected: boolean }>;
+  playerMeta?: Record<string, { avatarColor: string; avatarSymbol: string; level: number; connected: boolean; missedTurns: number; botControlled: boolean }>;
+  botControlled?: boolean; onReclaim?: () => void;
   onAction: (a: GameAction) => void; onRematch?: () => void; onExit: () => void;
 };
 type Pending = { type: MeldType; cardIds: string[] };
@@ -62,7 +63,7 @@ function TurnCountdown({ deadline }: { deadline?: number }) {
   return <View accessibilityLabel={`Sıra süresi ${seconds} saniye`} style={[s.timer, seconds <= 10 && s.timerUrgent]}><Text style={s.timerText}>{seconds}</Text></View>;
 }
 
-export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = true, canRematch = false, error, playerMeta, onAction, onRematch, onExit }: Props) {
+export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = true, canRematch = false, error, playerMeta, botControlled = false, onReclaim, onAction, onRematch, onExit }: Props) {
   const [selected, setSelected] = useState<string[]>([]);
   const [pending, setPending] = useState<Pending[]>([]);
   const [notice, setNotice] = useState('');
@@ -73,15 +74,16 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   const previousPhase = useRef(game.phase);
   const { width } = useWindowDimensions();
   const me = game.players.find(player => player.id === viewerId)!;
+  const myMissedTurns = playerMeta?.[viewerId]?.missedTurns ?? 0;
   const orderKey = `${modeLabel}:${game.roundIndex}:${viewerId}`;
   const handSignature = me.hand.map((card) => card.id).join('|');
   const [handOrder, setHandOrder] = useState(() => me.hand.map((card) => card.id));
   const loadedOrderKey = useRef('');
   const current = game.players[game.currentPlayerIndex];
-  const myTurn = current.id === viewerId && !blocked;
+  const myTurn = current.id === viewerId && !blocked && !botControlled;
   const playing = myTurn && game.phase === 'play';
   const drawing = myTurn && game.phase === 'draw';
-  const claiming = game.phase === 'claim' && game.claim?.playerIds[0] === viewerId && !blocked;
+  const claiming = game.phase === 'claim' && game.claim?.playerIds[0] === viewerId && !blocked && !botControlled;
   const claimPlayer = game.players.find(pl => pl.id === game.claim?.playerIds[0]);
   const openedThisTurn = me.openedTurn === game.turnCount;
   const stagedIds = new Set(pending.flatMap(g => g.cardIds));
@@ -191,7 +193,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.playersBar} contentContainerStyle={s.players}>
       {game.players.filter(pl => pl.id !== viewerId).map(pl => <View key={pl.id} style={[s.opponent, current.id === pl.id && s.activeOpponent]}>
         <View style={[s.avatar, playerMeta?.[pl.id] && { backgroundColor: playerMeta[pl.id].avatarColor }]}><Text style={s.avatarText}>{playerMeta?.[pl.id]?.avatarSymbol ?? pl.name.charAt(0)}</Text></View>
-        <View><Text numberOfLines={1} style={s.opponentName}>{pl.name}{playerMeta?.[pl.id]?.connected === false ? ' · çevrim dışı' : ''}</Text><Text style={s.small}>Sv. {playerMeta?.[pl.id]?.level ?? 1} · {game.handCounts[pl.id]} kart · {pl.score} puan{pl.hasOpened ? ' · Açtı' : ''}</Text></View>
+        <View><Text numberOfLines={1} style={s.opponentName}>{pl.name}{playerMeta?.[pl.id]?.botControlled ? ' · BOT' : playerMeta?.[pl.id]?.connected === false ? ' · çevrim dışı' : ''}</Text><Text style={s.small}>Sv. {playerMeta?.[pl.id]?.level ?? 1} · {game.handCounts[pl.id]} kart · {pl.score} puan{pl.hasOpened ? ' · Açtı' : ''}{playerMeta?.[pl.id]?.missedTurns ? ` · ${playerMeta[pl.id].missedTurns}/3 süre` : ''}</Text></View>
         <View style={{ marginLeft: 5 }}><PlayingCard hidden compact /></View>
       </View>)}
     </ScrollView>
@@ -212,6 +214,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
         </View>
       </View>
       <View style={s.turnRow}><Text style={s.turn}>{blocked ? 'Bağlantı / hamle bekleniyor…' : game.phase === 'claim' ? claiming ? 'Açık kartı 1 ceza kartıyla almak ister misin?' : `${claimPlayer?.name} açık kartı değerlendiriyor…` : myTurn ? drawing ? 'Sıra sende. Bir kart çek.' : 'Kartlarını seç, aç veya bir kart at.' : `${current.name} oynuyor…`}</Text><TurnCountdown deadline={game.turnDeadline} /></View>
+      {botControlled && <View style={s.botNotice}><Text style={s.botNoticeText}>Üç süre kaçırdığın için bot senin yerine oynuyor.</Text><Pressable accessibilityRole="button" disabled={blocked} onPress={onReclaim} style={[s.reclaimButton, blocked && s.disabled]}><Text style={s.reclaimText}>Koltuğu geri al</Text></Pressable></View>}
       {claiming && <View style={s.actions}>
         <Pressable accessibilityRole="button" onPress={() => act({ type: 'claim', take: false })} style={s.secondary}><Text style={s.actionText}>Pas geç</Text></Pressable>
         <Pressable accessibilityRole="button" onPress={() => act({ type: 'claim', take: true })} style={s.primary}><Text style={s.primaryText}>Al · +1 ceza kartı</Text></Pressable>
@@ -227,7 +230,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     </ScrollView>
     <View style={s.hand}>
       <View style={s.handHeading}>
-        <Text style={s.handName}>{me.name} <Text style={s.small}>· {me.hand.length} kart</Text></Text>
+        <Text style={s.handName}>{me.name} <Text style={s.small}>· {me.hand.length} kart{myMissedTurns ? ` · ${myMissedTurns}/3 süre kaçtı` : ''}</Text></Text>
         <View style={s.handMeta}><Text style={s.small}>{me.score} puan</Text><Pressable accessibilityRole="button" accessibilityLabel={arranging ? 'Kart dizmeyi bitir' : 'Eli istediğin gibi diz'} onPress={toggleArrange} style={[s.arrangeButton, arranging && s.arrangeButtonActive]}><Text style={s.gold}>{arranging ? 'Bitti' : 'Eli diz'}</Text></Pressable></View>
       </View>
       {!!(notice || error) && <Text accessibilityLiveRegion="polite" style={s.notice}>{error || notice}</Text>}
@@ -287,6 +290,8 @@ const s = StyleSheet.create({
   tableMark: { alignItems: 'center', opacity: 0.25 }, tableA: { color: '#e1d2ad', fontFamily: 'serif', fontSize: 25 }, tableBrand: { color: '#e1d2ad', fontSize: 6, letterSpacing: 1.5 },
   turnRow: { minHeight: 26, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }, turn: { color: '#e8d0a1', fontSize: 12, textAlign: 'center', fontWeight: '600' },
   timer: { minWidth: 28, height: 23, paddingHorizontal: 5, borderRadius: 12, backgroundColor: '#d9a44130', alignItems: 'center', justifyContent: 'center' }, timerUrgent: { backgroundColor: '#a64048' }, timerText: { color: p.cream, fontSize: 11, fontWeight: '900' }, emptyTable: { color: '#7f9d8c', textAlign: 'center', fontSize: 11, marginTop: 3 },
+  botNotice: { marginHorizontal: 12, padding: 9, borderRadius: 10, backgroundColor: '#d9a44122', borderWidth: 1, borderColor: '#d9a44166', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  botNoticeText: { color: p.cream, fontSize: 11, flex: 1 }, reclaimButton: { paddingVertical: 7, paddingHorizontal: 10, borderRadius: 8, backgroundColor: p.gold }, reclaimText: { color: p.ink, fontSize: 11, fontWeight: '800' },
   melds: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, meld: { padding: 8, borderWidth: 1, borderColor: p.line, borderRadius: 10, gap: 4 }, meldCards: { flexDirection: 'row' },
   meldAction: { paddingTop: 3, minHeight: 25, justifyContent: 'center' },
   hand: { paddingTop: 10, paddingBottom: 8, borderTopWidth: 1, borderColor: '#dab77b50', backgroundColor: '#071d17' },

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { actingPlayerId, applyAction, armTurnTimer, createDeck, createGame, isValidMeld, openMelds, handPoints, expireClaim, expireTurn, nextRound, replaceJoker, TURN_TIMEOUT_MS } from '../src/game/engine';
+import { actingPlayerId, applyAction, armTurnTimer, createDeck, createGame, isValidMeld, openMelds, handPoints, expireClaim, expireTurn, MISSED_TURNS_BEFORE_BOT, nextRound, reclaimBotSeat, replaceJoker, resetMissedTurns, TURN_TIMEOUT_MS } from '../src/game/engine';
 import { botAction, candidates } from '../src/game/bot';
 import { ROUND_CONTRACTS } from '../src/game/contracts';
 import { projectGame } from '../src/game/view';
@@ -234,4 +234,34 @@ test('online turn timer advances only after its authoritative deadline', () => {
   const afterDrawTimeout = expireTurn(afterDiscard, afterDiscard.turnDeadline!);
   assert.equal(afterDrawTimeout.phase, 'claim');
   assert.equal(afterDrawTimeout.turnDeadline, afterDrawTimeout.claim?.deadline);
+});
+
+test('three missed normal actions hand the seat to a bot and reclaim resets it', () => {
+  let state = armTurnTimer(createGame(['a', 'b', 'c']), 1_000);
+  const playerId = state.players[0].id;
+  for (let miss = 1; miss <= MISSED_TURNS_BEFORE_BOT; miss++) {
+    state = { ...state, currentPlayerIndex: 0, phase: 'play', turnDeadline: 1_000 + miss };
+    state = expireTurn(state, state.turnDeadline!);
+    assert.equal(state.missedTurns?.[playerId], miss);
+  }
+  assert.ok(state.botControlledPlayerIds?.includes(playerId));
+
+  const reclaimed = reclaimBotSeat(state, playerId, 50_000);
+  assert.equal(reclaimed.missedTurns?.[playerId], 0);
+  assert.ok(!reclaimed.botControlledPlayerIds?.includes(playerId));
+  assert.equal(resetMissedTurns({ ...state, botControlledPlayerIds: [] }, playerId).missedTurns?.[playerId], 0);
+});
+
+test('an expired penalty-card claim auto-passes without counting as a missed turn', () => {
+  const base = createGame(['a', 'b', 'c']);
+  const claimantId = base.players[1].id;
+  const claiming = {
+    ...base,
+    phase: 'claim' as const,
+    claim: { playerIds: [claimantId], deadline: 8_000 },
+    turnDeadline: 8_000,
+  };
+  const after = expireTurn(claiming, 8_000);
+  assert.equal(after.missedTurns?.[claimantId], undefined);
+  assert.equal(after.phase, 'play');
 });

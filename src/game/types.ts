@@ -53,6 +53,8 @@ export type GameState = {
   roundWinnerId: string | null;
   turnCount: number;
   turnDeadline?: number;
+  missedTurns?: Record<string, number>;
+  botControlledPlayerIds?: string[];
   discardFaceDown?: boolean;
   claim?: { playerIds: string[]; deadline: number };
 };

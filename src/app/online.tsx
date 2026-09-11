@@ -18,17 +18,19 @@ export default function OnlineScreen() {
     });
   }, []);
   const room = state.room;
+  const me = room?.members.find(member => member.id === room.you);
+  const hostIsBot = room?.members.find(member => member.id === room.hostId)?.botControlled ?? false;
   const playerMeta = Object.fromEntries((room?.members ?? []).map((member) => {
     const avatar = avatarFor(member.avatarKey);
-    return [member.id, { avatarColor: avatar.color, avatarSymbol: avatar.symbol, level: member.level, connected: member.connected }];
+    return [member.id, { avatarColor: avatar.color, avatarSymbol: avatar.symbol, level: member.level, connected: member.connected, missedTurns: member.missedTurns, botControlled: member.botControlled }];
   }));
   if (room?.game) return <GameTable key={room.code + ':' + room.game.roundIndex} game={room.game} viewerId={room.you}
-    modeLabel={`ÇEVRİM İÇİ · ${room.code}`} canAdvance={room.hostId === room.you} canRematch={room.hostId === room.you}
+    modeLabel={`ÇEVRİM İÇİ · ${room.code}`} canAdvance={room.hostId === room.you || hostIsBot} canRematch={room.hostId === room.you || hostIsBot}
     playerMeta={playerMeta} onRematch={() => sendRoom({ type: 'rematch' })}
+    botControlled={me?.botControlled} onReclaim={() => sendRoom({ type: 'reclaim' })}
     blocked={state.status !== 'online' || state.busy} onAction={sendAction}
     error={state.error || (state.status !== 'online' ? 'Yeniden bağlanılıyor… Elin korunuyor.' : '')}
     onExit={() => { if (room.game?.phase === 'game-over') forgetRoom(); router.replace('/'); }} />;
-  const me = room?.members.find(m => m.id === room.you);
   return <SafeAreaView style={s.page}>
     <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
       <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>← Ana menü</Text></Pressable>
