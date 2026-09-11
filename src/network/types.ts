@@ -4,9 +4,13 @@ import { PrivateGameView } from '../game/view';
 export type RoomView = {
   code: string;
   hostId: string;
+  status: 'waiting' | 'playing' | 'finished';
   you: string;
   revision: number;
-  members: { id: string; name: string; connected: boolean; ready: boolean }[];
+  members: {
+    id: string; name: string; connected: boolean; ready: boolean;
+    avatarKey: string; level: number; gamesPlayed: number; wins: number;
+  }[];
   game: PrivateGameView | null;
 };
 export type ClientMessage =
@@ -16,6 +20,7 @@ export type ClientMessage =
   | { type: 'resume'; code: string; token: string }
   | { type: 'ready'; ready: boolean }
   | { type: 'start' }
+  | { type: 'rematch' }
   | { type: 'leave' }
   | { type: 'action'; requestId: string; revision: number; action: GameAction };
 export type ServerMessage =

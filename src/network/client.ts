@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { useSyncExternalStore } from 'react';
+import { AppState } from 'react-native';
 import { GameAction } from '../game/types';
 import { isSupabaseConfigured, supabase } from './supabase';
 import { ClientMessage, RoomView } from './types';
@@ -12,6 +13,8 @@ let snapshot: State = { status: 'offline', room: null, error: '', busy: false };
 let roomId: string | null = null;
 let roomChannel: RealtimeChannel | null = null;
 let connecting: Promise<void> | null = null;
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let deadlineTimer: ReturnType<typeof setTimeout> | null = null;
 let sequence = 0;
 const listeners = new Set<() => void>();
 const storageKey = 'amerikano-supabase-room-v1';
@@ -54,21 +57,47 @@ async function refreshRoom() {
   if (!roomId) return;
   try {
     const result = await invoke({ type: 'fetch', roomId });
-    if (result.room) update({ room: result.room, error: '', status: 'online' });
+    if (result.room && (!snapshot.room || result.room.code !== snapshot.room.code || result.room.revision >= snapshot.room.revision)) {
+      update({ room: result.room, error: '', status: 'online' });
+      scheduleDeadlineRefresh(result.room);
+    }
   } catch (error) {
-    update({ error: error instanceof Error ? error.message : 'Masa yenilenemedi.' });
+    const message = error instanceof Error ? error.message : 'Masa yenilenemedi.';
+    if (/odada değilsin|oda bulunamadı|süresi doldu/i.test(message)) forgetRoom();
+    else update({ status: 'connecting', error: 'Bağlantı yenileniyor… Elin güvende.' });
   }
+}
+
+function clearRoomTimers() {
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  if (deadlineTimer) clearTimeout(deadlineTimer);
+  heartbeatTimer = null;
+  deadlineTimer = null;
+}
+
+function scheduleDeadlineRefresh(room: RoomView) {
+  if (deadlineTimer) clearTimeout(deadlineTimer);
+  deadlineTimer = null;
+  const deadline = room.game?.turnDeadline;
+  if (!deadline || room.game?.phase === 'round-over' || room.game?.phase === 'game-over') return;
+  deadlineTimer = setTimeout(() => { void refreshRoom(); }, Math.max(100, deadline - Date.now() + 150));
 }
 
 function listenToRoom(nextRoomId: string) {
   if (!supabase) return;
   if (roomChannel) void supabase.removeChannel(roomChannel);
+  clearRoomTimers();
+  heartbeatTimer = setInterval(() => { if (roomId) void refreshRoom(); }, 20_000);
   roomChannel = supabase
     .channel(`room:${nextRoomId}`, { config: { private: true } })
     .on('broadcast', { event: 'room_changed' }, () => { void refreshRoom(); })
     .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        update({ status: 'online', error: '' });
+        void refreshRoom();
+      }
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        update({ error: 'Masa bağlantısı yenileniyor…' });
+        update({ status: 'connecting', error: 'Masa bağlantısı yenileniyor… Elin güvende.' });
       }
     });
 }
@@ -77,6 +106,7 @@ async function accept(result: FunctionResult) {
   if (result.left) {
     if (supabase && roomChannel) await supabase.removeChannel(roomChannel);
     roomChannel = null;
+    clearRoomTimers();
     roomId = null;
     await persistRoom();
     update({ room: null, busy: false, error: '' });
@@ -88,7 +118,12 @@ async function accept(result: FunctionResult) {
     await persistRoom();
     listenToRoom(roomId);
   }
-  update({ room: result.room, busy: false, error: '', status: 'online' });
+  if (!snapshot.room || result.room.code !== snapshot.room.code || result.room.revision >= snapshot.room.revision) {
+    update({ room: result.room, busy: false, error: '', status: 'online' });
+    scheduleDeadlineRefresh(result.room);
+  } else {
+    update({ busy: false, error: '', status: 'online' });
+  }
 }
 
 export async function connectRoom() {
@@ -154,7 +189,12 @@ export function clearRoomError() { update({ error: '' }); }
 export function forgetRoom() {
   if (supabase && roomChannel) void supabase.removeChannel(roomChannel);
   roomChannel = null;
+  clearRoomTimers();
   roomId = null;
   void persistRoom();
   update({ room: null, status: isSupabaseConfigured ? 'online' : 'offline', error: '', busy: false });
 }
+
+AppState.addEventListener('change', (state) => {
+  if (state === 'active' && roomId) void refreshRoom();
+});

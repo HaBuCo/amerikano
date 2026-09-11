@@ -162,7 +162,7 @@ export function actingPlayerId(state: Pick<GameState, 'claim' | 'phase' | 'playe
   return state.phase === 'claim' ? state.claim!.playerIds[0] : state.players[state.currentPlayerIndex].id;
 }
 
-export function drawCard(state: GameState, source: 'stock' | 'discard', random = Math.random): GameState {
+export function drawCard(state: GameState, source: 'stock' | 'discard', random = Math.random, now = Date.now()): GameState {
   if (state.phase !== 'draw') return state;
   const stock = [...state.stock];
   const discard = [...state.discard];
@@ -175,7 +175,7 @@ export function drawCard(state: GameState, source: 'stock' | 'discard', random =
   if (source === 'stock' && discard.length && stock.length >= 2) {
     const playerIds = Array.from({ length: state.players.length - 1 }, (_, i) =>
       state.players[(state.currentPlayerIndex + state.players.length - i - 1) % state.players.length].id);
-    return { ...state, stock, discard, phase: 'claim', claim: { playerIds, deadline: Date.now() + CLAIM_TIMEOUT_MS } };
+    return { ...state, stock, discard, phase: 'claim', claim: { playerIds, deadline: now + CLAIM_TIMEOUT_MS } };
   }
   const card = source === 'stock' ? stock.pop() : discard.pop();
   if (!card) return state;
@@ -208,6 +208,34 @@ export function resolveClaim(state: GameState, actorId: string, take: boolean, n
 export function expireClaim(state: GameState, now = Date.now()): GameState {
   return state.phase === 'claim' && state.claim && now >= state.claim.deadline
     ? resolveClaim(state, state.claim.playerIds[0], false, now) : state;
+}
+
+export const TURN_TIMEOUT_MS = 45_000;
+
+export function armTurnTimer(state: GameState, now = Date.now()): GameState {
+  if (state.phase === 'claim' && state.claim) {
+    return state.turnDeadline === state.claim.deadline ? state : { ...state, turnDeadline: state.claim.deadline };
+  }
+  if (state.phase === 'draw' || state.phase === 'play') {
+    return { ...state, turnDeadline: now + TURN_TIMEOUT_MS };
+  }
+  if (state.turnDeadline === undefined) return state;
+  const { turnDeadline: _turnDeadline, ...withoutDeadline } = state;
+  return withoutDeadline;
+}
+
+/** Advances an overdue online turn without trusting a client-supplied action. */
+export function expireTurn(state: GameState, now = Date.now(), random = Math.random): GameState {
+  if (state.phase === 'claim') {
+    const expired = expireClaim(state, now);
+    return expired === state ? state : armTurnTimer(expired, now);
+  }
+  if ((state.phase !== 'draw' && state.phase !== 'play') || !state.turnDeadline || now < state.turnDeadline) return state;
+  if (state.phase === 'draw') return armTurnTimer(drawCard(state, 'stock', random, now), now);
+  const player = state.players[state.currentPlayerIndex];
+  const card = player.hand.reduce<Card | undefined>((lowest, candidate) =>
+    !lowest || cardPoints(candidate) < cardPoints(lowest) ? candidate : lowest, undefined);
+  return card ? armTurnTimer(discardCard(state, card.id), now) : state;
 }
 
 export function discardCard(state: GameState, cardId: string): GameState {

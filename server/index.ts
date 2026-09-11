@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { applyAction, createGame, expireClaim, RULESET_ID } from '../src/game/engine';
+import { applyAction, armTurnTimer, createGame, expireTurn, RULESET_ID } from '../src/game/engine';
 import { GameState } from '../src/game/types';
 import { projectGame } from '../src/game/view';
 import { ClientMessage, ServerMessage } from '../src/network/types';
@@ -36,7 +36,8 @@ function publish(room: Room) {
     if (s.code !== room.code) continue;
     send(ws, { type: 'state', room: {
       code: room.code, hostId: room.hostId, you: s.id, revision: room.revision,
-      members: room.members.map(m => ({ id: m.id, name: m.name, ready: m.ready, connected: connected(room.code, m.id) })),
+      status: !room.game ? 'waiting' : room.game.phase === 'game-over' ? 'finished' : 'playing',
+      members: room.members.map(m => ({ id: m.id, name: m.name, ready: m.ready, connected: connected(room.code, m.id), avatarKey: 'emerald', level: 1, gamesPlayed: 0, wins: 0 })),
       game: room.game ? projectGame(room.game, s.id) : null,
     } });
   }
@@ -46,9 +47,9 @@ function promote(room: Room) {
     room.hostId = room.members.find(m => connected(room.code, m.id))?.id ?? room.hostId;
   }
 }
-function expireRoomClaim(room: Room) {
+function expireRoomTurn(room: Room) {
   if (!room.game) return;
-  const next = expireClaim(room.game);
+  const next = expireTurn(room.game, Date.now(), secureRandom);
   if (next !== room.game) { room.game = next; room.revision++; save(room); publish(room); }
 }
 function nameOf(value: unknown) {
@@ -134,10 +135,15 @@ wss.on('connection', (ws, req) => {
         if (room.hostId !== session.id) throw new Error('Oyunu oda sahibi başlatabilir.');
         if (room.game) throw new Error('Oyun zaten başladı.');
         if (room.members.length < 3 || room.members.some(m => !m.ready || !connected(room.code, m.id))) throw new Error('En az 3 oyuncu bağlı ve hazır olmalı.');
-        room.game = createGame(room.members.map(m => m.name), secureRandom);
+        room.game = armTurnTimer(createGame(room.members.map(m => m.name), secureRandom));
+        room.game.players = room.game.players.map((p, i) => ({ ...p, id: room.members[i].id }));
+      } else if (msg.type === 'rematch') {
+        if (room.hostId !== session.id) throw new Error('Yeni maçı oda sahibi başlatabilir.');
+        if (room.game?.phase !== 'game-over') throw new Error('Maç henüz tamamlanmadı.');
+        room.game = armTurnTimer(createGame(room.members.map(m => m.name), secureRandom));
         room.game.players = room.game.players.map((p, i) => ({ ...p, id: room.members[i].id }));
       } else if (msg.type === 'action') {
-        expireRoomClaim(room);
+        expireRoomTurn(room);
         if (!room.game || !msg.action || typeof msg.requestId !== 'string' || msg.requestId.length > 100) throw new Error('Geçersiz hamle.');
         const requestKey = session.id + ':' + msg.requestId;
         if (room.requests.includes(requestKey)) { publish(room); return; }
@@ -145,7 +151,7 @@ wss.on('connection', (ws, req) => {
         if (msg.action.type === 'next' && room.hostId !== session.id) throw new Error('Sonraki eli oda sahibi başlatır.');
         const next = applyAction(room.game, session.id, msg.action, secureRandom);
         if (next === room.game) throw new Error('Hamle geçersiz: sıranı, kartlarını ve el görevini kontrol et.');
-        room.game = next;
+        room.game = armTurnTimer(next);
         room.requests.push(requestKey);
         room.requests = room.requests.slice(-256);
       } else throw new Error('Bilinmeyen işlem.');
@@ -174,6 +180,6 @@ const cleanup = setInterval(() => {
   }
 }, 60000);
 cleanup.unref();
-const claimClock = setInterval(() => { for (const room of rooms.values()) expireRoomClaim(room); }, 250);
+const claimClock = setInterval(() => { for (const room of rooms.values()) expireRoomTurn(room); }, 250);
 claimClock.unref();
 http.listen(port, '0.0.0.0', () => console.log(`Amerikano rooms: port ${port}`));

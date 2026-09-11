@@ -52,6 +52,7 @@ export type GameState = {
   phase: 'draw' | 'claim' | 'play' | 'round-over' | 'game-over';
   roundWinnerId: string | null;
   turnCount: number;
+  turnDeadline?: number;
   discardFaceDown?: boolean;
   claim?: { playerIds: string[]; deadline: number };
 };

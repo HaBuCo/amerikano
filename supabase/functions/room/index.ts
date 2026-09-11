@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { applyAction, createGame, expireClaim, RULESET_ID } from '../../../src/game/engine.ts';
+import { applyAction, armTurnTimer, createGame, expireTurn, RULESET_ID } from '../../../src/game/engine.ts';
 import { projectGame } from '../../../src/game/view.ts';
 import type { GameAction, GameState } from '../../../src/game/types.ts';
 
@@ -14,6 +14,7 @@ type Command =
   | { type: 'fetch'; roomId: string }
   | { type: 'ready'; roomId: string; ready: boolean }
   | { type: 'start'; roomId: string }
+  | { type: 'rematch'; roomId: string }
   | { type: 'leave'; roomId: string }
   | { type: 'action'; roomId: string; requestId: string; revision: number; action: GameAction };
 
@@ -64,30 +65,54 @@ Deno.serve(async (request) => {
     if (!command || typeof command.type !== 'string') throw new Error('Geçersiz istek.');
 
     const roomView = async (roomId: string) => {
+      await admin.rpc('touch_online_room_member', { p_room_id: roomId, p_user_id: user.id });
       const { data: membership } = await admin.from('room_members').select('room_id')
         .eq('room_id', roomId).eq('user_id', user.id).maybeSingle();
       if (!membership) throw new Error('Bu odada değilsin.');
 
       const [roomResult, membersResult, stateResult] = await Promise.all([
         admin.from('rooms').select('id, code, host_id, revision, status').eq('id', roomId).single(),
-        admin.from('room_members').select('user_id, display_name, ready, seat').eq('room_id', roomId).order('seat'),
+        admin.from('room_members').select('user_id, display_name, ready, seat, last_seen_at').eq('room_id', roomId).order('seat'),
         admin.from('room_states').select('state').eq('room_id', roomId).maybeSingle(),
       ]);
       if (roomResult.error || membersResult.error) throw new Error('Oda bilgisi alınamadı.');
       const state = stateResult.data?.state as GameState | undefined;
+      const memberIds = membersResult.data.map((member) => member.user_id);
+      const profilesResult = memberIds.length
+        ? await admin.from('profiles').select('user_id, avatar_key, experience, games_played, wins').in('user_id', memberIds)
+        : { data: [], error: null };
+      const profiles = new Map((profilesResult.data ?? []).map((profile) => [profile.user_id, profile]));
       return {
         code: roomResult.data.code,
         hostId: roomResult.data.host_id,
+        status: roomResult.data.status,
         you: user.id,
         revision: roomResult.data.revision,
         members: membersResult.data.map((member) => ({
+          ...(() => {
+            const profile = profiles.get(member.user_id);
+            return {
+              avatarKey: profile?.avatar_key ?? 'emerald',
+              level: Math.floor(Math.sqrt(Math.max(0, profile?.experience ?? 0) / 100)) + 1,
+              gamesPlayed: profile?.games_played ?? 0,
+              wins: profile?.wins ?? 0,
+            };
+          })(),
           id: member.user_id,
           name: member.display_name,
           ready: member.ready,
-          connected: true,
+          connected: Date.now() - Date.parse(member.last_seen_at) < 45_000,
         })),
         game: state ? projectGame(state, user.id) : null,
       };
+    };
+
+    const recordResult = async (targetRoomId: string, state: GameState) => {
+      if (state.phase !== 'game-over') return;
+      const minimum = Math.min(...state.players.map((player) => player.score));
+      const winnerIds = state.players.filter((player) => player.score === minimum).map((player) => player.id);
+      const result = await admin.rpc('record_online_game_result', { p_room_id: targetRoomId, p_winner_ids: winnerIds });
+      if (result.error) console.error('Could not record room result', result.error.message);
     };
 
     if (command.type === 'create') {
@@ -122,7 +147,27 @@ Deno.serve(async (request) => {
 
     if (!('roomId' in command) || typeof command.roomId !== 'string') throw new Error('Oda bilgisi eksik.');
 
-    if (command.type === 'fetch') return json({ roomId: command.roomId, room: await roomView(command.roomId) });
+    if (command.type === 'fetch') {
+      const currentView = await roomView(command.roomId);
+      const { data: stored } = await admin.from('room_states').select('state').eq('room_id', command.roomId).maybeSingle();
+      const before = stored?.state as GameState | undefined;
+      if (before) {
+        await recordResult(command.roomId, before);
+        const after = expireTurn(before, Date.now(), secureRandom);
+        if (after !== before) {
+          await admin.rpc('commit_room_state', {
+            target_room: command.roomId,
+            expected_revision: currentView.revision,
+            next_state: after,
+            actor_id: user.id,
+            command_id: `timeout-${crypto.randomUUID()}`,
+            next_status: null,
+          });
+          return json({ roomId: command.roomId, room: await roomView(command.roomId) });
+        }
+      }
+      return json({ roomId: command.roomId, room: currentView });
+    }
 
     if (command.type === 'ready') {
       if (typeof command.ready !== 'boolean') throw new Error('Hazır bilgisi geçersiz.');
@@ -152,7 +197,7 @@ Deno.serve(async (request) => {
       if (currentView.members.length < 3 || currentView.members.some((member) => !member.ready)) {
         throw new Error('En az 3 oyuncu hazır olmalı.');
       }
-      const game = createGame(currentView.members.map((member) => member.name), secureRandom);
+      const game = armTurnTimer(createGame(currentView.members.map((member) => member.name), secureRandom));
       game.players = game.players.map((player, index) => ({ ...player, id: currentView.members[index].id }));
       const commit = await admin.rpc('commit_room_state', {
         target_room: command.roomId,
@@ -166,15 +211,46 @@ Deno.serve(async (request) => {
       return json({ roomId: command.roomId, room: await roomView(command.roomId) });
     }
 
+    if (command.type === 'rematch') {
+      if (currentView.hostId !== user.id) throw new Error('Yeni maçı yalnızca oda sahibi başlatabilir.');
+      if (currentView.status !== 'finished' || currentView.game?.phase !== 'game-over') throw new Error('Maç henüz tamamlanmadı.');
+      await recordResult(command.roomId, roomState?.state as GameState);
+      const game = armTurnTimer(createGame(currentView.members.map((member) => member.name), secureRandom));
+      game.players = game.players.map((player, index) => ({ ...player, id: currentView.members[index].id }));
+      const commit = await admin.rpc('commit_room_state', {
+        target_room: command.roomId,
+        expected_revision: currentView.revision,
+        next_state: game,
+        actor_id: user.id,
+        command_id: `rematch-${crypto.randomUUID()}`,
+        next_status: 'playing',
+      });
+      if (commit.error || commit.data === null) throw new Error('Masa değişti; tekrar dene.');
+      return json({ roomId: command.roomId, room: await roomView(command.roomId) });
+    }
+
     if (command.type === 'action') {
       if (stateError || !roomState?.state) throw new Error('Oyun henüz başlamadı.');
       if (!Number.isSafeInteger(command.revision) || typeof command.requestId !== 'string') throw new Error('Geçersiz hamle.');
       if (command.action.type === 'next' && currentView.hostId !== user.id) {
         throw new Error('Sonraki eli yalnızca oda sahibi başlatabilir.');
       }
-      const before = expireClaim(roomState.state as GameState);
-      const after = applyAction(before, user.id, command.action, secureRandom);
-      if (after === before) throw new Error('Hamle geçersiz: sıranı, kartlarını ve el görevini kontrol et.');
+      const stored = roomState.state as GameState;
+      const timed = expireTurn(stored, Date.now(), secureRandom);
+      if (timed !== stored) {
+        await admin.rpc('commit_room_state', {
+          target_room: command.roomId,
+          expected_revision: command.revision,
+          next_state: timed,
+          actor_id: user.id,
+          command_id: `timeout-${crypto.randomUUID()}`,
+          next_status: null,
+        });
+        return json({ roomId: command.roomId, room: await roomView(command.roomId) });
+      }
+      const applied = applyAction(stored, user.id, command.action, secureRandom);
+      if (applied === stored) throw new Error('Hamle geçersiz: sıranı, kartlarını ve el görevini kontrol et.');
+      const after = armTurnTimer(applied);
       const commit = await admin.rpc('commit_room_state', {
         target_room: command.roomId,
         expected_revision: command.revision,
@@ -184,6 +260,7 @@ Deno.serve(async (request) => {
         next_status: after.phase === 'game-over' ? 'finished' : null,
       });
       if (commit.error || commit.data === null) throw new Error('Masa güncellendi; hamleni yeniden seç.');
+      await recordResult(command.roomId, after);
       return json({ roomId: command.roomId, room: await roomView(command.roomId) });
     }
 

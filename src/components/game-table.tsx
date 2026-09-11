@@ -12,7 +12,9 @@ import { arrangeHand, loadHandOrder, moveCardToIndex, reconcileHandOrder, saveHa
 
 type Props = {
   game: PrivateGameView; viewerId: string; modeLabel: string; blocked?: boolean;
-  canAdvance?: boolean; error?: string; onAction: (a: GameAction) => void; onExit: () => void;
+  canAdvance?: boolean; canRematch?: boolean; error?: string;
+  playerMeta?: Record<string, { avatarColor: string; avatarSymbol: string; level: number; connected: boolean }>;
+  onAction: (a: GameAction) => void; onRematch?: () => void; onExit: () => void;
 };
 type Pending = { type: MeldType; cardIds: string[] };
 type DraggableCardProps = {
@@ -47,7 +49,20 @@ function DraggableHandCard({ card, index, step, cardsPerRow, arranging, selected
   </Animated.View>;
 }
 
-export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = true, error, onAction, onExit }: Props) {
+function TurnCountdown({ deadline }: { deadline?: number }) {
+  const [seconds, setSeconds] = useState(() => deadline ? Math.max(0, Math.ceil((deadline - Date.now()) / 1000)) : 0);
+  useEffect(() => {
+    if (!deadline) return;
+    const update = () => setSeconds(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  }, [deadline]);
+  if (!deadline) return null;
+  return <View accessibilityLabel={`Sıra süresi ${seconds} saniye`} style={[s.timer, seconds <= 10 && s.timerUrgent]}><Text style={s.timerText}>{seconds}</Text></View>;
+}
+
+export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = true, canRematch = false, error, playerMeta, onAction, onRematch, onExit }: Props) {
   const [selected, setSelected] = useState<string[]>([]);
   const [pending, setPending] = useState<Pending[]>([]);
   const [notice, setNotice] = useState('');
@@ -175,8 +190,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     </View>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.playersBar} contentContainerStyle={s.players}>
       {game.players.filter(pl => pl.id !== viewerId).map(pl => <View key={pl.id} style={[s.opponent, current.id === pl.id && s.activeOpponent]}>
-        <View style={s.avatar}><Text style={s.avatarText}>{pl.name.charAt(0)}</Text></View>
-        <View><Text numberOfLines={1} style={s.opponentName}>{pl.name}</Text><Text style={s.small}>{game.handCounts[pl.id]} kart · {pl.score} puan{pl.hasOpened ? ' · Açtı' : ''}</Text></View>
+        <View style={[s.avatar, playerMeta?.[pl.id] && { backgroundColor: playerMeta[pl.id].avatarColor }]}><Text style={s.avatarText}>{playerMeta?.[pl.id]?.avatarSymbol ?? pl.name.charAt(0)}</Text></View>
+        <View><Text numberOfLines={1} style={s.opponentName}>{pl.name}{playerMeta?.[pl.id]?.connected === false ? ' · çevrim dışı' : ''}</Text><Text style={s.small}>Sv. {playerMeta?.[pl.id]?.level ?? 1} · {game.handCounts[pl.id]} kart · {pl.score} puan{pl.hasOpened ? ' · Açtı' : ''}</Text></View>
         <View style={{ marginLeft: 5 }}><PlayingCard hidden compact /></View>
       </View>)}
     </ScrollView>
@@ -196,7 +211,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
           </Pressable>
         </View>
       </View>
-      <Text style={s.turn}>{blocked ? 'Bağlantı / hamle bekleniyor…' : game.phase === 'claim' ? claiming ? 'Açık kartı 1 ceza kartıyla almak ister misin?' : `${claimPlayer?.name} açık kartı değerlendiriyor…` : myTurn ? drawing ? 'Sıra sende. Bir kart çek.' : 'Kartlarını seç, aç veya bir kart at.' : `${current.name} oynuyor…`}</Text>
+      <View style={s.turnRow}><Text style={s.turn}>{blocked ? 'Bağlantı / hamle bekleniyor…' : game.phase === 'claim' ? claiming ? 'Açık kartı 1 ceza kartıyla almak ister misin?' : `${claimPlayer?.name} açık kartı değerlendiriyor…` : myTurn ? drawing ? 'Sıra sende. Bir kart çek.' : 'Kartlarını seç, aç veya bir kart at.' : `${current.name} oynuyor…`}</Text><TurnCountdown deadline={game.turnDeadline} /></View>
       {claiming && <View style={s.actions}>
         <Pressable accessibilityRole="button" onPress={() => act({ type: 'claim', take: false })} style={s.secondary}><Text style={s.actionText}>Pas geç</Text></Pressable>
         <Pressable accessibilityRole="button" onPress={() => act({ type: 'claim', take: true })} style={s.primary}><Text style={s.primaryText}>Al · +1 ceza kartı</Text></Pressable>
@@ -237,7 +252,10 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
         <Text style={s.resultTitle}>{game.phase === 'game-over' ? winners.map(w => w.name).join(' & ') + ' kazandı!' : game.phase === 'round-over' ? game.players.find(pl => pl.id === game.roundWinnerId)?.name + ' bitirdi!' : 'Puan tablosu'}</Text>
         <Text style={s.resultCaption}>En düşük toplam puan kazanır.</Text>
         {[...game.players].sort((a, b) => a.score - b.score).map((pl, i) => <View key={pl.id} style={s.score}><Text style={s.scoreName}>{i + 1}. {pl.name}</Text><Text style={s.scoreValue}>{pl.score}</Text></View>)}
-        {over ? game.phase === 'game-over' ? <Pressable style={s.resultButton} onPress={onExit}><Text style={s.actionText}>Ana menü</Text></Pressable>
+        {over ? game.phase === 'game-over' ? <>{onRematch && (canRematch
+            ? <Pressable disabled={blocked} style={[s.resultButton, blocked && s.disabled]} onPress={onRematch}><Text style={s.actionText}>Tekrar oyna</Text></Pressable>
+            : <Text style={s.resultCaption}>Oda sahibinin yeniden başlatması bekleniyor.</Text>)}
+          <Pressable style={s.resultButtonSecondary} onPress={onExit}><Text style={s.resultButtonSecondaryText}>Ana menü</Text></Pressable></>
           : canAdvance ? <Pressable disabled={blocked} style={s.resultButton} onPress={() => { setPending([]); setSelected([]); act({ type: 'next' }); }}><Text style={s.actionText}>{game.roundIndex === 11 ? 'Sonucu gör' : 'Sonraki el'}</Text></Pressable>
           : <Text style={s.resultCaption}>Oda sahibinin sonraki eli başlatması bekleniyor.</Text>
           : <Pressable style={s.resultButton} onPress={() => setScoresOpen(false)}><Text style={s.actionText}>Masaya dön</Text></Pressable>}
@@ -267,7 +285,8 @@ const s = StyleSheet.create({
   stackShadow: { position: 'absolute', width: CARD_WIDTH, height: CARD_HEIGHT, borderRadius: 5, backgroundColor: '#bda886', left: 7, top: 7, borderWidth: 1, borderColor: '#624a32' },
   pileLabel: { color: '#e1d2ad', fontSize: 8, letterSpacing: 1, fontWeight: '700' }, empty: { width: CARD_WIDTH, height: CARD_HEIGHT, borderWidth: 1, borderColor: '#ffffff25', borderRadius: 5 },
   tableMark: { alignItems: 'center', opacity: 0.25 }, tableA: { color: '#e1d2ad', fontFamily: 'serif', fontSize: 25 }, tableBrand: { color: '#e1d2ad', fontSize: 6, letterSpacing: 1.5 },
-  turn: { color: '#e8d0a1', fontSize: 12, textAlign: 'center', fontWeight: '600' }, emptyTable: { color: '#7f9d8c', textAlign: 'center', fontSize: 11, marginTop: 3 },
+  turnRow: { minHeight: 26, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }, turn: { color: '#e8d0a1', fontSize: 12, textAlign: 'center', fontWeight: '600' },
+  timer: { minWidth: 28, height: 23, paddingHorizontal: 5, borderRadius: 12, backgroundColor: '#d9a44130', alignItems: 'center', justifyContent: 'center' }, timerUrgent: { backgroundColor: '#a64048' }, timerText: { color: p.cream, fontSize: 11, fontWeight: '900' }, emptyTable: { color: '#7f9d8c', textAlign: 'center', fontSize: 11, marginTop: 3 },
   melds: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, meld: { padding: 8, borderWidth: 1, borderColor: p.line, borderRadius: 10, gap: 4 }, meldCards: { flexDirection: 'row' },
   meldAction: { paddingTop: 3, minHeight: 25, justifyContent: 'center' },
   hand: { paddingTop: 10, paddingBottom: 8, borderTopWidth: 1, borderColor: '#dab77b50', backgroundColor: '#071d17' },
@@ -285,4 +304,5 @@ const s = StyleSheet.create({
   resultIcon: { textAlign: 'center', color: '#997431', fontSize: 36 }, resultTitle: { color: '#142c22', fontWeight: '800', fontSize: 25, textAlign: 'center' }, resultCaption: { color: '#59675f', fontSize: 13, lineHeight: 20, textAlign: 'center' },
   score: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderColor: '#d5cdbb' }, scoreName: { color: '#253a2e', fontSize: 15 }, scoreValue: { fontWeight: '800', color: '#80602b' },
   resultButton: { padding: 16, backgroundColor: '#143e2c', borderRadius: 12, alignItems: 'center' },
+  resultButtonSecondary: { padding: 13, borderWidth: 1, borderColor: '#9d9584', borderRadius: 12, alignItems: 'center' }, resultButtonSecondaryText: { color: '#253a2e', fontSize: 13, fontWeight: '700' },
 });

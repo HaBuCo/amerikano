@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { actingPlayerId, applyAction, createDeck, createGame, isValidMeld, openMelds, handPoints, expireClaim, nextRound, replaceJoker } from '../src/game/engine';
+import { actingPlayerId, applyAction, armTurnTimer, createDeck, createGame, isValidMeld, openMelds, handPoints, expireClaim, expireTurn, nextRound, replaceJoker, TURN_TIMEOUT_MS } from '../src/game/engine';
 import { botAction, candidates } from '../src/game/bot';
 import { ROUND_CONTRACTS } from '../src/game/contracts';
 import { projectGame } from '../src/game/view';
@@ -217,4 +217,21 @@ test('set joker accepts only a missing suit of the same rank and requires prior 
   assert.equal(replaceJoker(s, 'set', 'j', 'duplicate-heart'), s);
   assert.notEqual(replaceJoker(s, 'set', 'j', '5spades'), s);
   assert.notEqual(replaceJoker(s, 'set', 'j', '5clubs'), s);
+});
+
+test('online turn timer advances only after its authoritative deadline', () => {
+  const now = 1_000_000;
+  const playing = armTurnTimer(createGame(['a', 'b', 'c']), now);
+  assert.equal(playing.turnDeadline, now + TURN_TIMEOUT_MS);
+  assert.equal(expireTurn(playing, playing.turnDeadline! - 1), playing);
+
+  const afterDiscard = expireTurn(playing, playing.turnDeadline!);
+  assert.equal(afterDiscard.phase, 'draw');
+  assert.equal(afterDiscard.currentPlayerIndex, 2);
+  assert.equal(afterDiscard.players[0].hand.length, 13);
+  assert.equal(afterDiscard.turnDeadline, playing.turnDeadline! + TURN_TIMEOUT_MS);
+
+  const afterDrawTimeout = expireTurn(afterDiscard, afterDiscard.turnDeadline!);
+  assert.equal(afterDrawTimeout.phase, 'claim');
+  assert.equal(afterDrawTimeout.turnDeadline, afterDrawTimeout.claim?.deadline);
 });
