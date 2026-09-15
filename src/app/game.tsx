@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameTable } from '@/components/game-table';
 import { actingPlayerId, applyAction, createGame } from '@/game/engine';
 import { botAction } from '@/game/bot';
@@ -62,11 +63,15 @@ export default function GameScreen() {
     setError(''); setGame(next);
     if (!single && (actingPlayerId(next) !== actingPlayerId(game) || action.type === 'next')) setVisible(false);
   }
-  return <>
-    <GameTable key={game.roundIndex + ':' + viewerId} game={projectGame(game, viewerId)} viewerId={viewerId} modeLabel={single ? 'TEK OYUNCULU · BOT MASASI' : 'AYNI CİHAZDA'} onAction={act} error={error} onExit={() => router.replace('/')} />
-    <Modal visible={single && loadState !== 'ready'} animationType="fade" transparent>
-      <View style={s.resumeBackdrop}><View style={s.resumeSheet}>
-        {loadState === 'loading' ? <><Text style={s.eyebrow}>OYUNUN HAZIRLANIYOR</Text><Text style={s.copy}>Kayıt kontrol ediliyor…</Text></> : <>
+
+  if (single && loadState !== 'ready') {
+    return <SafeAreaView style={s.resumePage}>
+      <View style={s.resumeSheet}>
+        {loadState === 'loading' ? <>
+          <Text style={s.eyebrow}>OYUNUN HAZIRLANIYOR</Text>
+          <Text style={s.resumeTitle}>Masa kuruluyor.</Text>
+          <Text style={s.copy}>Kayıt kontrol ediliyor…</Text>
+        </> : <>
           <Text style={s.eyebrow}>YARIM KALAN OYUN</Text>
           <Text style={s.resumeTitle}>Masadaki yerin duruyor.</Text>
           <Text style={s.copy}>El {savedGame ? savedGame.roundIndex + 1 : 1} / 12 · Kaldığın hamleden devam edebilirsin.</Text>
@@ -74,8 +79,12 @@ export default function GameScreen() {
           <Pressable accessibilityRole="button" onPress={startFresh} style={s.outlineButton}><Text style={s.outlineText}>Yeni oyun başlat</Text></Pressable>
           <Pressable accessibilityRole="button" onPress={() => router.replace('/')}><Text style={s.menuText}>Ana menüye dön</Text></Pressable>
         </>}
-      </View></View>
-    </Modal>
+      </View>
+    </SafeAreaView>;
+  }
+
+  return <>
+    <GameTable key={game.roundIndex + ':' + viewerId} game={projectGame(game, viewerId)} viewerId={viewerId} modeLabel={single ? 'TEK OYUNCULU · BOT MASASI' : 'AYNI CİHAZDA'} onAction={act} error={error} onExit={() => router.replace('/')} />
     <Modal visible={!single && !visible && !['round-over', 'game-over'].includes(game.phase)} animationType="none" onRequestClose={() => router.replace('/')}>
       <View style={s.curtain}><Text style={s.eyebrow}>TELEFONU VER</Text><Text style={s.name}>{current.name}</Text><Text style={s.copy}>Hazır olduğunda kartlarını göster.</Text><Pressable accessibilityRole="button" onPress={() => setVisible(true)} style={s.button}><Text style={s.buttonText}>Elimi göster</Text></Pressable></View>
     </Modal>
@@ -85,7 +94,7 @@ const s = StyleSheet.create({
   curtain: { flex: 1, backgroundColor: '#071d17', padding: 32, justifyContent: 'center', alignItems: 'center', gap: 20 },
   eyebrow: { color: p.gold, letterSpacing: 3, fontSize: 11 }, name: { color: p.cream, fontSize: 34, fontWeight: '800' }, copy: { color: p.muted },
   button: { width: '100%', maxWidth: 400, backgroundColor: p.gold, padding: 18, borderRadius: 14, alignItems: 'center' }, buttonText: { color: p.ink, fontWeight: '800', fontSize: 17 },
-  resumeBackdrop: { flex: 1, backgroundColor: '#000c', padding: 24, justifyContent: 'center' },
+  resumePage: { flex: 1, backgroundColor: '#071d17', padding: 24, justifyContent: 'center' },
   resumeSheet: { width: '100%', maxWidth: 430, alignSelf: 'center', backgroundColor: '#0d3327', borderWidth: 1, borderColor: p.line, borderRadius: 22, padding: 25, gap: 17 },
   resumeTitle: { color: p.cream, fontSize: 27, lineHeight: 33, fontWeight: '800' },
   outlineButton: { width: '100%', maxWidth: 400, borderWidth: 1, borderColor: p.line, padding: 17, borderRadius: 14, alignItems: 'center' },
