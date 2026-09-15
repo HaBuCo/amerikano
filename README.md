@@ -78,9 +78,10 @@ zorunlu değildir, misafir/anonim oyun akışı aynen çalışmaya devam eder. H
 oyuncunun kimliği (`src/network/auth.ts`) aynı Supabase Auth oturumunu kullandığı için
 `connectRoom` çevrim içi masalarda da otomatik olarak bu hesabı kullanır.
 
-- **E-posta/parola**: `supabase.auth.signInWithPassword` / `signUp`. Ekstra kurulum
-  gerekmez; Supabase panelinde "Confirm email" açıksa kayıt sonrası onay bağlantısı
-  gönderilir.
+- **E-posta/parola**: kayıt, giriş, e-posta doğrulama ve uygulama içinden parola
+  yenileme desteklenir. Supabase Dashboard > Authentication > URL Configuration
+  bölümündeki Redirect URLs listesine `amerikano://**` ekle. Misafir oyuncu kayıt
+  olduğunda mevcut profil kimliği korunur.
 - **Apple ile giriş** (yalnızca iOS): `expo-apple-authentication` + Supabase
   `signInWithIdToken`. Apple Developer hesabında "Sign in with Apple" özelliğini aç,
   Supabase Dashboard > Authentication > Providers > Apple'ı etkinleştir.
@@ -91,9 +92,17 @@ oyuncunun kimliği (`src/network/auth.ts`) aynı Supabase Auth oturumunu kulland
   ve gerekiyorsa bir "iOS" (iosClientId) OAuth istemcisi oluştur; bu ID'leri
   `.env.local` içine `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` / `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`
   olarak ekle, webClientId'yi Supabase Dashboard > Authentication > Providers > Google'a da
-  gir. `app.json` > `plugins` içindeki `@react-native-google-signin/google-signin`
-  eklentisinin `iosUrlScheme` değerini (ters çevrilmiş iOS Client ID,
-  `com.googleusercontent.apps.XXXX` biçiminde) gerçek değerle değiştir.
+  gir. `app.config.ts`, iOS URL şemasını iOS Client ID'den EAS derlemesi sırasında
+  otomatik üretir. Eksik yapılandırmada Google düğmesi gösterilmez.
+
+- **Misafir hesabını yükseltme**: Supabase Dashboard > Authentication > Providers
+  bölümünde **Enable Manual Linking** seçeneğini aç. Böylece Apple/Google ile devam
+  eden misafirin seviyesi ve istatistikleri yeni hesabında kalır.
+- **Hesap silme**: `delete-account` Edge Function'ını yayınla. Apple ile giriş yapanların
+  Apple yetkisini de kaldırabilmek için `APPLE_TEAM_ID`, `APPLE_KEY_ID`,
+  `APPLE_PRIVATE_KEY` ve isteğe bağlı `APPLE_CLIENT_ID` (`com.hegionsoft.amerikano`)
+  değerlerini yalnızca Supabase Edge Function secrets olarak tanımla. `.p8` anahtarını
+  projeye veya `EXPO_PUBLIC_` değişkenlerine koyma.
 
 Bu iki native modül **Expo Go'da çalışmaz**; test etmek için `npx expo prebuild` ile
 oluşturulan yerel proje veya bir EAS development build (`eas build --profile development`)
