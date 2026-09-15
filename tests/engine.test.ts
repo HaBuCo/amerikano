@@ -11,15 +11,17 @@ const j: Card = { id: 'j', rank: null, suit: null, isJoker: true };
 const stateWithHand = (hand: Card[]): GameState => {
   const s = createGame(['a', 'b', 'c']); s.players[0].hand = hand; s.phase = 'play'; s.turnCount = 3; return s;
 };
-test('106 unique card IDs; full deal conserves all cards for 3–6 players', () => {
+test('106 unique card IDs; full deal conserves all cards for 2–6 players', () => {
   assert.equal(new Set(createDeck().map(c => c.id)).size, 106);
-  for (const n of [3, 4, 5, 6]) {
+  for (const n of [2, 3, 4, 5, 6]) {
     const s = createGame(Array.from({ length: n }, (_, i) => String(i)));
     assert.equal(s.stock.length + s.discard.length + s.players.reduce((n, p) => n + p.hand.length, 0), 106);
     assert.ok(s.players.every((p, i) => p.hand.length === (i === s.currentPlayerIndex ? 14 : 13)));
     assert.equal(s.phase, 'play');
     assert.equal(applyAction(s, actingPlayerId(s), { type: 'draw', source: 'stock' }), s);
   }
+  assert.throws(() => createGame(['a']), /2–6/);
+  assert.throws(() => createGame(['a', 'b', 'c', 'd', 'e', 'f', 'g']), /2–6/);
 });
 test('set size, duplicates, suit and ace rules', () => {
   assert.ok(isValidMeld([c('7'), c('7', 'clubs'), j], 'set'));
@@ -148,6 +150,23 @@ test('penalty claim has priority, adds two cards and does not consume claimant t
   assert.equal(passed.phase, 'play');
   assert.deepEqual(passed.discard, s.discard);
   assert.equal(passed.stock.length, s.stock.length - 1);
+});
+
+test('two-player game offers the penalty card to the only opponent', () => {
+  const initial = createGame(['a', 'b']);
+  const discarded = applyAction(initial, 'player-1', { type: 'discard', cardId: initial.players[0].hand[0].id });
+  assert.equal(discarded.currentPlayerIndex, 1);
+  assert.equal(discarded.phase, 'draw');
+
+  const offered = applyAction(discarded, 'player-2', { type: 'draw', source: 'stock' });
+  assert.equal(offered.phase, 'claim');
+  assert.deepEqual(offered.claim?.playerIds, ['player-1']);
+
+  const claimed = applyAction(offered, 'player-1', { type: 'claim', take: true });
+  assert.equal(claimed.players[0].hand.length, 15);
+  assert.equal(claimed.players[1].hand.length, 14);
+  assert.equal(claimed.currentPlayerIndex, 1);
+  assert.equal(claimed.phase, 'play');
 });
 
 test('no penalty offer without enough stock; exhausted stock is recycled without moving top discard', () => {

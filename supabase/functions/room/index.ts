@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { actingPlayerId, applyAction, armTurnTimer, createGame, expireTurn, reclaimBotSeat, resetMissedTurns, RULESET_ID } from '../../../src/game/engine.ts';
+import { actingPlayerId, applyAction, armTurnTimer, createGame, expireTurn, MIN_GAME_PLAYERS, reclaimBotSeat, resetMissedTurns, RULESET_ID } from '../../../src/game/engine.ts';
 import { botAction } from '../../../src/game/bot.ts';
 import { projectGame } from '../../../src/game/view.ts';
 import type { GameAction, GameState } from '../../../src/game/types.ts';
@@ -213,8 +213,8 @@ Deno.serve(async (request) => {
     if (command.type === 'start') {
       if (currentView.hostId !== user.id) throw new Error('Oyunu yalnızca oda sahibi başlatabilir.');
       if (currentView.game || roomState) throw new Error('Oyun zaten başladı.');
-      if (currentView.members.length < 3 || currentView.members.some((member) => !member.ready)) {
-        throw new Error('En az 3 oyuncu hazır olmalı.');
+      if (currentView.members.length < MIN_GAME_PLAYERS || currentView.members.some((member) => !member.ready)) {
+        throw new Error('En az 2 oyuncu hazır olmalı.');
       }
       const game = armTurnTimer(createGame(currentView.members.map((member) => member.name), secureRandom));
       game.players = game.players.map((player, index) => ({ ...player, id: currentView.members[index].id }));

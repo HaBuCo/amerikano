@@ -48,7 +48,7 @@ export default function HomeScreen() {
             <Text style={styles.arrow}>→</Text>
           </Pressable>
           <Pressable accessibilityRole="button" style={({ pressed }) => [styles.onlineButton, pressed && styles.pressed]} onPress={() => router.push('/online')}>
-            <View><Text style={styles.secondaryText}>Arkadaşlarınla oyna</Text><Text style={styles.onlineCaption}>Oda kur veya kodla katıl · 3–6 kişi</Text></View><Text style={styles.onlineArrow}>↗</Text>
+            <View><Text style={styles.secondaryText}>Arkadaşlarınla oyna</Text><Text style={styles.onlineCaption}>Oda kur veya kodla katıl · 2–6 kişi</Text></View><Text style={styles.onlineArrow}>↗</Text>
           </Pressable>
           <View style={styles.links}><Pressable accessibilityRole="button" onPress={() => router.push('/setup')}><Text style={styles.link}>Aynı cihazda</Text></Pressable><Text style={styles.link}>·</Text><Pressable accessibilityRole="button" onPress={() => router.push('/rules')}><Text style={styles.link}>Oyun kuralları</Text></Pressable></View>
         </View>

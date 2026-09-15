@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { actingPlayerId, applyAction, armTurnTimer, createGame, expireTurn, reclaimBotSeat, resetMissedTurns, RULESET_ID } from '../src/game/engine';
+import { actingPlayerId, applyAction, armTurnTimer, createGame, expireTurn, MIN_GAME_PLAYERS, reclaimBotSeat, resetMissedTurns, RULESET_ID } from '../src/game/engine';
 import { botAction } from '../src/game/bot';
 import { GameState } from '../src/game/types';
 import { projectGame } from '../src/game/view';
@@ -149,7 +149,7 @@ wss.on('connection', (ws, req) => {
       } else if (msg.type === 'start') {
         if (room.hostId !== session.id) throw new Error('Oyunu oda sahibi başlatabilir.');
         if (room.game) throw new Error('Oyun zaten başladı.');
-        if (room.members.length < 3 || room.members.some(m => !m.ready || !connected(room.code, m.id))) throw new Error('En az 3 oyuncu bağlı ve hazır olmalı.');
+        if (room.members.length < MIN_GAME_PLAYERS || room.members.some(m => !m.ready || !connected(room.code, m.id))) throw new Error('En az 2 oyuncu bağlı ve hazır olmalı.');
         room.game = armTurnTimer(createGame(room.members.map(m => m.name), secureRandom));
         room.game.players = room.game.players.map((p, i) => ({ ...p, id: room.members[i].id }));
       } else if (msg.type === 'rematch') {

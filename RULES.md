@@ -24,7 +24,7 @@ Bu, uygulamamızın seçilmiş kural setidir; evrensel bir standart iddiası de�
 ## Oynanış
 
 - 2 standart deste ve 2 joker, toplam 106 benzersiz fiziksel kart.
-- Uygulama 3–6 oyuncuyu destekler; 3–5 kişi idealdir.
+- Çevrim içi arkadaş odaları 2–6, aynı cihaz modu 3–6 oyuncuyu destekler; klasik oyun 3–5 kişi için idealdir.
 - Her oyuncuya 13, başlangıç oyuncusuna 14 kart verilir. Başlangıç oyuncusu kart çekmez.
 - Kapalı destenin yanında bir açık kart bulunur. Dijital dağıtım karıştırmayı otomatik yapar.
 - Koltuk dizisi saat yönünde kabul edilir; sıra ters yönde ilerler.

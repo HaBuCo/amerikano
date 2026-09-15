@@ -117,8 +117,11 @@ export function satisfiesContract(
   return match(0);
 }
 
+export const MIN_GAME_PLAYERS = 2;
+export const MAX_GAME_PLAYERS = 6;
+
 export function createGame(playerNames: string[], random = Math.random): GameState {
-  if (playerNames.length < 3 || playerNames.length > 6) throw new Error('3–6 oyuncu gerekli.');
+  if (playerNames.length < MIN_GAME_PLAYERS || playerNames.length > MAX_GAME_PLAYERS) throw new Error('2–6 oyuncu gerekli.');
   const players: Player[] = playerNames.map((name, index) => ({
     id: `player-${index + 1}`,
     name,

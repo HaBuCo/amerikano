@@ -6,6 +6,7 @@ import { connectRoom, enterRoom, forgetRoom, sendAction, sendRoom, useRoom } fro
 import { GameTable } from '@/components/game-table';
 import { palette as p } from '@/constants/palette';
 import { avatarFor, profileLevel, refreshPlayerProfile, usePlayerProfile } from '@/network/profile';
+import { MIN_GAME_PLAYERS } from '@/game/engine';
 
 export default function OnlineScreen() {
   const state = useRoom();
@@ -61,8 +62,8 @@ export default function OnlineScreen() {
           </View>;
         })}
         <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online'} onPress={() => sendRoom({ type: 'ready', ready: !me?.ready })} style={s.secondary}><Text style={s.white}>{me?.ready ? 'Hazır değilim' : 'Hazırım ✓'}</Text></Pressable>
-        {room.hostId === room.you && <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online' || room.members.length < 3 || room.members.some(m => !m.ready || !m.connected)} style={[s.primary, (room.members.length < 3 || room.members.some(m => !m.ready || !m.connected)) && s.disabled]} onPress={() => sendRoom({ type: 'start' })}><Text style={s.primaryText}>Kartları dağıt</Text></Pressable>}
-        <Text style={s.body}>{room.members.length}/6 oyuncu · En az 3 kişi gerekli</Text>
+        {room.hostId === room.you && <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online' || room.members.length < MIN_GAME_PLAYERS || room.members.some(m => !m.ready || !m.connected)} style={[s.primary, (room.members.length < MIN_GAME_PLAYERS || room.members.some(m => !m.ready || !m.connected)) && s.disabled]} onPress={() => sendRoom({ type: 'start' })}><Text style={s.primaryText}>Kartları dağıt</Text></Pressable>}
+        <Text style={s.body}>{room.members.length}/6 oyuncu · En az 2 kişi gerekli</Text>
         <Pressable onPress={() => sendRoom({ type: 'leave' })}><Text style={s.link}>Odadan ayrıl</Text></Pressable>
       </>}
     </ScrollView>

@@ -1,7 +1,7 @@
 # Amerikano
 
 iOS ve Android için Expo + React Native Amerikano: botlara karşı tek oyunculu,
-3–6 kişilik aynı cihaz modu ve kodla katılınan çevrim içi arkadaş odaları.
+3–6 kişilik aynı cihaz modu ve 2–6 kişilik kodla katılınan çevrim içi arkadaş odaları.
 Klasik resimli kartların CC0 lisansı ve kaynağı assets/cards altında bulunur.
 
 ## Çalıştırma
@@ -33,6 +33,7 @@ EAS ortamına eklenmeli hem de `app.json` içindeki Google URL şemasına yazıl
 ## İlk sürümde olanlar
 
 - 3–6 oyunculu aynı cihaz modu
+- 2–6 oyunculu çevrim içi arkadaş odaları
 - Mevcut 12 el ve açılış görevleri (ayrıntılar: [RULES.md](RULES.md))
 - 106 kartlık deste, seri/küt ve joker doğrulaması
 - İlk beş elde açılışta joker yasağı; yalnızca yüksek As
