@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { actingPlayerId, applyAction, armTurnTimer, createDeck, createGame, isValidMeld, openMelds, handPoints, expireClaim, expireTurn, MISSED_TURNS_BEFORE_BOT, nextRound, reclaimBotSeat, replaceJoker, resetMissedTurns, TURN_TIMEOUT_MS } from '../src/game/engine';
-import { botAction, candidates } from '../src/game/bot';
-import { ROUND_CONTRACTS } from '../src/game/contracts';
-import { projectGame } from '../src/game/view';
-import { Card, GameState, Rank, Suit } from '../src/game/types';
+import { actingPlayerId, applyAction, armTurnTimer, createDeck, createGame, isValidMeld, openMelds, handPoints, expireClaim, expireTurn, MISSED_TURNS_BEFORE_BOT, nextRound, reclaimBotSeat, replaceJoker, resetMissedTurns, TURN_TIMEOUT_MS } from '../src/game/engine.ts';
+import { botAction, candidates } from '../src/game/bot.ts';
+import { ROUND_CONTRACTS } from '../src/game/contracts.ts';
+import { projectGame } from '../src/game/view.ts';
+import type { Card, GameState, Rank, Suit } from '../src/game/types.ts';
 
 const c = (rank: Rank, suit: Suit = 'hearts', id = rank + suit): Card => ({ id, rank, suit, isJoker: false });
 const j: Card = { id: 'j', rank: null, suit: null, isJoker: true };

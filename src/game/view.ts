@@ -1,4 +1,4 @@
-import { GameState } from './types.ts';
+import type { GameState } from './types.ts';
 
 export type GameView = Omit<GameState, 'stock'> & { stockCount: number };
 // Hidden hands are empty arrays. Counts are transmitted independently.

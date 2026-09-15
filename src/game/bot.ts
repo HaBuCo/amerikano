@@ -1,6 +1,7 @@
 import { ROUND_CONTRACTS } from './contracts.ts';
 import { actingPlayerId, applyAction, cardPoints, isValidMeld } from './engine.ts';
-import { Card, GameAction, GameState, MeldType, RANKS, SUITS } from './types.ts';
+import { RANKS, SUITS } from './types.ts';
+import type { Card, GameAction, GameState, MeldType } from './types.ts';
 
 type Group = { type: MeldType; cardIds: string[]; points: number };
 const rankValue = (c: Card) => c.rank === 'A' ? 14 : RANKS.indexOf(c.rank!) + 1;
@@ -100,6 +101,68 @@ function usefulness(card: Card, hand: Card[]): number {
   return score;
 }
 
+function groupValue(group: Group): number {
+  return group.cardIds.length * 60 + group.points * 2;
+}
+
+function protectionScores(hand: Card[]): Map<string, number> {
+  const scores = new Map<string, number>();
+  for (const group of candidates(hand)) {
+    const score = groupValue(group);
+    for (const id of group.cardIds) scores.set(id, Math.max(scores.get(id) ?? 0, score));
+  }
+  return scores;
+}
+
+function remainingPotential(hand: Card[]): number {
+  const groups = candidates(hand);
+  return groups.length ? groupValue(groups[0]) : hand.reduce((sum, card) => sum + usefulness(card, hand), 0);
+}
+
+function bestExtraGroup(state: GameState, playerId: string, hand: Card[]): GameAction | null {
+  let best: { action: GameAction; score: number } | null = null;
+  for (const group of candidates(hand)) {
+    const action: GameAction = { type: 'open', groups: [{ type: group.type, cardIds: group.cardIds }] };
+    const next = applyAction(state, playerId, action);
+    if (next === state) continue;
+    const remaining = next.players.find(player => player.id === playerId)!.hand;
+    const score = group.cardIds.length * 1000 + group.points * 10 + remainingPotential(remaining);
+    if (!best || score > best.score) best = { action, score };
+  }
+  return best?.action ?? null;
+}
+
+function bestLayoff(state: GameState, playerId: string, hand: Card[]): GameAction | null {
+  const protection = protectionScores(hand);
+  let best: { action: GameAction; score: number } | null = null;
+  for (const card of hand) {
+    for (const meld of state.melds) {
+      const action: GameAction = { type: 'layoff', meldId: meld.id, cardId: card.id };
+      if (applyAction(state, playerId, action) === state) continue;
+      const score = cardPoints(card) * 8 - usefulness(card, hand) * 2 - (protection.get(card.id) ?? 0) * 2;
+      if (!best || score > best.score) best = { action, score };
+    }
+  }
+  return best?.action ?? null;
+}
+
+function bestJokerReplacement(state: GameState, playerId: string, hand: Card[]): GameAction | null {
+  const protection = protectionScores(hand);
+  let best: { action: GameAction; score: number } | null = null;
+  for (const card of hand) {
+    if (card.isJoker) continue;
+    for (const meld of state.melds) {
+      for (const joker of meld.cards.filter(item => item.isJoker)) {
+        const action: GameAction = { type: 'replaceJoker', meldId: meld.id, jokerId: joker.id, cardId: card.id };
+        if (applyAction(state, playerId, action) === state) continue;
+        const score = 500 + usefulness(card, hand) - (protection.get(card.id) ?? 0);
+        if (!best || score > best.score) best = { action, score };
+      }
+    }
+  }
+  return best?.action ?? null;
+}
+
 export function botAction(state: GameState): GameAction | null {
   const p = state.players.find(p => p.id === actingPlayerId(state))!;
   if (state.phase === 'claim') {
@@ -123,29 +186,17 @@ export function botAction(state: GameState): GameAction | null {
       return { type: 'open', groups };
     }
   } else if (p.openedTurn !== state.turnCount) {
-    for (const c of p.hand) {
-      if (c.isJoker) continue;
-      for (const m of state.melds) {
-        for (const joker of m.cards.filter(card => card.isJoker)) {
-          const a: GameAction = { type: 'replaceJoker', meldId: m.id, jokerId: joker.id, cardId: c.id };
-          if (applyAction(state, p.id, a) !== state) return a;
-        }
-      }
-    }
-    for (const c of p.hand) {
-      for (const m of state.melds) {
-        const a: GameAction = { type: 'layoff', meldId: m.id, cardId: c.id };
-        if (applyAction(state, p.id, a) !== state) return a;
-      }
-    }
-    const g = candidates(p.hand).find(group => applyAction(state, p.id, { type: 'open', groups: [group] }) !== state);
-    if (g) return { type: 'open', groups: [{ type: g.type, cardIds: g.cardIds }] };
+    const replacement = bestJokerReplacement(state, p.id, p.hand);
+    if (replacement) return replacement;
+    const extraGroup = bestExtraGroup(state, p.id, p.hand);
+    if (extraGroup) return extraGroup;
+    const layoff = bestLayoff(state, p.id, p.hand);
+    if (layoff) return layoff;
   }
-  const discardable = [...p.hand];
-  const protectedIds = new Set(candidates(p.hand).flatMap(g => g.cardIds));
-  discardable.sort((a, b) => {
-    const weight = (c: Card) => usefulness(c, p.hand) + (protectedIds.has(c.id) ? 30 : 0) - cardPoints(c) / 5;
-    return weight(a) - weight(b);
+  const protection = protectionScores(p.hand);
+  const discardable = [...p.hand].sort((a, b) => {
+    const score = (card: Card) => cardPoints(card) * 8 - usefulness(card, p.hand) * 2 - (protection.get(card.id) ?? 0) * 2;
+    return score(b) - score(a);
   });
   return discardable.length ? { type: 'discard', cardId: discardable[0].id } : null;
 }

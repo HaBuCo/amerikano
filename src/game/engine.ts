@@ -1,5 +1,6 @@
 import { ROUND_CONTRACTS } from './contracts.ts';
-import { Card, GameAction, GameState, Meld, MeldType, Player, Rank, RoundContract, RANKS, SUITS } from './types.ts';
+import { RANKS, SUITS } from './types.ts';
+import type { Card, GameAction, GameState, Meld, MeldType, Player, Rank, RoundContract } from './types.ts';
 
 const rankValue: Record<Rank, number> = Object.fromEntries(
   RANKS.map((rank, index) => [rank, rank === 'A' ? 14 : index + 1]),
