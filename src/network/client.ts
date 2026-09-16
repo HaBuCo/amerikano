@@ -78,8 +78,9 @@ function clearRoomTimers() {
 function scheduleDeadlineRefresh(room: RoomView) {
   if (deadlineTimer) clearTimeout(deadlineTimer);
   deadlineTimer = null;
-  const deadline = room.game?.turnDeadline;
-  if (!deadline || room.game?.phase === 'round-over' || room.game?.phase === 'game-over') return;
+  const turnDeadline = room.game?.phase === 'round-over' || room.game?.phase === 'game-over' ? undefined : room.game?.turnDeadline;
+  const deadline = [turnDeadline, room.startsAt].filter((value): value is number => typeof value === 'number').sort((a, b) => a - b)[0];
+  if (!deadline) return;
   deadlineTimer = setTimeout(() => { void refreshRoom(); }, Math.max(100, deadline - Date.now() + 150));
 }
 

@@ -8,6 +8,7 @@ export type RoomView = {
   visibility: 'private' | 'public';
   you: string;
   revision: number;
+  startsAt?: number;
   members: {
     id: string; name: string; connected: boolean; ready: boolean;
     avatarKey: string; level: number; gamesPlayed: number; wins: number;

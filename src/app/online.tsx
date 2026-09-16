@@ -15,6 +15,8 @@ export default function OnlineScreen() {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [initialized, setInitialized] = useState(false);
+  const [clock, setClock] = useState(() => Date.now());
+  const [waitedRoomCode, setWaitedRoomCode] = useState<string | null>(null);
   const quickAttempted = useRef(false);
   useEffect(() => {
     void connectRoom().then(() => refreshPlayerProfile()).then((profile) => {
@@ -22,6 +24,21 @@ export default function OnlineScreen() {
     }).finally(() => setInitialized(true));
   }, []);
   const room = state.room;
+  useEffect(() => {
+    if (!room?.startsAt || room.status !== 'waiting') return;
+    const timer = setInterval(() => setClock(Date.now()), 250);
+    return () => clearInterval(timer);
+  }, [room?.startsAt, room?.status]);
+  useEffect(() => {
+    if (room?.visibility !== 'public' || room.status !== 'waiting' || room.members.length >= MIN_GAME_PLAYERS) return;
+    const roomCode = room.code;
+    const timer = setTimeout(() => setWaitedRoomCode(roomCode), 15_000);
+    return () => clearTimeout(timer);
+  }, [room?.code, room?.members.length, room?.status, room?.visibility]);
+  const quickSeconds = room?.startsAt && room.status === 'waiting'
+    ? Math.max(0, Math.ceil((room.startsAt - clock) / 1000))
+    : null;
+  const longWait = room?.visibility === 'public' && room.status === 'waiting' && room.code === waitedRoomCode;
   useEffect(() => {
     if (quick !== '1' || !initialized || !name || room || state.busy || state.status !== 'online' || quickAttempted.current) return;
     quickAttempted.current = true;
@@ -40,6 +57,11 @@ export default function OnlineScreen() {
     const avatar = avatarFor(member.avatarKey);
     return [member.id, { avatarColor: avatar.color, avatarSymbol: avatar.symbol, level: member.level, connected: member.connected, missedTurns: member.missedTurns, botControlled: member.botControlled }];
   }));
+  const switchToPrivateRoom = async () => {
+    const playerName = me?.name || name;
+    await leaveWaitingRoom();
+    if (playerName) await enterRoom(playerName);
+  };
   if (room?.game) return <GameTable key={room.code + ':' + room.game.roundIndex} game={room.game} viewerId={room.you}
     modeLabel={`ÇEVRİM İÇİ · ${room.code}`} canAdvance={room.hostId === room.you || hostIsBot} canRematch={room.hostId === room.you || hostIsBot}
     playerMeta={playerMeta} onRematch={() => sendRoom({ type: 'rematch' })}
@@ -82,11 +104,18 @@ export default function OnlineScreen() {
             <Text style={s.status}>{!m.connected ? 'Yeniden bağlanıyor' : m.ready ? '✓ Hazır' : 'Bekleniyor'}</Text>
           </View>;
         })}
-        <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online'} onPress={() => sendRoom({ type: 'ready', ready: !me?.ready })} style={s.secondary}><Text style={s.white}>{me?.ready ? 'Hazır değilim' : 'Hazırım ✓'}</Text></Pressable>
-        {room.hostId === room.you && <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online' || room.members.length < MIN_GAME_PLAYERS || room.members.some(m => !m.ready || !m.connected)} style={[s.primary, (room.members.length < MIN_GAME_PLAYERS || room.members.some(m => !m.ready || !m.connected)) && s.disabled]} onPress={() => sendRoom({ type: 'start' })}><Text style={s.primaryText}>Kartları dağıt</Text></Pressable>}
+        {room.visibility === 'private' ? <>
+          <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online'} onPress={() => sendRoom({ type: 'ready', ready: !me?.ready })} style={s.secondary}><Text style={s.white}>{me?.ready ? 'Hazır değilim' : 'Hazırım ✓'}</Text></Pressable>
+          {room.hostId === room.you && <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online' || room.members.length < MIN_GAME_PLAYERS || room.members.some(m => !m.ready || !m.connected)} style={[s.primary, (room.members.length < MIN_GAME_PLAYERS || room.members.some(m => !m.ready || !m.connected)) && s.disabled]} onPress={() => sendRoom({ type: 'start' })}><Text style={s.primaryText}>Kartları dağıt</Text></Pressable>}
+        </> : <View style={s.matchPanel}>
+          <Text style={s.matchTitle}>{quickSeconds === null ? 'Rakip aranıyor…' : `Kartlar ${quickSeconds} saniye içinde dağıtılıyor`}</Text>
+          <Text style={s.roomHint}>{quickSeconds === null ? 'İkinci oyuncu geldiğinde herkes otomatik hazır olur.' : 'Masadan ayrılma; oyun otomatik başlayacak.'}</Text>
+          {longWait && <><Text style={s.waitNotice}>Bekleme uzadı. Arkadaşını bu kodla çağırabilir veya özel masaya geçebilirsin.</Text>
+            <Pressable disabled={state.busy} onPress={() => void switchToPrivateRoom()} style={s.secondary}><Text style={s.white}>Özel arkadaş masasına geç</Text></Pressable></>}
+        </View>}
         <Text style={s.body}>{room.members.length}/6 oyuncu · En az 2 kişi gerekli</Text>
         <Text style={s.roomHint}>Ana menüye dönersen bu bekleme odasından ayrılırsın.</Text>
-        <Pressable disabled={state.busy} onPress={() => void leaveWaitingRoom()}><Text style={s.link}>Odadan ayrıl</Text></Pressable>
+        <Pressable disabled={state.busy} onPress={() => void leaveWaitingRoom()}><Text style={s.link}>{room.visibility === 'public' ? 'Aramayı iptal et' : 'Odadan ayrıl'}</Text></Pressable>
       </>}
     </ScrollView>
   </SafeAreaView>;
@@ -108,4 +137,6 @@ const s = StyleSheet.create({
   error: { borderRadius: 12, backgroundColor: '#842c2c55', padding: 14 },
   roomHint: { color: p.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' },
   inviteButton: { minHeight: 52, paddingHorizontal: 17, borderRadius: 13, backgroundColor: '#ffffff0d', borderWidth: 1, borderColor: p.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, inviteArrow: { color: p.gold, fontSize: 22 },
+  matchPanel: { gap: 10, padding: 16, borderRadius: 14, backgroundColor: '#ffffff0a', borderWidth: 1, borderColor: p.line },
+  matchTitle: { color: p.cream, fontSize: 17, fontWeight: '800', textAlign: 'center' }, waitNotice: { color: p.gold, fontSize: 12, lineHeight: 18, textAlign: 'center' },
 });

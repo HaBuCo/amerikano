@@ -9,7 +9,7 @@ Paketler bağımlılık ve oyuncu etkisine göre aşağıdaki sırada uygulanır
 - [x] 2. Ayrıntılı el sonu
   - El cezası, toplam değişimi ve kalan kartlar
   - Bir sonraki el görevi ve maç sonu sıralaması
-- [ ] 3. Hemen Oyna güvenilirliği
+- [x] 3. Hemen Oyna güvenilirliği
   - Otomatik hazır olma ve geri sayım
   - Masa sahibi aktarımı, aramayı iptal etme ve uzun bekleme seçeneği
 - [ ] 4. Ayrılma ve geri bağlanma
