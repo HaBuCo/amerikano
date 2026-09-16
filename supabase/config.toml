@@ -8,3 +8,7 @@ enable_anonymous_sign_ins = true
 # Authentication is checked inside the function with auth.getUser(). This keeps
 # the function compatible with Supabase's current JWT signing-key transition.
 verify_jwt = false
+
+[functions.social]
+# The function validates the bearer token with auth.getUser before every command.
+verify_jwt = false

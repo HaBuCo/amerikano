@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { Href, router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -47,10 +47,13 @@ export default function HomeScreen() {
             <View><Text style={styles.primaryText}>Tek oyunculu</Text><Text style={styles.primaryCaption}>3 bota karşı · İnternetsiz oyna</Text></View>
             <Text style={styles.arrow}>→</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" style={({ pressed }) => [styles.onlineButton, pressed && styles.pressed]} onPress={() => router.push('/online')}>
-            <View><Text style={styles.secondaryText}>Arkadaşlarınla oyna</Text><Text style={styles.onlineCaption}>Oda kur veya kodla katıl · 2–6 kişi</Text></View><Text style={styles.onlineArrow}>↗</Text>
+          <Pressable accessibilityRole="button" style={({ pressed }) => [styles.onlineButton, pressed && styles.pressed]} onPress={() => router.push('/online?quick=1')}>
+            <View><Text style={styles.secondaryText}>Hemen oyna</Text><Text style={styles.onlineCaption}>Uygun çevrim içi masaya otomatik otur</Text></View><Text style={styles.onlineArrow}>→</Text>
           </Pressable>
-          <View style={styles.links}><Pressable accessibilityRole="button" onPress={() => router.push('/setup')}><Text style={styles.link}>Aynı cihazda</Text></Pressable><Text style={styles.link}>·</Text><Pressable accessibilityRole="button" onPress={() => router.push('/rules')}><Text style={styles.link}>Oyun kuralları</Text></Pressable></View>
+          <Pressable accessibilityRole="button" style={({ pressed }) => [styles.friendButton, pressed && styles.pressed]} onPress={() => router.push('/online')}>
+            <View><Text style={styles.friendText}>Arkadaşlarınla oyna</Text><Text style={styles.onlineCaption}>Özel masa kur, katıl veya davet et</Text></View><Text style={styles.friendArrow}>↗</Text>
+          </Pressable>
+          <View style={styles.links}><Pressable accessibilityRole="button" onPress={() => router.push('/friends' as Href)}><Text style={styles.link}>Arkadaşlar</Text></Pressable><Text style={styles.link}>·</Text><Pressable accessibilityRole="button" onPress={() => router.push('/setup')}><Text style={styles.link}>Aynı cihazda</Text></Pressable><Text style={styles.link}>·</Text><Pressable accessibilityRole="button" onPress={() => router.push('/rules')}><Text style={styles.link}>Kurallar</Text></Pressable></View>
         </View>
 
         <Text style={styles.footer}>12 EL · KLASİK AMERİKANO</Text>
@@ -77,8 +80,10 @@ const styles = StyleSheet.create({
   primaryButton: { minHeight: 76, borderRadius: 16, backgroundColor: palette.gold, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20 },
   primaryCaption: { color: '#494127', fontSize: 12, marginTop: 5 },
   onlineButton: { minHeight: 76, borderRadius: 16, borderWidth: 1, borderColor: '#b1c2a650', backgroundColor: '#ffffff08', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20 },
+  friendButton: { minHeight: 62, borderRadius: 16, borderWidth: 1, borderColor: palette.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20 },
   onlineCaption: { color: palette.muted, fontSize: 12, marginTop: 5 },
   onlineArrow: { color: palette.gold, fontSize: 27 },
+  friendText: { color: palette.cream, fontSize: 15, fontWeight: '700' }, friendArrow: { color: palette.muted, fontSize: 22 },
   links: { flexDirection: 'row', gap: 20, justifyContent: 'center', paddingVertical: 8 },
   link: { color: '#b8c6bb', fontSize: 13, paddingVertical: 8 },
   primaryText: { color: palette.ink, fontSize: 18, fontWeight: '900' },

@@ -1,8 +1,9 @@
 # Supabase backend
 
 The migrations in `migrations/` create the online room storage, access rules,
-player profiles, presence heartbeat, game statistics and rematch support. Apply
-them in filename order before deploying the `room` and `delete-account` Edge Functions.
+player profiles, presence heartbeat, game statistics, rematch support, friendships
+and short-lived room invitations. Apply them in filename order before deploying the
+`room`, `social` and `delete-account` Edge Functions.
 
 Security model:
 
@@ -16,6 +17,10 @@ Security model:
 - three consecutive 45-second action expiries hand that seat to a server-run bot until the player reclaims it;
 - the separate 8-second discard-claim window auto-passes and never counts toward bot takeover;
 - private Realtime broadcasts only tell room members that a new view is ready.
+- friendships and invitations have no direct client grants; the `social` Edge Function
+  reveals joinable room codes only to accepted friends.
+- quick play atomically fills the oldest compatible public waiting table, creating an
+  ephemeral table only when no seat is available; presence keeps occupied lobbies alive.
 
 Never add a service-role key to an Expo environment variable. It belongs only in
 Supabase's server environment.

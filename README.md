@@ -46,6 +46,8 @@ EAS ortamına eklenmeli hem de `app.json` içindeki Google URL şemasına yazıl
 - Kart çekme, ortaya atma, görev açma, gruba işleme ve joker değiştirme için doğrudan sürükle-bırak masa hareketleri
 - Mobil bellek kullanımı için 300×420 boyutuna optimize edilmiş kart görselleri ve hafif masa gölgeleri
 - Kalıcı oyuncu adı, avatar, seviye, maç ve galibiyet istatistikleri
+- Arkadaş kodu, arkadaşlık istekleri, çevrim içi durumu, açık arkadaş masasına katılma ve 10 dakikalık masa davetleri
+- Hemen Oyna ile en eski uygun açık masayı dolduran, gerekirse geçici yeni masa oluşturan hızlı eşleşme
 - Çevrim içi masaya otomatik dönüş, bağlantı durumu ve sunucu kontrollü 45 saniyelik sıra süresi
 - Maç sonunda aynı oyuncularla tek dokunuşla yeniden oynama
 - Kart çekme, grup hazırlama, yere açma ve kart atma akışı
@@ -67,6 +69,12 @@ odayı okuyabilirler; rakip elleri ve kapalı deste istemcinin okuyamadığı `r
 tablosunda tutulur. Hamleler Edge Function içinde ortak oyun motoruyla doğrulanır.
 Revision kontrolü aynı anda gelen hamlelerin birbirini ezmesini engeller ve Realtime
 özel oda kanalındaki değişiklikleri üyelere bildirir.
+
+`social` Edge Function'ı arkadaş grafiğini özel tutar. Yalnızca kabul edilmiş arkadaşlar
+birbirinin çevrim içi durumunu ve bekleyen, dolmamış masasını görebilir. Masa davetleri
+10 dakika sonra sona erer. Bağlı oyuncusu olan bekleme odaları açık kalır; tamamen boş
+kalan odalar 5 dakika sonra temizlenir. Başlamış oyunlara sonradan oyuncu alınmaz ve
+her hamlede 24 saatlik geri dönüş süresi yenilenir.
 
 `server/` altındaki eski WebSocket + SQLite sunucusu yalnızca yerel referans ve geriye
 dönüş seçeneği olarak korunmaktadır; mobil istemci artık onu kullanmaz.

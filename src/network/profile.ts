@@ -16,6 +16,7 @@ export type PlayerProfile = {
   userId: string;
   displayName: string;
   avatarKey: AvatarKey;
+  friendCode: string;
   experience: number;
   gamesPlayed: number;
   wins: number;
@@ -43,6 +44,7 @@ function mapProfile(row: Record<string, unknown>): PlayerProfile {
     displayName: String(row.display_name || 'Oyuncu'),
     avatarKey: AVATAR_OPTIONS.some((avatar) => avatar.key === row.avatar_key)
       ? row.avatar_key as AvatarKey : 'emerald',
+    friendCode: String(row.friend_code || ''),
     experience: Number(row.experience) || 0,
     gamesPlayed: Number(row.games_played) || 0,
     wins: Number(row.wins) || 0,
@@ -69,7 +71,7 @@ export function refreshPlayerProfile() {
 
     const session = await ensureSession();
     const { data, error } = await supabase!.from('profiles')
-      .select('user_id, display_name, avatar_key, experience, games_played, wins')
+      .select('user_id, display_name, avatar_key, friend_code, experience, games_played, wins')
       .eq('user_id', session.user.id).maybeSingle();
     if (error) throw error;
     const profile = data ? mapProfile(data) : cached;
@@ -93,7 +95,7 @@ export async function savePlayerProfile(displayName: string, avatarKey: AvatarKe
     const { data, error } = await supabase!.from('profiles')
       .update({ display_name: cleanName, avatar_key: avatarKey })
       .eq('user_id', session.user.id)
-      .select('user_id, display_name, avatar_key, experience, games_played, wins')
+      .select('user_id, display_name, avatar_key, friend_code, experience, games_played, wins')
       .single();
     if (error) throw error;
     const profile = mapProfile(data);

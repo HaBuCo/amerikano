@@ -5,6 +5,7 @@ export type RoomView = {
   code: string;
   hostId: string;
   status: 'waiting' | 'playing' | 'finished';
+  visibility: 'private' | 'public';
   you: string;
   revision: number;
   members: {
@@ -17,6 +18,7 @@ export type RoomView = {
 export type ClientMessage =
   | { type: 'create'; name: string }
   | { type: 'join'; code: string; name: string }
+  | { type: 'matchmake'; name: string }
   // Kept while the legacy self-hosted server remains available as a fallback.
   | { type: 'resume'; code: string; token: string }
   | { type: 'ready'; ready: boolean }

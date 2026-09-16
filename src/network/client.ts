@@ -155,30 +155,63 @@ export async function connectRoom() {
   return connecting;
 }
 
-export function sendRoom(message: ClientMessage) {
-  if (snapshot.busy) return;
+export async function sendRoom(message: ClientMessage) {
+  if (snapshot.busy) return false;
   if (!supabase || snapshot.status !== 'online') {
     update({ error: 'Bağlantı kurulmasını bekle.' });
-    return;
+    return false;
   }
   if (!roomId && message.type !== 'create' && message.type !== 'join') {
     update({ error: 'Önce bir odaya katıl.' });
-    return;
+    return false;
   }
   update({ busy: true, error: '' });
-  const body = message.type === 'create' || message.type === 'join' ? message : { ...message, roomId };
-  void invoke(body).then(accept).catch((error) => {
+  const body = message.type === 'create' || message.type === 'join' || message.type === 'matchmake' ? message : { ...message, roomId };
+  try {
+    await accept(await invoke(body));
+    return true;
+  } catch (error) {
     update({ busy: false, error: error instanceof Error ? error.message : 'İşlem tamamlanamadı.' });
-  });
+    return false;
+  }
 }
 
 export function enterRoom(name: string, code?: string) {
-  sendRoom(code ? { type: 'join', name, code: code.toUpperCase() } : { type: 'create', name });
+  return sendRoom(code ? { type: 'join', name, code: code.toUpperCase() } : { type: 'create', name });
+}
+
+export function enterQuickRoom(name: string) {
+  return sendRoom({ type: 'matchmake', name });
+}
+
+export async function leaveWaitingRoom() {
+  if (!roomId) {
+    forgetRoom();
+    return;
+  }
+  if (snapshot.busy) return;
+
+  const leavingRoomId = roomId;
+  update({ busy: true, error: '' });
+  try {
+    const result = await invoke({ type: 'leave', roomId: leavingRoomId });
+    await accept(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Odadan çıkılamadı.';
+    if (/oyun sürerken/i.test(message)) {
+      update({ busy: false, error: message });
+      return;
+    }
+
+    // The local lobby must not trap the player forever if the cleanup request
+    // fails. The server expires abandoned waiting rooms independently.
+    forgetRoom();
+  }
 }
 
 export function sendAction(action: GameAction) {
   if (!snapshot.room) return;
-  sendRoom({
+  void sendRoom({
     type: 'action', requestId: `${Date.now()}-${++sequence}`,
     revision: snapshot.room.revision, action,
   });

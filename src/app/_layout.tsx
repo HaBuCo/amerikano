@@ -21,6 +21,7 @@ export default function RootLayout() {
         <Stack.Screen name="rules" options={{ title: 'Nasıl Oynanır' }} />
         <Stack.Screen name="game" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="online" options={{ headerShown: false }} />
+        <Stack.Screen name="friends" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
       </Stack>
     </GameSoundsProvider>

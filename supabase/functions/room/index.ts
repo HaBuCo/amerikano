@@ -12,6 +12,7 @@ const corsHeaders = {
 type Command =
   | { type: 'create'; name: string }
   | { type: 'join'; code: string; name: string }
+  | { type: 'matchmake'; name: string }
   | { type: 'fetch'; roomId: string }
   | { type: 'ready'; roomId: string; ready: boolean }
   | { type: 'start'; roomId: string }
@@ -80,15 +81,28 @@ Deno.serve(async (request) => {
     const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
     const command = await request.json() as Command;
     if (!command || typeof command.type !== 'string') throw new Error('Geçersiz istek.');
+    await admin.from('profiles').update({ last_active_at: new Date().toISOString() }).eq('user_id', user.id);
 
     const roomView = async (roomId: string) => {
+      const now = new Date().toISOString();
+      const { data: activeRoom, error: activeRoomError } = await admin.from('rooms')
+        .select('id, code, host_id, revision, status, visibility')
+        .eq('id', roomId)
+        .gt('expires_at', now)
+        .maybeSingle();
+      if (activeRoomError) throw activeRoomError;
+      if (!activeRoom) {
+        await admin.from('rooms').delete().eq('id', roomId).lt('expires_at', now);
+        throw new Error('Oda bulunamadı veya süresi doldu.');
+      }
+
       await admin.rpc('touch_online_room_member', { p_room_id: roomId, p_user_id: user.id });
       const { data: membership } = await admin.from('room_members').select('room_id')
         .eq('room_id', roomId).eq('user_id', user.id).maybeSingle();
       if (!membership) throw new Error('Bu odada değilsin.');
 
       const [roomResult, membersResult, stateResult] = await Promise.all([
-        admin.from('rooms').select('id, code, host_id, revision, status').eq('id', roomId).single(),
+        Promise.resolve({ data: activeRoom, error: null }),
         admin.from('room_members').select('user_id, display_name, ready, seat, last_seen_at').eq('room_id', roomId).order('seat'),
         admin.from('room_states').select('state').eq('room_id', roomId).maybeSingle(),
       ]);
@@ -103,6 +117,7 @@ Deno.serve(async (request) => {
         code: roomResult.data.code,
         hostId: roomResult.data.host_id,
         status: roomResult.data.status,
+        visibility: roomResult.data.visibility ?? 'private',
         you: user.id,
         revision: roomResult.data.revision,
         members: membersResult.data.map((member) => ({
@@ -135,6 +150,7 @@ Deno.serve(async (request) => {
     };
 
     if (command.type === 'create') {
+      await admin.from('rooms').delete().lt('expires_at', new Date().toISOString());
       const name = playerName(command.name);
       let roomId: string | null = null;
       for (let attempt = 0; attempt < 8 && !roomId; attempt += 1) {
@@ -149,6 +165,7 @@ Deno.serve(async (request) => {
     }
 
     if (command.type === 'join') {
+      await admin.from('rooms').delete().lt('expires_at', new Date().toISOString());
       const result = await admin.rpc('join_online_room', {
         p_code: String(command.code || '').toUpperCase(),
         p_user_id: user.id,
@@ -162,6 +179,20 @@ Deno.serve(async (request) => {
         throw new Error(message);
       }
       return json({ roomId: result.data, room: await roomView(result.data as string) });
+    }
+
+    if (command.type === 'matchmake') {
+      await admin.from('rooms').delete().lt('expires_at', new Date().toISOString());
+      let targetRoomId: string | null = null;
+      for (let attempt = 0; attempt < 8 && !targetRoomId; attempt += 1) {
+        const result = await admin.rpc('matchmake_online_room', {
+          p_code: roomCode(), p_user_id: user.id, p_name: playerName(command.name), p_ruleset: RULESET_ID,
+        });
+        if (!result.error) targetRoomId = result.data as string;
+        else if (result.error.code !== '23505') throw result.error;
+      }
+      if (!targetRoomId) throw new Error('Uygun masa oluşturulamadı; yeniden dene.');
+      return json({ roomId: targetRoomId, room: await roomView(targetRoomId) });
     }
 
     if (!('roomId' in command) || typeof command.roomId !== 'string') throw new Error('Oda bilgisi eksik.');

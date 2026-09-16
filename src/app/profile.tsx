@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { router, Stack } from 'expo-router';
+import { Href, router, Stack } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { palette as p } from '@/constants/palette';
@@ -41,6 +41,11 @@ function ProfileForm({ profile, loading, saving, error }: { profile: PlayerProfi
         <View style={s.stat}><Text style={s.statValue}>{profile?.wins ?? 0}</Text><Text style={s.statLabel}>GALİBİYET</Text></View>
       </View>
 
+      <View style={s.friendCodePanel}>
+        <View><Text style={s.label}>ARKADAŞ KODUN</Text><Text selectable style={s.friendCode}>{profile.friendCode || 'Hazırlanıyor'}</Text></View>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/friends' as Href)}><Text style={s.friendLink}>Arkadaşlar →</Text></Pressable>
+      </View>
+
       <Text style={s.label}>AVATAR</Text>
       <View style={s.avatars}>{AVATAR_OPTIONS.map((option) => <Pressable key={option.key} accessibilityRole="button"
         accessibilityLabel={`${option.key} avatarı`} accessibilityState={{ selected: avatar === option.key }}
@@ -72,4 +77,6 @@ const s = StyleSheet.create({
   input: { padding: 17, minHeight: 55, borderRadius: 12, borderWidth: 1, borderColor: p.line, color: p.cream, backgroundColor: '#ffffff08', fontSize: 17 },
   primary: { borderRadius: 13, minHeight: 54, alignItems: 'center', justifyContent: 'center', backgroundColor: p.gold }, primaryText: { color: p.ink, fontWeight: '800', fontSize: 16 },
   disabled: { opacity: 0.4 }, success: { color: '#9bd5b5', textAlign: 'center' }, error: { color: '#f0aaa4', textAlign: 'center' },
+  friendCodePanel: { borderWidth: 1, borderColor: p.line, borderRadius: 14, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  friendCode: { color: p.cream, fontSize: 22, fontWeight: '900', letterSpacing: 3, marginTop: 7 }, friendLink: { color: p.gold, fontWeight: '700' },
 });
