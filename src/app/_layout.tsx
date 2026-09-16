@@ -3,10 +3,11 @@ import { StatusBar } from 'expo-status-bar';
 
 import { palette } from '@/constants/palette';
 import { GameSoundsProvider } from '@/audio/game-sounds';
+import { GameSettingsProvider } from '@/settings/game-settings';
 
 export default function RootLayout() {
   return (
-    <GameSoundsProvider>
+    <GameSettingsProvider><GameSoundsProvider>
       <StatusBar style="light" />
       <Stack
         screenOptions={{
@@ -24,6 +25,6 @@ export default function RootLayout() {
         <Stack.Screen name="friends" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
       </Stack>
-    </GameSoundsProvider>
+    </GameSoundsProvider></GameSettingsProvider>
   );
 }

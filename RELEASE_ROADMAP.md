@@ -17,7 +17,7 @@ Paketler bağımlılık ve oyuncu etkisine göre aşağıdaki sırada uygulanır
   - Bağlantı durumlarının açık biçimde ayrılması
 - [x] 5. İlk oyun eğitimi
   - İlk bot maçında adım adım, kapatılabilir eğitim
-- [ ] 6. Ayarlar ve dokunuşlar
+- [x] 6. Ayarlar ve dokunuşlar
   - Titreşim, kritik süre uyarısı, kart ve sürükleme tercihleri
   - Oyun içi hızlı görev/kural yardımı
 - [ ] 7. Yayın öncesi güvenlik ağı

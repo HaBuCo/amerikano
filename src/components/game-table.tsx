@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Animated, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { palette as p } from '@/constants/palette';
-import { CARD_HEIGHT, CARD_WIDTH, PlayingCard } from './playing-card';
+import { CARD_HEIGHT, CARD_WIDTH, PlayingCard, SMALL_CARD_HEIGHT, SMALL_CARD_WIDTH } from './playing-card';
 import { PrivateGameView } from '@/game/view';
 import { Card, GameAction, MeldType } from '@/game/types';
 import { ROUND_CONTRACTS } from '@/game/contracts';
@@ -11,6 +11,7 @@ import { isValidMeld } from '@/game/engine';
 import { GameSound, useGameSounds } from '@/audio/game-sounds';
 import { arrangeHand, loadHandOrder, moveCardToIndex, reconcileHandOrder, saveHandOrder } from '@/game/hand-order';
 import { autoArrangeHand } from '@/game/auto-arrange';
+import { useGameSettings } from '@/settings/game-settings';
 
 type Props = {
   game: PrivateGameView; viewerId: string; modeLabel: string; blocked?: boolean;
@@ -55,25 +56,27 @@ function DragSurface({ active, children, onDragStart, onDrop, style }: {
 
 type DraggableCardProps = {
   card: Card; index: number; step: number; cardsPerRow: number;
+  cardWidth: number; cardHeight: number; compactCard: boolean;
   arranging: boolean; gameplayEnabled: boolean; onDragStart: () => void;
   onReorder: (cardId: string, targetIndex: number) => void;
   onGameplayDrop: (cardId: string, point: DropPoint) => void;
 };
 
-function DraggableHandCard({ card, index, step, cardsPerRow, arranging, gameplayEnabled, onDragStart, onReorder, onGameplayDrop }: DraggableCardProps) {
+function DraggableHandCard({ card, index, step, cardsPerRow, cardWidth, cardHeight, compactCard, arranging, gameplayEnabled, onDragStart, onReorder, onGameplayDrop }: DraggableCardProps) {
   return <DragSurface active={arranging || gameplayEnabled} onDragStart={onDragStart} onDrop={(point) => {
     if (arranging) {
       const columnMove = Math.round(point.dx / step);
-      const rowMove = Math.round(point.dy / (CARD_HEIGHT + 8));
+      const rowMove = Math.round(point.dy / (cardHeight + 8));
       onReorder(card.id, index + columnMove + rowMove * cardsPerRow);
     } else onGameplayDrop(card.id, point);
-  }} style={{ marginLeft: index % cardsPerRow ? step - CARD_WIDTH : 0, zIndex: index % cardsPerRow }}>
-    <PlayingCard card={card} />
+  }} style={{ marginLeft: index % cardsPerRow ? step - cardWidth : 0, zIndex: index % cardsPerRow }}>
+    <PlayingCard card={card} small={compactCard} />
   </DragSurface>;
 }
 
-function TurnCountdown({ deadline }: { deadline?: number }) {
+function TurnCountdown({ deadline, warningEnabled, onUrgent }: { deadline?: number; warningEnabled: boolean; onUrgent: () => void }) {
   const [seconds, setSeconds] = useState(() => deadline ? Math.max(0, Math.ceil((deadline - Date.now()) / 1000)) : 0);
+  const warnedDeadline = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (!deadline) return;
     const update = () => setSeconds(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
@@ -81,8 +84,14 @@ function TurnCountdown({ deadline }: { deadline?: number }) {
     const timer = setInterval(update, 1000);
     return () => clearInterval(timer);
   }, [deadline]);
+  useEffect(() => {
+    if (deadline && warningEnabled && seconds === 10 && warnedDeadline.current !== deadline) {
+      warnedDeadline.current = deadline;
+      onUrgent();
+    }
+  }, [deadline, onUrgent, seconds, warningEnabled]);
   if (!deadline) return null;
-  return <View accessibilityLabel={`Sıra süresi ${seconds} saniye`} style={[s.timer, seconds <= 10 && s.timerUrgent]}><Text style={s.timerText}>{seconds}</Text></View>;
+  return <View accessibilityLabel={`Sıra süresi ${seconds} saniye`} style={[s.timer, warningEnabled && seconds <= 10 && s.timerUrgent]}><Text style={s.timerText}>{seconds}</Text></View>;
 }
 
 function FlowStep({ number, label, state }: { number: number; label: string; state: 'done' | 'active' | 'ready' | 'waiting' }) {
@@ -92,18 +101,28 @@ function FlowStep({ number, label, state }: { number: number; label: string; sta
   </View>;
 }
 
+function SettingRow({ label, value, onPress }: { label: string; value: boolean; onPress: () => void }) {
+  return <Pressable accessibilityRole="switch" accessibilityState={{ checked: value }} onPress={onPress} style={s.settingRow}>
+    <Text style={s.settingLabel}>{label}</Text><View style={[s.switchTrack, value && s.switchTrackOn]}><View style={[s.switchKnob, value && s.switchKnobOn]} /></View>
+  </Pressable>;
+}
+
 export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = true, canRematch = false, error, playerMeta, botControlled = false, connectionState, onReclaim, onAction, onRematch, onForfeit, onExit }: Props) {
   const [pendingState, setPendingState] = useState<{ key: string; groups: Pending[] }>({ key: '', groups: [] });
   const [notice, setNotice] = useState('');
   const [exitOpen, setExitOpen] = useState(false);
   const [scoresOpen, setScoresOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [arranging, setArranging] = useState(false);
   const [activeDrag, setActiveDrag] = useState<'hand' | 'stock' | 'discard' | 'staged' | 'arranging' | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const dropNodes = useRef<Record<string, Measurable | null>>({});
   const dropRects = useRef<Record<string, DropRect>>({});
   const { enabled: soundEnabled, toggle: toggleSound, play: playSound } = useGameSounds();
+  const { settings, updateSettings, feedback } = useGameSettings();
   const previousPhase = useRef(game.phase);
+  const previousError = useRef(error);
   const { width } = useWindowDimensions();
   const me = game.players.find(player => player.id === viewerId)!;
   const myMissedTurns = playerMeta?.[viewerId]?.missedTurns ?? 0;
@@ -137,15 +156,25 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   const winners = game.players.filter(player => player.score === Math.min(...game.players.map(pl => pl.score)));
   const sortedPlayers = [...game.players].sort((a, b) => a.score - b.score);
   const nextContract = game.roundIndex + 1 < ROUND_CONTRACTS.length ? ROUND_CONTRACTS[game.roundIndex + 1] : null;
-  const cardsPerRow = width >= 430 ? 9 : 8;
+  const handCardWidth = settings.compactCards ? SMALL_CARD_WIDTH : CARD_WIDTH;
+  const handCardHeight = settings.compactCards ? SMALL_CARD_HEIGHT : CARD_HEIGHT;
+  const cardsPerRow = width >= 430 ? settings.compactCards ? 10 : 9 : settings.compactCards ? 9 : 8;
   const handWidth = Math.min(width, 760) - 36;
-  const step = Math.max(31, Math.min(46, (handWidth - CARD_WIDTH) / (cardsPerRow - 1)));
+  const step = Math.max(28, Math.min(settings.compactCards ? 41 : 46, (handWidth - handCardWidth) / (cardsPerRow - 1)));
   const rows = Array.from({ length: Math.ceil(cards.length / cardsPerRow) }, (_, i) => cards.slice(i * cardsPerRow, i * cardsPerRow + cardsPerRow));
 
   useEffect(() => {
-    if (previousPhase.current !== game.phase && (game.phase === 'round-over' || game.phase === 'game-over')) playSound('win');
+    if (previousPhase.current !== game.phase && (game.phase === 'round-over' || game.phase === 'game-over')) {
+      playSound('win');
+      feedback('success');
+    }
     previousPhase.current = game.phase;
-  }, [game.phase, playSound]);
+  }, [feedback, game.phase, playSound]);
+
+  useEffect(() => {
+    if (error && error !== previousError.current) feedback('error');
+    previousError.current = error;
+  }, [error, feedback]);
 
   useEffect(() => {
     let active = true;
@@ -199,6 +228,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     setActiveDrag(kind);
     setActiveCardId(cardId ?? null);
     playSound('tap');
+    feedback('selection');
   }
 
   function isInside(key: string, point: DropPoint) {
@@ -407,13 +437,19 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       default: return 'tap';
     }
   }
-  function act(action: GameAction) { setNotice(''); playSound(actionSound(action)); onAction(action); }
+  function act(action: GameAction) {
+    setNotice('');
+    playSound(actionSound(action));
+    feedback(action.type === 'open' || action.type === 'finish' ? 'success' : 'impact');
+    onAction(action);
+  }
   return <SafeAreaView style={s.page}>
     <View style={s.header}>
       <Pressable accessibilityRole="button" accessibilityLabel="Masadan çık" onPress={() => setExitOpen(true)} style={s.iconButton}><Text style={s.white}>←</Text></Pressable>
       <View style={s.center}><Text style={s.eyebrow}>{modeLabel}</Text><Text style={s.round}>EL {game.roundIndex + 1} / 12 · {contract.shortTitle}</Text></View>
       <View style={s.headerActions}>
-        <Pressable accessibilityRole="button" accessibilityLabel={soundEnabled ? 'Sesi kapat' : 'Sesi aç'} style={s.iconButton} onPress={toggleSound}><Text style={s.soundIcon}>{soundEnabled ? '♪' : '×'}</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Hızlı kural yardımı" style={s.iconButton} onPress={() => { feedback(); setHelpOpen(true); }}><Text style={s.soundIcon}>?</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Oyun ayarları" style={s.iconButton} onPress={() => { feedback(); setSettingsOpen(true); }}><Text style={s.soundIcon}>⚙</Text></Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="Puan tablosu" style={s.iconButton} onPress={() => { playSound('tap'); setScoresOpen(true); }}><Text style={s.white}>≡</Text></Pressable>
       </View>
     </View>
@@ -454,7 +490,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
           </View>
         </View>
       </View>
-      <View style={s.turnRow}><Text style={s.turn}>{blocked ? 'Bağlantı / hamle bekleniyor…' : game.phase === 'claim' ? claiming ? 'Almak için açık kartı eline sürükle; istemiyorsan pas geç.' : `${claimPlayer?.name} açık kartı değerlendiriyor…` : myTurn ? drawing ? 'Desteden veya açık karttan eline sürükle.' : 'Kartını hedefe sürükle ve bırak.' : `${current.name} oynuyor…`}</Text><TurnCountdown deadline={game.turnDeadline} /></View>
+      <View style={s.turnRow}><Text style={s.turn}>{blocked ? 'Bağlantı / hamle bekleniyor…' : game.phase === 'claim' ? claiming ? 'Almak için açık kartı eline sürükle; istemiyorsan pas geç.' : `${claimPlayer?.name} açık kartı değerlendiriyor…` : myTurn ? drawing ? 'Desteden veya açık karttan eline sürükle.' : 'Kartını hedefe sürükle ve bırak.' : `${current.name} oynuyor…`}</Text><TurnCountdown deadline={game.turnDeadline} warningEnabled={settings.criticalTimer} onUrgent={() => { playSound('tap'); feedback('warning'); }} /></View>
       {botControlled && <View style={s.botNotice}><Text style={s.botNoticeText}>Üç süre kaçırdığın için bot senin yerine oynuyor.</Text><Pressable accessibilityRole="button" disabled={blocked} onPress={onReclaim} style={[s.reclaimButton, blocked && s.disabled]}><Text style={s.reclaimText}>Koltuğu geri al</Text></Pressable></View>}
       {claiming && <View style={s.actions}>
         <Pressable accessibilityRole="button" onPress={() => act({ type: 'claim', take: false })} style={s.secondary}><Text style={s.actionText}>Pas geç</Text></Pressable>
@@ -479,7 +515,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
         {game.melds.map((m, index) => <View key={m.id} ref={(node) => registerDropZone(`meld:${index}`, node)} style={[s.meld, activeDrag === 'hand' && acceptsCard(index) && s.dropTargetActive, activeDrag === 'hand' && !acceptsCard(index) && s.meldInactive]}>
           <Text style={s.small}>{game.players.find(pl => pl.id === m.ownerId)?.name} · {m.type === 'set' ? 'Küt' : 'Seri'}</Text>
           <View style={s.meldCards}>{m.cards.map((c, i) => <View key={c.id} style={{ marginLeft: i ? -16 : 0 }}><PlayingCard card={c} compact /></View>)}</View>
-          {activeDrag === 'hand' && acceptsCard(index) && <Text style={s.meldDropHint}>Buraya işlenebilir</Text>}
+          {settings.dragHints && activeDrag === 'hand' && acceptsCard(index) && <Text style={s.meldDropHint}>Buraya işlenebilir</Text>}
         </View>)}
       </View> : <Text style={s.emptyTable}>Açılan gruplar burada görünecek.</Text>}
     </ScrollView>
@@ -493,10 +529,10 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       <ScrollView scrollEnabled={!activeDrag} removeClippedSubviews={false} style={s.handCards} contentContainerStyle={s.handScroll}>
         <View style={s.rows}>{rows.map((row, index) => <View key={index} style={s.cardRow}>
           {row.map((c, i) => <DraggableHandCard key={c.id} card={c} index={index * cardsPerRow + i} step={step} cardsPerRow={cardsPerRow}
-            arranging={arranging} gameplayEnabled={playing} onDragStart={() => beginDrag(arranging ? 'arranging' : 'hand', c.id)} onReorder={reorderCard} onGameplayDrop={dropHandCard} />)}
+            cardWidth={handCardWidth} cardHeight={handCardHeight} compactCard={settings.compactCards} arranging={arranging} gameplayEnabled={playing} onDragStart={() => beginDrag(arranging ? 'arranging' : 'hand', c.id)} onReorder={reorderCard} onGameplayDrop={dropHandCard} />)}
         </View>)}</View>
       </ScrollView>
-      {!arranging && <Text style={s.dragGuide}>{drawing ? 'Kart çekmek için üstteki desteden eline sürükle.' : playing ? 'Atmak için kartı açık kartın üstüne; işlemek için gruba sürükle.' : 'Sıranı beklerken “Oto diz” veya “Elle diz” ile elini düzenleyebilirsin.'}</Text>}
+      {settings.dragHints && !arranging && <Text style={s.dragGuide}>{drawing ? 'Kart çekmek için üstteki desteden eline sürükle.' : playing ? 'Atmak için kartı açık kartın üstüne; işlemek için gruba sürükle.' : 'Sıranı beklerken “Oto diz” veya “Elle diz” ile elini düzenleyebilirsin.'}</Text>}
     </View>
     <Modal visible={over || scoresOpen} transparent animationType="fade" onRequestClose={() => setScoresOpen(false)}>
       <View style={s.backdrop}><View style={s.sheet}>
@@ -531,6 +567,28 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       <Pressable style={s.resultButton} onPress={onExit}><Text style={s.actionText}>{onForfeit ? 'Şimdilik çık · koltuğumu koru' : 'Ana menüye dön'}</Text></Pressable>
       {onForfeit && <Pressable style={s.forfeitButton} onPress={onForfeit}><Text style={s.forfeitText}>Kalıcı ayrıl · bot devam etsin</Text></Pressable>}
       <Pressable style={s.resultButtonSecondary} onPress={() => setExitOpen(false)}><Text style={s.resultButtonSecondaryText}>Oynamaya devam et</Text></Pressable>
+    </View></View></Modal>
+    <Modal visible={settingsOpen} transparent animationType="fade" onRequestClose={() => setSettingsOpen(false)}><View style={s.backdrop}><View style={s.sheet}>
+      <Text style={s.resultTitle}>Oyun ayarları</Text>
+      <SettingRow label="Ses efektleri" value={soundEnabled} onPress={() => { toggleSound(); feedback(); }} />
+      <SettingRow label="Titreşim" value={settings.haptics} onPress={() => updateSettings({ haptics: !settings.haptics })} />
+      <SettingRow label="Son 10 saniye uyarısı" value={settings.criticalTimer} onPress={() => { feedback(); updateSettings({ criticalTimer: !settings.criticalTimer }); }} />
+      <SettingRow label="Eldeki kartları küçült" value={settings.compactCards} onPress={() => { feedback(); updateSettings({ compactCards: !settings.compactCards }); }} />
+      <SettingRow label="Sürükleme ipuçları" value={settings.dragHints} onPress={() => { feedback(); updateSettings({ dragHints: !settings.dragHints }); }} />
+      <Pressable style={s.resultButton} onPress={() => setSettingsOpen(false)}><Text style={s.actionText}>Tamam</Text></Pressable>
+    </View></View></Modal>
+    <Modal visible={helpOpen} transparent animationType="fade" onRequestClose={() => setHelpOpen(false)}><View style={s.backdrop}><View style={s.sheet}>
+      <Text style={s.resultTitle}>Bu elde ne yapacağım?</Text>
+      <View style={s.helpTask}><Text style={s.helpTaskLabel}>EL {game.roundIndex + 1} GÖREVİ</Text><Text style={s.helpTaskTitle}>{contract.title}</Text></View>
+      <ScrollView style={s.helpScroll} contentContainerStyle={s.helpContent}>
+        <Text style={s.helpLine}><Text style={s.helpStrong}>1. Kart çek:</Text> Deste veya açık kartı eline sürükle.</Text>
+        <Text style={s.helpLine}><Text style={s.helpStrong}>2. Aç / işle:</Text> Görev tepsilerini doldur. Açtıktan sonraki sıralarda yerdeki gruplara işleyebilirsin.</Text>
+        <Text style={s.helpLine}><Text style={s.helpStrong}>3. Kart at:</Text> Bir kartı açık kart alanına sürükleyerek sıranı bitir.</Text>
+        <Text style={s.helpLine}><Text style={s.helpStrong}>Küt:</Text> Aynı sayı, farklı semboller. <Text style={s.helpStrong}>Seri:</Text> Aynı sembolde ardışık kartlar; As yalnızca Q-K-A sonunda kullanılır.</Text>
+        <Text style={s.helpLine}><Text style={s.helpStrong}>Joker:</Text> İlk 5 elin ilk açılışında kullanılamaz. Yerdeki jokeri ancak elini açtıktan sonra tam karşılık kartıyla değiştirebilirsin.</Text>
+        <Text style={s.helpLine}><Text style={s.helpStrong}>Puan:</Text> Elde kalan sayılar değeri kadar, J-Q-K 10, As 11, Joker 25 ceza verir. En düşük toplam kazanır.</Text>
+      </ScrollView>
+      <Pressable style={s.resultButton} onPress={() => setHelpOpen(false)}><Text style={s.actionText}>Masaya dön</Text></Pressable>
     </View></View></Modal>
   </SafeAreaView>;
 }
@@ -588,4 +646,8 @@ const s = StyleSheet.create({
   resultButton: { padding: 16, backgroundColor: '#143e2c', borderRadius: 12, alignItems: 'center' },
   resultButtonSecondary: { padding: 13, borderWidth: 1, borderColor: '#9d9584', borderRadius: 12, alignItems: 'center' }, resultButtonSecondaryText: { color: '#253a2e', fontSize: 13, fontWeight: '700' },
   forfeitButton: { padding: 13, borderWidth: 1, borderColor: '#b75b5b', borderRadius: 12, alignItems: 'center' }, forfeitText: { color: '#9f3030', fontSize: 13, fontWeight: '800' },
+  settingRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderColor: '#d5cdbb' }, settingLabel: { color: '#253a2e', fontSize: 14, fontWeight: '700' },
+  switchTrack: { width: 43, height: 25, padding: 3, borderRadius: 13, backgroundColor: '#a9a398' }, switchTrackOn: { backgroundColor: '#2f7454' }, switchKnob: { width: 19, height: 19, borderRadius: 10, backgroundColor: '#fff' }, switchKnobOn: { alignSelf: 'flex-end' },
+  helpTask: { padding: 13, borderRadius: 12, backgroundColor: '#e8ddc6', gap: 4 }, helpTaskLabel: { color: '#80602b', fontSize: 9, letterSpacing: 1.5, fontWeight: '900' }, helpTaskTitle: { color: '#253a2e', fontSize: 18, fontWeight: '900' },
+  helpScroll: { flexGrow: 0 }, helpContent: { gap: 12 }, helpLine: { color: '#59675f', fontSize: 13, lineHeight: 20 }, helpStrong: { color: '#253a2e', fontWeight: '900' },
 });
