@@ -1,13 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn, ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
 import { randomInt } from 'node:crypto';
 import { WebSocket } from 'ws';
-import { ServerMessage, ClientMessage, RoomView } from '../src/network/types';
+import type { ServerMessage, ClientMessage, RoomView } from '../src/network/types.ts';
 
 class Peer {
   ws: WebSocket;
@@ -38,7 +39,7 @@ test('three real clients: rooms, authority, privacy, deduplication, reconnect an
   let server: ChildProcess;
   const peers: Peer[] = [];
   const start = async () => {
-    server = spawn(process.execPath, ['--import', 'tsx', 'server/index.ts'], {
+    server = spawn(process.execPath, ['server/index.ts'], {
       cwd: process.cwd(), env: { ...process.env, PORT: String(port), ROOM_DB: data }, stdio: ['ignore', 'pipe', 'pipe'],
     });
     await new Promise<void>((resolve, reject) => {

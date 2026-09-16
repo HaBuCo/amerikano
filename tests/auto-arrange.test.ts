@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { autoArrangeHand } from '../src/game/auto-arrange.ts';
-import { Card, Rank, Suit } from '../src/game/types.ts';
+import type { Card, Rank, Suit } from '../src/game/types.ts';
 
 const card = (id: string, rank: Rank, suit: Suit): Card => ({ id, rank, suit, isJoker: false });
 const joker = (id: string): Card => ({ id, rank: null, suit: null, isJoker: true });

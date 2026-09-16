@@ -1,5 +1,6 @@
 import { isValidMeld } from './engine.ts';
-import { Card, MeldType, RANKS, RoundContract, SUITS } from './types.ts';
+import { RANKS, SUITS } from './types.ts';
+import type { Card, MeldType, RoundContract } from './types.ts';
 
 type Group = { type: MeldType; cards: Card[]; points: number };
 type SearchState = {

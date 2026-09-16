@@ -20,7 +20,7 @@ Paketler bağımlılık ve oyuncu etkisine göre aşağıdaki sırada uygulanır
 - [x] 6. Ayarlar ve dokunuşlar
   - Titreşim, kritik süre uyarısı, kart ve sürükleme tercihleri
   - Oyun içi hızlı görev/kural yardımı
-- [ ] 7. Yayın öncesi güvenlik ağı
+- [x] 7. Yayın öncesi güvenlik ağı
   - Hata/çökme gözlemi
   - İki cihaz, bağlantı kaybı, arka plan ve 12 el çevrim içi kontrolleri
 

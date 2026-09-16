@@ -12,3 +12,7 @@ verify_jwt = false
 [functions.social]
 # The function validates the bearer token with auth.getUser before every command.
 verify_jwt = false
+
+[functions.telemetry]
+# The function validates the bearer token itself before accepting an error event.
+verify_jwt = false

@@ -4,11 +4,11 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { actingPlayerId, applyAction, armTurnTimer, createGame, expireTurn, MIN_GAME_PLAYERS, reclaimBotSeat, resetMissedTurns, RULESET_ID } from '../src/game/engine';
-import { botAction } from '../src/game/bot';
-import { GameState } from '../src/game/types';
-import { projectGame } from '../src/game/view';
-import { ClientMessage, ServerMessage } from '../src/network/types';
+import { actingPlayerId, applyAction, armTurnTimer, createGame, expireTurn, MIN_GAME_PLAYERS, reclaimBotSeat, resetMissedTurns, RULESET_ID } from '../src/game/engine.ts';
+import { botAction } from '../src/game/bot.ts';
+import { projectGame } from '../src/game/view.ts';
+import type { GameState } from '../src/game/types.ts';
+import type { ClientMessage, ServerMessage } from '../src/network/types.ts';
 
 type Member = { id: string; name: string; token: string; ready: boolean };
 type Room = { ruleset: string; code: string; hostId: string; members: Member[]; game: GameState | null; revision: number; updated: number; requests: string[] };
