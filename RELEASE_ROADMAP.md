@@ -6,7 +6,7 @@ Paketler bağımlılık ve oyuncu etkisine göre aşağıdaki sırada uygulanır
   - Üç aşamalı sıra rehberi
   - Yalnızca geçerli sürükle-bırak hedeflerinin vurgulanması
   - Kural bazlı, açıklayıcı geçersiz hamle mesajları
-- [ ] 2. Ayrıntılı el sonu
+- [x] 2. Ayrıntılı el sonu
   - El cezası, toplam değişimi ve kalan kartlar
   - Bir sonraki el görevi ve maç sonu sıralaması
 - [ ] 3. Hemen Oyna güvenilirliği

@@ -41,6 +41,17 @@ export type Player = {
   score: number;
 };
 
+export type RoundResult = {
+  winnerId: string;
+  entries: {
+    playerId: string;
+    penalty: number;
+    totalBefore: number;
+    totalAfter: number;
+    cards: Card[];
+  }[];
+};
+
 export type GameState = {
   roundIndex: number;
   players: Player[];
@@ -51,6 +62,7 @@ export type GameState = {
   melds: Meld[];
   phase: 'draw' | 'claim' | 'play' | 'round-over' | 'game-over';
   roundWinnerId: string | null;
+  roundResult?: RoundResult;
   turnCount: number;
   turnDeadline?: number;
   missedTurns?: Record<string, number>;

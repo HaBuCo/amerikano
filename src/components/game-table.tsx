@@ -134,6 +134,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
         })));
   const over = game.phase === 'round-over' || game.phase === 'game-over';
   const winners = game.players.filter(player => player.score === Math.min(...game.players.map(pl => pl.score)));
+  const sortedPlayers = [...game.players].sort((a, b) => a.score - b.score);
+  const nextContract = game.roundIndex + 1 < ROUND_CONTRACTS.length ? ROUND_CONTRACTS[game.roundIndex + 1] : null;
   const cardsPerRow = width >= 430 ? 9 : 8;
   const handWidth = Math.min(width, 760) - 36;
   const step = Math.max(31, Math.min(46, (handWidth - CARD_WIDTH) / (cardsPerRow - 1)));
@@ -496,8 +498,21 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       <View style={s.backdrop}><View style={s.sheet}>
         <Text style={s.resultIcon}>♛</Text>
         <Text style={s.resultTitle}>{game.phase === 'game-over' ? winners.map(w => w.name).join(' & ') + ' kazandı!' : game.phase === 'round-over' ? game.players.find(pl => pl.id === game.roundWinnerId)?.name + ' bitirdi!' : 'Puan tablosu'}</Text>
-        <Text style={s.resultCaption}>En düşük toplam puan kazanır.</Text>
-        {[...game.players].sort((a, b) => a.score - b.score).map((pl, i) => <View key={pl.id} style={s.score}><Text style={s.scoreName}>{i + 1}. {pl.name}</Text><Text style={s.scoreValue}>{pl.score}</Text></View>)}
+        <Text style={s.resultCaption}>{game.phase === 'round-over' && nextContract ? `Sıradaki el: ${nextContract.title}` : game.phase === 'game-over' ? '12 el tamamlandı. En düşük toplam puan kazandı.' : 'En düşük toplam puan kazanır.'}</Text>
+        <ScrollView style={s.resultList} contentContainerStyle={s.resultListContent} showsVerticalScrollIndicator={false}>
+          {sortedPlayers.map((pl, i) => {
+            const detail = over ? game.roundResult?.entries.find((entry) => entry.playerId === pl.id) : undefined;
+            return <View key={pl.id} style={s.scoreBlock}>
+              <View style={s.score}><Text style={s.scoreName}>{i + 1}. {pl.name}</Text><Text style={s.scoreValue}>{pl.score}</Text></View>
+              {detail && <>
+                <Text style={s.penalty}>{detail.penalty === 0 ? 'Eli kapattı · Ceza yok' : `+${detail.penalty} ceza · ${detail.totalBefore} → ${detail.totalAfter}`}</Text>
+                {detail.cards.length > 0 && <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.remainingCards}>
+                  {detail.cards.map((card) => <PlayingCard key={card.id} card={card} compact />)}
+                </ScrollView>}
+              </>}
+            </View>;
+          })}
+        </ScrollView>
         {over ? game.phase === 'game-over' ? <>{onRematch && (canRematch
             ? <Pressable disabled={blocked} style={[s.resultButton, blocked && s.disabled]} onPress={onRematch}><Text style={s.actionText}>Tekrar oyna</Text></Pressable>
             : <Text style={s.resultCaption}>Oda sahibinin yeniden başlatması bekleniyor.</Text>)}
@@ -558,9 +573,11 @@ const s = StyleSheet.create({
   actionText: { color: p.cream, fontSize: 13, fontWeight: '700' }, primaryText: { color: p.ink, fontSize: 14, fontWeight: '800' }, disabled: { opacity: 0.35 },
   notice: { color: '#ffc88a', paddingHorizontal: 18, marginTop: 6, fontSize: 12 }, arrangeHint: { color: p.gold, paddingHorizontal: 18, marginTop: 6, fontSize: 11 },
   dragGuide: { color: '#90aa9b', fontSize: 10, textAlign: 'center', paddingHorizontal: 18, paddingTop: 5 }, gold: { color: p.gold, fontSize: 12 },
-  backdrop: { flex: 1, backgroundColor: '#000b', justifyContent: 'center', padding: 24 }, sheet: { width: '100%', maxWidth: 480, alignSelf: 'center', backgroundColor: '#f5eedf', borderRadius: 23, padding: 25, gap: 14 },
+  backdrop: { flex: 1, backgroundColor: '#000b', justifyContent: 'center', padding: 24 }, sheet: { width: '100%', maxWidth: 480, maxHeight: '88%', alignSelf: 'center', backgroundColor: '#f5eedf', borderRadius: 23, padding: 25, gap: 14 },
   resultIcon: { textAlign: 'center', color: '#997431', fontSize: 36 }, resultTitle: { color: '#142c22', fontWeight: '800', fontSize: 25, textAlign: 'center' }, resultCaption: { color: '#59675f', fontSize: 13, lineHeight: 20, textAlign: 'center' },
-  score: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderColor: '#d5cdbb' }, scoreName: { color: '#253a2e', fontSize: 15 }, scoreValue: { fontWeight: '800', color: '#80602b' },
+  resultList: { flexGrow: 0 }, resultListContent: { gap: 8 }, scoreBlock: { borderBottomWidth: 1, borderColor: '#d5cdbb', paddingBottom: 8 },
+  score: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 }, scoreName: { color: '#253a2e', fontSize: 15 }, scoreValue: { fontWeight: '800', color: '#80602b' },
+  penalty: { color: '#59675f', fontSize: 11, marginBottom: 5 }, remainingCards: { gap: 3, paddingRight: 8 },
   resultButton: { padding: 16, backgroundColor: '#143e2c', borderRadius: 12, alignItems: 'center' },
   resultButtonSecondary: { padding: 13, borderWidth: 1, borderColor: '#9d9584', borderRadius: 12, alignItems: 'center' }, resultButtonSecondaryText: { color: '#253a2e', fontSize: 13, fontWeight: '700' },
 });

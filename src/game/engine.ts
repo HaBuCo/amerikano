@@ -478,11 +478,27 @@ export function explainInvalidAction(state: GameState, actorId: string, action: 
 
 function finishRound(state: GameState): GameState {
   const winner = state.players[state.currentPlayerIndex];
+  const entries = state.players.map((player) => {
+    const penalty = player.id === winner.id ? 0 : handPoints(player.hand);
+    return {
+      playerId: player.id,
+      penalty,
+      totalBefore: player.score,
+      totalAfter: player.score + penalty,
+      cards: [...player.hand],
+    };
+  });
   const players = state.players.map((player) => ({
     ...player,
-    score: player.id === winner.id ? player.score : player.score + handPoints(player.hand),
+    score: entries.find((entry) => entry.playerId === player.id)!.totalAfter,
   }));
-  return { ...state, players, phase: 'round-over', roundWinnerId: winner.id };
+  return {
+    ...state,
+    players,
+    phase: 'round-over',
+    roundWinnerId: winner.id,
+    roundResult: { winnerId: winner.id, entries },
+  };
 }
 
 export function nextRound(state: GameState, random = Math.random): GameState {

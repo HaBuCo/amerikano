@@ -58,6 +58,11 @@ test('opening locks, joker restriction, mandatory last discard and score', () =>
   const expected = handPoints(s.players[1].hand);
   s = applyAction(s, 'player-1', { type: 'discard', cardId: 'Ahearts' });
   assert.equal(s.phase, 'round-over'); assert.equal(s.players[1].score, expected);
+  assert.equal(s.roundResult?.winnerId, 'player-1');
+  assert.deepEqual(s.roundResult?.entries.find(entry => entry.playerId === 'player-1'), {
+    playerId: 'player-1', penalty: 0, totalBefore: 0, totalAfter: 0, cards: [],
+  });
+  assert.equal(s.roundResult?.entries.find(entry => entry.playerId === 'player-2')?.penalty, expected);
   const jokerState = stateWithHand([c('7'), c('7', 'clubs'), j, c('A')]);
   assert.equal(applyAction(jokerState, 'player-1', { type: 'open', groups: [{ type: 'set', cardIds: ['7hearts', '7clubs', 'j'] }] }), jokerState);
 });
@@ -80,6 +85,11 @@ test('private projection contains no deck or other hand cards', () => {
   const json = JSON.stringify(v);
   assert.ok(s.stock.every(c => !json.includes(c.id)));
   assert.ok(s.players[1].hand.every(c => !json.includes(c.id)));
+  const ended = { ...s, phase: 'round-over' as const, roundResult: {
+    winnerId: s.players[0].id,
+    entries: s.players.map(player => ({ playerId: player.id, penalty: 0, totalBefore: 0, totalAfter: 0, cards: player.hand })),
+  } };
+  assert.equal(projectGame(ended, s.players[0].id).roundResult?.entries[1].cards.length, 13);
 });
 test('full bot match completes 12 rounds and conserves every card', { timeout: 120000 }, () => {
   let seed = 91;
