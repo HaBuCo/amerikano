@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { actingPlayerId, applyAction, armTurnTimer, createGame, expireTurn, MIN_GAME_PLAYERS, reclaimBotSeat, resetMissedTurns, RULESET_ID } from '../../../src/game/engine.ts';
+import { actingPlayerId, applyAction, armTurnTimer, createGame, expireTurn, explainInvalidAction, MIN_GAME_PLAYERS, reclaimBotSeat, resetMissedTurns, RULESET_ID } from '../../../src/game/engine.ts';
 import { botAction } from '../../../src/game/bot.ts';
 import { projectGame } from '../../../src/game/view.ts';
 import type { GameAction, GameState } from '../../../src/game/types.ts';
@@ -319,7 +319,7 @@ Deno.serve(async (request) => {
         return json({ roomId: command.roomId, room: await roomView(command.roomId) });
       }
       const applied = applyAction(stored, user.id, command.action, secureRandom);
-      if (applied === stored) throw new Error('Hamle geçersiz: sıranı, kartlarını ve el görevini kontrol et.');
+      if (applied === stored) throw new Error(explainInvalidAction(stored, user.id, command.action));
       const after = advanceBots(armTurnTimer(resetMissedTurns(applied, user.id)));
       const commit = await admin.rpc('commit_room_state', {
         target_room: command.roomId,

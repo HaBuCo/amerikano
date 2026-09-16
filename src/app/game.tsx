@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameTable } from '@/components/game-table';
-import { actingPlayerId, applyAction, createGame } from '@/game/engine';
+import { actingPlayerId, applyAction, createGame, explainInvalidAction } from '@/game/engine';
 import { botAction } from '@/game/bot';
 import { clearSingleGame, loadSingleGame, saveSingleGame } from '@/game/local-save';
 import { projectGame } from '@/game/view';
@@ -57,7 +57,7 @@ export default function GameScreen() {
   function act(action: GameAction) {
     const next = applyAction(game, viewerId, action);
     if (next === game) {
-      setError('Görevi ve joker kuralını kontrol et. Açtığın turda ek grup veya işleme yapamazsın. Bitiş için bir kart ayır.');
+      setError(explainInvalidAction(game, viewerId, action));
       return;
     }
     setError(''); setGame(next);

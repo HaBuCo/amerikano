@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { actingPlayerId, applyAction, armTurnTimer, createDeck, createGame, isValidMeld, openMelds, handPoints, expireClaim, expireTurn, MISSED_TURNS_BEFORE_BOT, nextRound, reclaimBotSeat, replaceJoker, resetMissedTurns, TURN_TIMEOUT_MS } from '../src/game/engine.ts';
+import { actingPlayerId, applyAction, armTurnTimer, createDeck, createGame, isValidMeld, openMelds, handPoints, expireClaim, expireTurn, explainInvalidAction, MISSED_TURNS_BEFORE_BOT, nextRound, reclaimBotSeat, replaceJoker, resetMissedTurns, TURN_TIMEOUT_MS } from '../src/game/engine.ts';
 import { botAction, candidates } from '../src/game/bot.ts';
 import { ROUND_CONTRACTS } from '../src/game/contracts.ts';
 import { projectGame } from '../src/game/view.ts';
@@ -39,6 +39,14 @@ test('canonical cards block forged values, duplicate IDs and out-of-turn actions
   assert.equal(openMelds(s, [{ id: 'evil', ownerId: 'evil', type: 'set', cards: forged }]), s);
   assert.equal(applyAction(s, s.players[1].id, { type: 'discard', cardId: '7hearts' }), s);
   assert.equal(applyAction(s, s.players[0].id, { type: 'open', groups: [{ type: 'set', cardIds: ['7hearts', '7hearts', '7spades'] }] }), s);
+});
+test('rejected actions explain the exact rule to the player', () => {
+  const s = stateWithHand([c('7'), c('7', 'clubs'), c('7', 'spades'), c('A')]);
+  assert.equal(explainInvalidAction(s, s.players[1].id, { type: 'discard', cardId: '7hearts' }), 'Sıra sende değil.');
+  assert.equal(explainInvalidAction(s, s.players[0].id, { type: 'draw', source: 'stock' }), 'Kart çekme aşaması tamamlandı; şimdi elinden bir kart oyna veya at.');
+  s.melds = [{ id: 'm', type: 'set', cards: [c('7'), c('7', 'clubs'), c('7', 'spades')], ownerId: s.players[1].id }];
+  assert.equal(explainInvalidAction(s, s.players[0].id, { type: 'layoff', meldId: 'm', cardId: 'Ahearts' }), 'Masaya kart işlemek için önce kendi görevini açmalısın.');
+  assert.match(explainInvalidAction(s, s.players[0].id, { type: 'open', groups: [{ type: 'run', cardIds: ['7hearts', '7clubs', '7spades'] }] }), /geçerli değil/);
 });
 test('opening locks, joker restriction, mandatory last discard and score', () => {
   let s = stateWithHand([c('7'), c('7', 'clubs'), c('7', 'spades'), c('A')]);

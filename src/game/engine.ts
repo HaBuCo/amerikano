@@ -385,7 +385,7 @@ export function applyAction(state: GameState, actorId: string, action: GameActio
     case 'open': {
       if (action.type === 'finish' && !ROUND_CONTRACTS[state.roundIndex].final) return state;
       if (!Array.isArray(action.groups) || action.groups.length > 35 ||
-          action.groups.some(g => !g || !Array.isArray(g.cardIds))) return state;
+          action.groups.some(g => !g || (g.type !== 'set' && g.type !== 'run') || !Array.isArray(g.cardIds))) return state;
       const hand = state.players[state.currentPlayerIndex].hand;
       const groups = action.groups.map((g, i) => ({
         id: String(i), ownerId: actorId, type: g.type,
@@ -395,6 +395,85 @@ export function applyAction(state: GameState, actorId: string, action: GameActio
     }
     default: return state;
   }
+}
+
+/** Returns a player-facing reason when an action would be rejected. */
+export function explainInvalidAction(state: GameState, actorId: string, action: GameAction): string {
+  if (action.type === 'next') return state.phase === 'round-over' ? '' : 'Bu el henüz tamamlanmadı.';
+  if (action.type === 'claim') {
+    if (state.phase !== 'claim' || !state.claim) return 'Şu anda ceza kartı kararı beklenmiyor.';
+    if (state.claim.playerIds[0] !== actorId) return 'Açık kartı değerlendirme sırası başka bir oyuncuda.';
+    if (action.take && (state.stock.length < 2 || !state.discard.length)) return 'Ceza kartını almak için destede yeterli kart yok.';
+    return '';
+  }
+
+  const current = state.players[state.currentPlayerIndex];
+  if (current.id !== actorId) return 'Sıra sende değil.';
+  if (action.type === 'draw') {
+    if (state.phase !== 'draw') return 'Kart çekme aşaması tamamlandı; şimdi elinden bir kart oyna veya at.';
+    if (action.source === 'discard' && !state.discard.length) return 'Ortada alınabilecek açık kart yok.';
+    if (action.source === 'stock' && !state.stock.length) return 'Kapalı destede kart kalmadı.';
+    return '';
+  }
+  if (state.phase !== 'play') return 'Önce desteden veya açık karttan bir kart çekmelisin.';
+
+  if (action.type === 'discard') {
+    if (!current.hand.some((card) => card.id === action.cardId)) return 'Atmak istediğin kart elinde değil.';
+    if (current.hand.length === 1 && !current.hasOpened) return 'Elini açmadan son kartını atamazsın.';
+    return '';
+  }
+
+  if (action.type === 'layoff') {
+    if (!current.hasOpened) return 'Masaya kart işlemek için önce kendi görevini açmalısın.';
+    if (current.openedTurn === state.turnCount) return 'Görev açtığın turda işleme yapamazsın; sonraki sıranı bekle.';
+    if (current.hand.length <= 1) return 'Bitiş için elinde bir atmalık kart bırakmalısın.';
+    const card = current.hand.find((item) => item.id === action.cardId);
+    const meld = state.melds.find((item) => item.id === action.meldId);
+    if (!card || !meld) return 'Kart veya masa grubu artık geçerli değil.';
+    return isValidMeld([...meld.cards, card], meld.type) ? '' : 'Bu kart seçtiğin küt veya seriye işlenemez.';
+  }
+
+  if (action.type === 'replaceJoker') {
+    if (!current.hasOpened) return 'Yerdeki jokeri almak için önce kendi görevini açmalısın.';
+    if (current.openedTurn === state.turnCount) return 'Görev açtığın turda joker alamazsın; sonraki sıranı bekle.';
+    const replacement = current.hand.find((card) => card.id === action.cardId);
+    const meld = state.melds.find((item) => item.id === action.meldId);
+    const joker = meld?.cards.find((card) => card.id === action.jokerId);
+    if (!replacement || replacement.isJoker || !meld || !joker?.isJoker) return 'Jokerin tam karşılık kartını elinden bırakmalısın.';
+    const replaced = meld.cards.map((card) => card.id === joker.id ? replacement : card);
+    return isValidMeld(replaced, meld.type) ? '' : 'Bu kart yerdeki jokerin tam karşılığı değil.';
+  }
+
+  if (action.type === 'finish' && !ROUND_CONTRACTS[state.roundIndex].final) return 'Elden bitme yalnızca final elinde kullanılabilir.';
+  if (action.type === 'open' || action.type === 'finish') {
+    if (current.hasOpened && current.openedTurn === state.turnCount) return 'Aynı turda ikinci kez grup açamazsın.';
+    if (!Array.isArray(action.groups) || !action.groups.length) return 'Açmak için en az bir geçerli grup hazırlamalısın.';
+    if (action.groups.length > 35 || action.groups.some((group) => group.type !== 'set' && group.type !== 'run')) {
+      return 'Hazırladığın gruplardan birinin türü geçerli değil.';
+    }
+    const cardIds = action.groups.flatMap((group) => group.cardIds);
+    if (new Set(cardIds).size !== cardIds.length) return 'Aynı kartı iki farklı grupta kullanamazsın.';
+    if (cardIds.some((id) => !current.hand.some((card) => card.id === id))) return 'Hazırladığın gruptaki kartlardan biri artık elinde değil.';
+    const melds = action.groups.map((group) => ({
+      type: group.type,
+      cards: group.cardIds.map((id) => current.hand.find((card) => card.id === id)!),
+    }));
+    if (melds.some((meld) => !isValidMeld(meld.cards, meld.type))) return 'Hazırladığın küt veya serilerden biri geçerli değil.';
+    if (current.hand.length - cardIds.length < 1) return 'Bitiş için elinde bir atmalık kart bırakmalısın.';
+    if (current.hasOpened) return '';
+    if (state.roundIndex < 5 && melds.some((meld) => meld.cards.some((card) => card.isJoker))) {
+      return 'İlk beş elin açılış görevinde joker kullanılamaz.';
+    }
+    const contract = ROUND_CONTRACTS[state.roundIndex];
+    if (contract.final) {
+      if (action.type !== 'finish') return 'Final elinde bütün grupları ve bitiş kartını tek hamlede tamamlamalısın.';
+      if (!current.hand.some((card) => card.id === action.discardId) || cardIds.includes(action.discardId)) return 'Final için grupların dışında bir bitiş kartı bırak.';
+      if (current.hand.length - cardIds.length !== 1) return 'Finalde bitiş kartı dışında elinde kart kalmamalı.';
+      return '';
+    }
+    return satisfiesContract(melds, contract) ? '' : `Bu elin açılış görevi: ${contract.title}.`;
+  }
+  return 'Bu hamle şu anda yapılamıyor.';
 }
 
 function finishRound(state: GameState): GameState {
