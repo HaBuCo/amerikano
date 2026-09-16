@@ -15,7 +15,7 @@ Paketler bağımlılık ve oyuncu etkisine göre aşağıdaki sırada uygulanır
 - [x] 4. Ayrılma ve geri bağlanma
   - Kalıcı ayrılma/bot devri
   - Bağlantı durumlarının açık biçimde ayrılması
-- [ ] 5. İlk oyun eğitimi
+- [x] 5. İlk oyun eğitimi
   - İlk bot maçında adım adım, kapatılabilir eğitim
 - [ ] 6. Ayarlar ve dokunuşlar
   - Titreşim, kritik süre uyarısı, kart ve sürükleme tercihleri

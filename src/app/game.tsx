@@ -3,12 +3,14 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameTable } from '@/components/game-table';
+import { GameTutorial } from '@/components/game-tutorial';
 import { actingPlayerId, applyAction, createGame, explainInvalidAction } from '@/game/engine';
 import { botAction } from '@/game/bot';
 import { clearSingleGame, loadSingleGame, saveSingleGame } from '@/game/local-save';
 import { projectGame } from '@/game/view';
 import { GameAction } from '@/game/types';
 import { palette as p } from '@/constants/palette';
+import { hasSeenFirstGameTutorial, markFirstGameTutorialSeen } from '@/game/tutorial';
 
 export default function GameScreen() {
   const params = useLocalSearchParams<{ players?: string; mode?: string }>();
@@ -18,6 +20,8 @@ export default function GameScreen() {
   const [error, setError] = useState('');
   const [savedGame, setSavedGame] = useState<typeof game | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'choice' | 'ready'>(single ? 'loading' : 'ready');
+  const [tutorialChecked, setTutorialChecked] = useState(!single);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
   const current = game.players.find(p => p.id === actingPlayerId(game))!;
   const viewerId = single ? game.players[0].id : current.id;
   useEffect(() => {
@@ -31,18 +35,32 @@ export default function GameScreen() {
     return () => { active = false; };
   }, [single]);
   useEffect(() => {
+    if (!single) return;
+    let active = true;
+    void hasSeenFirstGameTutorial().then((seen) => {
+      if (!active) return;
+      setTutorialOpen(!seen);
+      setTutorialChecked(true);
+    });
+    return () => { active = false; };
+  }, [single]);
+  useEffect(() => {
     if (!single || loadState !== 'ready') return;
     if (game.phase === 'game-over') void clearSingleGame();
     else void saveSingleGame(game);
   }, [game, loadState, single]);
   useEffect(() => {
-    if (!single || loadState !== 'ready' || current.id === viewerId || !['draw', 'claim', 'play'].includes(game.phase)) return;
+    if (!single || loadState !== 'ready' || tutorialOpen || current.id === viewerId || !['draw', 'claim', 'play'].includes(game.phase)) return;
     const timer = setTimeout(() => {
       const action = botAction(game);
       if (action) setGame(applyAction(game, current.id, action));
     }, game.phase === 'draw' ? 800 : 550);
     return () => clearTimeout(timer);
-  }, [game, single, current.id, viewerId, loadState]);
+  }, [game, single, current.id, viewerId, loadState, tutorialOpen]);
+  function finishTutorial() {
+    setTutorialOpen(false);
+    void markFirstGameTutorialSeen();
+  }
   function startFresh() {
     void clearSingleGame();
     setSavedGame(null);
@@ -64,7 +82,7 @@ export default function GameScreen() {
     if (!single && (actingPlayerId(next) !== actingPlayerId(game) || action.type === 'next')) setVisible(false);
   }
 
-  if (single && loadState !== 'ready') {
+  if (single && (loadState !== 'ready' || !tutorialChecked)) {
     return <SafeAreaView style={s.resumePage}>
       <View style={s.resumeSheet}>
         {loadState === 'loading' ? <>
@@ -85,6 +103,7 @@ export default function GameScreen() {
 
   return <>
     <GameTable key={game.roundIndex + ':' + viewerId} game={projectGame(game, viewerId)} viewerId={viewerId} modeLabel={single ? 'TEK OYUNCULU · BOT MASASI' : 'AYNI CİHAZDA'} onAction={act} error={error} onExit={() => router.replace('/')} />
+    {single && <GameTutorial visible={tutorialOpen} onDone={finishTutorial} />}
     <Modal visible={!single && !visible && !['round-over', 'game-over'].includes(game.phase)} animationType="none" onRequestClose={() => router.replace('/')}>
       <View style={s.curtain}><Text style={s.eyebrow}>TELEFONU VER</Text><Text style={s.name}>{current.name}</Text><Text style={s.copy}>Hazır olduğunda kartlarını göster.</Text><Pressable accessibilityRole="button" onPress={() => setVisible(true)} style={s.button}><Text style={s.buttonText}>Elimi göster</Text></Pressable></View>
     </Modal>
