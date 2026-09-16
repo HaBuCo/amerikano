@@ -268,6 +268,14 @@ export function reclaimBotSeat(state: GameState, playerId: string, now = Date.no
   return actingPlayerId(reclaimed) === playerId ? armTurnTimer(reclaimed, now) : reclaimed;
 }
 
+/** Permanently hands a human seat to the server bot without removing the player from the match. */
+export function cedeSeatToBot(state: GameState, playerId: string, now = Date.now()): GameState {
+  if (!state.players.some((player) => player.id === playerId) || state.phase === 'round-over' || state.phase === 'game-over') return state;
+  if (state.botControlledPlayerIds?.includes(playerId)) return state;
+  const next = { ...state, botControlledPlayerIds: [...(state.botControlledPlayerIds ?? []), playerId] };
+  return actingPlayerId(next) === playerId ? armTurnTimer(next, now) : next;
+}
+
 export function discardCard(state: GameState, cardId: string): GameState {
   if (state.phase !== 'play') return state;
   const current = state.players[state.currentPlayerIndex];

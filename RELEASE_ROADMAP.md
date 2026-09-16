@@ -12,7 +12,7 @@ Paketler bağımlılık ve oyuncu etkisine göre aşağıdaki sırada uygulanır
 - [x] 3. Hemen Oyna güvenilirliği
   - Otomatik hazır olma ve geri sayım
   - Masa sahibi aktarımı, aramayı iptal etme ve uzun bekleme seçeneği
-- [ ] 4. Ayrılma ve geri bağlanma
+- [x] 4. Ayrılma ve geri bağlanma
   - Kalıcı ayrılma/bot devri
   - Bağlantı durumlarının açık biçimde ayrılması
 - [ ] 5. İlk oyun eğitimi

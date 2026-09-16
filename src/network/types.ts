@@ -27,6 +27,7 @@ export type ClientMessage =
   | { type: 'rematch' }
   | { type: 'reclaim' }
   | { type: 'leave' }
+  | { type: 'forfeit' }
   | { type: 'action'; requestId: string; revision: number; action: GameAction };
 export type ServerMessage =
   | { type: 'session'; token: string; code: string }

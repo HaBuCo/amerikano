@@ -17,7 +17,8 @@ type Props = {
   canAdvance?: boolean; canRematch?: boolean; error?: string;
   playerMeta?: Record<string, { avatarColor: string; avatarSymbol: string; level: number; connected: boolean; missedTurns: number; botControlled: boolean }>;
   botControlled?: boolean; onReclaim?: () => void;
-  onAction: (a: GameAction) => void; onRematch?: () => void; onExit: () => void;
+  connectionState?: 'online' | 'reconnecting' | 'offline';
+  onAction: (a: GameAction) => void; onRematch?: () => void; onForfeit?: () => void; onExit: () => void;
 };
 type Pending = { type: MeldType | null; cardIds: string[] };
 type DropRect = { x: number; y: number; width: number; height: number };
@@ -91,7 +92,7 @@ function FlowStep({ number, label, state }: { number: number; label: string; sta
   </View>;
 }
 
-export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = true, canRematch = false, error, playerMeta, botControlled = false, onReclaim, onAction, onRematch, onExit }: Props) {
+export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = true, canRematch = false, error, playerMeta, botControlled = false, connectionState, onReclaim, onAction, onRematch, onForfeit, onExit }: Props) {
   const [pendingState, setPendingState] = useState<{ key: string; groups: Pending[] }>({ key: '', groups: [] });
   const [notice, setNotice] = useState('');
   const [exitOpen, setExitOpen] = useState(false);
@@ -416,10 +417,13 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
         <Pressable accessibilityRole="button" accessibilityLabel="Puan tablosu" style={s.iconButton} onPress={() => { playSound('tap'); setScoresOpen(true); }}><Text style={s.white}>≡</Text></Pressable>
       </View>
     </View>
+    {connectionState && <View style={[s.connectionBar, connectionState === 'online' ? s.connectionOnline : connectionState === 'reconnecting' ? s.connectionWaiting : s.connectionOffline]}>
+      <Text style={s.connectionText}>{connectionState === 'online' ? '● Sunucuya bağlı' : connectionState === 'reconnecting' ? '◌ Yeniden bağlanıyor · elin korunuyor' : '○ Çevrim dışı · hamleler bekletiliyor'}</Text>
+    </View>}
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.playersBar} contentContainerStyle={s.players}>
       {game.players.filter(pl => pl.id !== viewerId).map(pl => <View key={pl.id} style={[s.opponent, current.id === pl.id && s.activeOpponent]}>
         <View style={[s.avatar, playerMeta?.[pl.id] && { backgroundColor: playerMeta[pl.id].avatarColor }]}><Text style={s.avatarText}>{playerMeta?.[pl.id]?.avatarSymbol ?? pl.name.charAt(0)}</Text></View>
-        <View><Text numberOfLines={1} style={s.opponentName}>{pl.name}{playerMeta?.[pl.id]?.botControlled ? ' · BOT' : playerMeta?.[pl.id]?.connected === false ? ' · çevrim dışı' : ''}</Text><Text style={s.small}>Sv. {playerMeta?.[pl.id]?.level ?? 1} · {game.handCounts[pl.id]} kart · {pl.score} puan{pl.hasOpened ? ' · Açtı' : ''}{playerMeta?.[pl.id]?.missedTurns ? ` · ${playerMeta[pl.id].missedTurns}/3 süre` : ''}</Text></View>
+        <View><Text numberOfLines={1} style={s.opponentName}>{pl.name}{(playerMeta?.[pl.id]?.botControlled || game.botControlledPlayerIds?.includes(pl.id)) ? ' · BOT' : playerMeta?.[pl.id]?.connected === false ? ' · çevrim dışı' : ''}</Text><Text style={s.small}>Sv. {playerMeta?.[pl.id]?.level ?? 1} · {game.handCounts[pl.id]} kart · {pl.score} puan{pl.hasOpened ? ' · Açtı' : ''}{playerMeta?.[pl.id]?.missedTurns ? ` · ${playerMeta[pl.id].missedTurns}/3 süre` : ''}</Text></View>
         <View style={{ marginLeft: 5 }}><PlayingCard hidden compact /></View>
       </View>)}
     </ScrollView>
@@ -523,15 +527,18 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       </View></View>
     </Modal>
     <Modal visible={exitOpen} transparent animationType="fade" onRequestClose={() => setExitOpen(false)}><View style={s.backdrop}><View style={s.sheet}>
-      <Text style={s.resultTitle}>Masadan çıkılsın mı?</Text><Text style={s.resultCaption}>Tek oyunculu oyun sıfırlanır. Çevrim içi odana aynı cihazdan tekrar dönebilirsin.</Text>
-      <Pressable style={s.resultButton} onPress={onExit}><Text style={s.actionText}>Ana menüye dön</Text></Pressable>
-      <Pressable style={s.resultButton} onPress={() => setExitOpen(false)}><Text style={s.actionText}>Oynamaya devam et</Text></Pressable>
+      <Text style={s.resultTitle}>Masadan çıkılsın mı?</Text><Text style={s.resultCaption}>{onForfeit ? 'Şimdilik çıkarsan aynı cihazdan masaya dönebilirsin. Kalıcı ayrılırsan koltuğunu bot devralır.' : 'Oyun kaydedilir; aynı cihazdan kaldığın yerden devam edebilirsin.'}</Text>
+      <Pressable style={s.resultButton} onPress={onExit}><Text style={s.actionText}>{onForfeit ? 'Şimdilik çık · koltuğumu koru' : 'Ana menüye dön'}</Text></Pressable>
+      {onForfeit && <Pressable style={s.forfeitButton} onPress={onForfeit}><Text style={s.forfeitText}>Kalıcı ayrıl · bot devam etsin</Text></Pressable>}
+      <Pressable style={s.resultButtonSecondary} onPress={() => setExitOpen(false)}><Text style={s.resultButtonSecondaryText}>Oynamaya devam et</Text></Pressable>
     </View></View></Modal>
   </SafeAreaView>;
 }
 const s = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#09271e', width: '100%', maxWidth: 760, alignSelf: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 6 },
+  connectionBar: { marginHorizontal: 12, marginBottom: 4, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, alignItems: 'center' },
+  connectionOnline: { backgroundColor: '#2f8d5b35' }, connectionWaiting: { backgroundColor: '#d9a44130' }, connectionOffline: { backgroundColor: '#a6404838' }, connectionText: { color: p.cream, fontSize: 10, fontWeight: '700' },
   iconButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: p.line, borderRadius: 20 },
   headerActions: { flexDirection: 'row', gap: 7 }, soundIcon: { color: p.gold, fontSize: 19, fontWeight: '800' },
   white: { color: p.cream, fontSize: 20 }, center: { alignItems: 'center', gap: 4, marginLeft: 45 }, eyebrow: { color: p.gold, fontSize: 9, letterSpacing: 2, fontWeight: '800' },
@@ -580,4 +587,5 @@ const s = StyleSheet.create({
   penalty: { color: '#59675f', fontSize: 11, marginBottom: 5 }, remainingCards: { gap: 3, paddingRight: 8 },
   resultButton: { padding: 16, backgroundColor: '#143e2c', borderRadius: 12, alignItems: 'center' },
   resultButtonSecondary: { padding: 13, borderWidth: 1, borderColor: '#9d9584', borderRadius: 12, alignItems: 'center' }, resultButtonSecondaryText: { color: '#253a2e', fontSize: 13, fontWeight: '700' },
+  forfeitButton: { padding: 13, borderWidth: 1, borderColor: '#b75b5b', borderRadius: 12, alignItems: 'center' }, forfeitText: { color: '#9f3030', fontSize: 13, fontWeight: '800' },
 });

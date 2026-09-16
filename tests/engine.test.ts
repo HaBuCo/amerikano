@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { actingPlayerId, applyAction, armTurnTimer, createDeck, createGame, isValidMeld, openMelds, handPoints, expireClaim, expireTurn, explainInvalidAction, MISSED_TURNS_BEFORE_BOT, nextRound, reclaimBotSeat, replaceJoker, resetMissedTurns, TURN_TIMEOUT_MS } from '../src/game/engine.ts';
+import { actingPlayerId, applyAction, armTurnTimer, cedeSeatToBot, createDeck, createGame, isValidMeld, openMelds, handPoints, expireClaim, expireTurn, explainInvalidAction, MISSED_TURNS_BEFORE_BOT, nextRound, reclaimBotSeat, replaceJoker, resetMissedTurns, TURN_TIMEOUT_MS } from '../src/game/engine.ts';
 import { botAction, candidates } from '../src/game/bot.ts';
 import { ROUND_CONTRACTS } from '../src/game/contracts.ts';
 import { projectGame } from '../src/game/view.ts';
@@ -47,6 +47,15 @@ test('rejected actions explain the exact rule to the player', () => {
   s.melds = [{ id: 'm', type: 'set', cards: [c('7'), c('7', 'clubs'), c('7', 'spades')], ownerId: s.players[1].id }];
   assert.equal(explainInvalidAction(s, s.players[0].id, { type: 'layoff', meldId: 'm', cardId: 'Ahearts' }), 'Masaya kart işlemek için önce kendi görevini açmalısın.');
   assert.match(explainInvalidAction(s, s.players[0].id, { type: 'open', groups: [{ type: 'run', cardIds: ['7hearts', '7clubs', '7spades'] }] }), /geçerli değil/);
+});
+test('a permanent departure hands the seat to a bot and can still be reclaimed by engine rules', () => {
+  const s = createGame(['a', 'b']);
+  const playerId = actingPlayerId(s);
+  const ceded = cedeSeatToBot(s, playerId, 1_000);
+  assert.ok(ceded.botControlledPlayerIds?.includes(playerId));
+  assert.equal(ceded.turnDeadline, 1_000 + TURN_TIMEOUT_MS);
+  const reclaimed = reclaimBotSeat(ceded, playerId, 2_000);
+  assert.ok(!reclaimed.botControlledPlayerIds?.includes(playerId));
 });
 test('opening locks, joker restriction, mandatory last discard and score', () => {
   let s = stateWithHand([c('7'), c('7', 'clubs'), c('7', 'spades'), c('A')]);

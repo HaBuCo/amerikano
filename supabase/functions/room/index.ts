@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { actingPlayerId, applyAction, armTurnTimer, createGame, expireTurn, explainInvalidAction, MIN_GAME_PLAYERS, reclaimBotSeat, resetMissedTurns, RULESET_ID } from '../../../src/game/engine.ts';
+import { actingPlayerId, applyAction, armTurnTimer, cedeSeatToBot, createGame, expireTurn, explainInvalidAction, MIN_GAME_PLAYERS, reclaimBotSeat, resetMissedTurns, RULESET_ID } from '../../../src/game/engine.ts';
 import { botAction } from '../../../src/game/bot.ts';
 import { projectGame } from '../../../src/game/view.ts';
 import type { GameAction, GameState } from '../../../src/game/types.ts';
@@ -19,6 +19,7 @@ type Command =
   | { type: 'rematch'; roomId: string }
   | { type: 'reclaim'; roomId: string }
   | { type: 'leave'; roomId: string }
+  | { type: 'forfeit'; roomId: string }
   | { type: 'action'; roomId: string; requestId: string; revision: number; action: GameAction };
 
 function json(body: unknown, status = 200) {
@@ -298,6 +299,39 @@ Deno.serve(async (request) => {
     const currentView = await roomView(command.roomId);
     const { data: roomState, error: stateError } = await admin.from('room_states').select('state')
       .eq('room_id', command.roomId).maybeSingle();
+
+    if (command.type === 'forfeit') {
+      if (stateError || !roomState?.state) throw new Error('Oyun henüz başlamadı.');
+      const stored = roomState.state as GameState;
+      const ceded = cedeSeatToBot(stored, user.id);
+      if (ceded === stored) throw new Error('Bu koltuk kalıcı olarak bırakılamıyor.');
+      const after = advanceBots(ceded);
+      const commit = await admin.rpc('commit_room_state', {
+        target_room: command.roomId,
+        expected_revision: currentView.revision,
+        next_state: after,
+        actor_id: user.id,
+        command_id: `forfeit-${crypto.randomUUID()}`,
+        next_status: after.phase === 'game-over' ? 'finished' : null,
+      });
+      if (commit.error || commit.data === null) throw new Error('Masa güncellendi; kalıcı ayrılmayı yeniden seç.');
+      await recordResult(command.roomId, after);
+      await admin.from('room_members').delete().eq('room_id', command.roomId).eq('user_id', user.id);
+      const [latestRoom, replacement] = await Promise.all([
+        admin.from('rooms').select('host_id, revision').eq('id', command.roomId).maybeSingle(),
+        admin.from('room_members').select('user_id').eq('room_id', command.roomId).order('seat').limit(1).maybeSingle(),
+      ]);
+      if (!replacement.data) {
+        await admin.from('rooms').delete().eq('id', command.roomId);
+      } else if (latestRoom.data) {
+        await admin.from('rooms').update({
+          host_id: latestRoom.data.host_id === user.id ? replacement.data.user_id : latestRoom.data.host_id,
+          revision: latestRoom.data.revision + 1,
+          updated_at: new Date().toISOString(),
+        }).eq('id', command.roomId).eq('revision', latestRoom.data.revision);
+      }
+      return json({ left: true });
+    }
 
     if (command.type === 'start') {
       if (currentView.hostId !== user.id) throw new Error('Oyunu yalnızca oda sahibi başlatabilir.');

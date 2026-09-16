@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Href, router, useLocalSearchParams } from 'expo-router';
 import { Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { connectRoom, enterQuickRoom, enterRoom, forgetRoom, leaveWaitingRoom, sendAction, sendRoom, useRoom } from '@/network/client';
+import { connectRoom, enterQuickRoom, enterRoom, forgetRoom, forfeitRoom, leaveWaitingRoom, sendAction, sendRoom, suspendRoom, useRoom } from '@/network/client';
 import { GameTable } from '@/components/game-table';
 import { palette as p } from '@/constants/palette';
 import { avatarFor, profileLevel, refreshPlayerProfile, usePlayerProfile } from '@/network/profile';
@@ -67,8 +67,10 @@ export default function OnlineScreen() {
     playerMeta={playerMeta} onRematch={() => sendRoom({ type: 'rematch' })}
     botControlled={me?.botControlled} onReclaim={() => sendRoom({ type: 'reclaim' })}
     blocked={state.status !== 'online' || state.busy} onAction={sendAction}
+    connectionState={state.status === 'online' ? 'online' : state.status === 'connecting' ? 'reconnecting' : 'offline'}
     error={state.error || (state.status !== 'online' ? 'Yeniden bağlanılıyor… Elin korunuyor.' : '')}
-    onExit={() => { if (room.game?.phase === 'game-over') forgetRoom(); router.replace('/'); }} />;
+    onForfeit={() => { void forfeitRoom().then((left) => { if (left) router.replace('/'); }); }}
+    onExit={() => { if (room.game?.phase === 'game-over') forgetRoom(); else suspendRoom(); router.replace('/'); }} />;
   return <SafeAreaView style={s.page}>
     <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
       <Pressable accessibilityRole="button" disabled={state.busy} onPress={goBack}><Text style={s.back}>← Ana menü</Text></Pressable>

@@ -210,6 +210,17 @@ export async function leaveWaitingRoom() {
   }
 }
 
+export function forfeitRoom() {
+  return sendRoom({ type: 'forfeit' });
+}
+
+export function suspendRoom() {
+  if (supabase && roomChannel) void supabase.removeChannel(roomChannel);
+  roomChannel = null;
+  clearRoomTimers();
+  update({ status: 'connecting', busy: false, error: '' });
+}
+
 export function sendAction(action: GameAction) {
   if (!snapshot.room) return;
   void sendRoom({
