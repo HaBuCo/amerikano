@@ -8,7 +8,7 @@
     "scheme": "amerikano",
     "userInterfaceStyle": "dark",
     "ios": {
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/images/icon.png",
       "supportsTablet": true,
       "bundleIdentifier": "com.hegionsoft.amerikano",
       "usesAppleSignIn": true,
@@ -58,7 +58,7 @@
       [
         "@react-native-google-signin/google-signin",
         {
-          "iosUrlScheme": "com.googleusercontent.apps.REPLACE_WITH_IOS_CLIENT_ID"
+          "iosUrlScheme": "com.googleusercontent.apps.placeholder"
         }
       ],
       "expo-asset",
