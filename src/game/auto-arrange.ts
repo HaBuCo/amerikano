@@ -17,6 +17,8 @@ export type AutoArrangeOptions = {
   allowJokersInGroups?: boolean;
 };
 
+export type SuggestedContractGroup = { type: MeldType; cardIds: string[] };
+
 const rankValue = (card: Card) => card.rank === 'A' ? 14 : RANKS.indexOf(card.rank!) + 1;
 const groupKey = (type: MeldType, cards: Card[]) => `${type}:${cards.map(card => card.id).sort().join(',')}`;
 const slotKey = (type: MeldType, length: number) => `${type}:${length}`;
@@ -38,11 +40,11 @@ function combinations<T>(items: T[], count: number): T[][] {
 
 // With two physical decks, two layers per suit/rank find parallel groups
 // without generating every possible duplicate combination.
-function groupCandidates(hand: Card[], allowJokers: boolean): Group[] {
+function groupCandidates(hand: Card[], allowJokers: boolean, keepDiscard = true): Group[] {
   const result = new Map<string, Group>();
   const jokers = allowJokers ? hand.filter(card => card.isJoker) : [];
   const add = (type: MeldType, cards: Card[]) => {
-    if (cards.length < 3 || cards.length >= hand.length || !isValidMeld(cards, type)) return;
+    if (cards.length < 3 || (keepDiscard && cards.length >= hand.length) || !isValidMeld(cards, type)) return;
     const key = groupKey(type, cards);
     if (!result.has(key)) result.set(key, {
       type,
@@ -148,6 +150,36 @@ function orderGroup(group: Group) {
     if (a.isJoker !== b.isJoker) return a.isJoker ? 1 : -1;
     return SUITS.indexOf(a.suit!) - SUITS.indexOf(b.suit!);
   });
+}
+
+/** Finds one complete, non-overlapping opening that exactly matches the contract. */
+export function suggestContractGroups(cards: Card[], contract: RoundContract, allowJokers: boolean): SuggestedContractGroup[] | null {
+  if (contract.final) return null;
+  const slots = contract.parts.flatMap(part =>
+    Array.from({ length: part.count }, () => ({ type: part.type, length: part.length })),
+  );
+  const needs: Record<string, number> = {};
+  for (const slot of slots) needs[slotKey(slot.type, slot.length)] = (needs[slotKey(slot.type, slot.length)] ?? 0) + 1;
+  const available = selectGroups(groupCandidates(cards, allowJokers), needs);
+  const result: SuggestedContractGroup[] = [];
+
+  for (const slot of slots) {
+    const index = available.findIndex(group => group.type === slot.type && group.cards.length === slot.length);
+    if (index < 0) return null;
+    const [group] = available.splice(index, 1);
+    result.push({ type: group.type, cardIds: orderGroup(group).map(card => card.id) });
+  }
+  return result;
+}
+
+/** Finds a complete partition for the final round after choosing the discard. */
+export function suggestFinalGroups(cards: Card[], discardId: string): SuggestedContractGroup[] | null {
+  const remaining = cards.filter(card => card.id !== discardId);
+  if (remaining.length !== cards.length - 1 || remaining.length < 3) return null;
+  const groups = selectGroups(groupCandidates(remaining, true, false), {});
+  const used = new Set(groups.flatMap(group => group.cards.map(card => card.id)));
+  if (used.size !== remaining.length || remaining.some(card => !used.has(card.id))) return null;
+  return groups.map(group => ({ type: group.type, cardIds: orderGroup(group).map(card => card.id) }));
 }
 
 function nearPairs(cards: Card[], preferredType?: MeldType) {

@@ -28,8 +28,9 @@ Bu, uygulamamızın seçilmiş kural setidir; evrensel bir standart iddiası de�
 - Her oyuncuya 13, başlangıç oyuncusuna 14 kart verilir. Başlangıç oyuncusu kart çekmez.
 - Kapalı destenin yanında bir açık kart bulunur. Dijital dağıtım karıştırmayı otomatik yapar.
 - Koltuk dizisi saat yönünde kabul edilir; sıra ters yönde ilerler.
-  Başlangıç oyuncusunun solundaki koltuk dağıtıcıdır. Her el dağıtıcı ve başlangıç koltuğu
-  aynı yönde birer yer ilerler; önceki elin kazananı bunu değiştirmez.
+  Yeni maçın ilk başlangıç oyuncusu rastgele seçilir. Başlangıç oyuncusunun solundaki koltuk
+  dağıtıcıdır. Her el dağıtıcı ve başlangıç koltuğu aynı yönde birer yer ilerler; önceki elin
+  kazananı bunu değiştirmez.
 - Sıradaki oyuncu açık kartı doğrudan alabilir veya kapalı desteyi seçebilir.
 - Kapalı deste seçildiğinde diğer oyuncular açık kartı isteyebilir. Alan oyuncu
   açık kartı ve desteden bir kapalı ceza kartını eline ekler; sırası değişmez.
@@ -46,11 +47,17 @@ Bu, uygulamamızın seçilmiş kural setidir; evrensel bir standart iddiası de�
   A-2-3 ve K-A-2 geçersiz. Joker eksik kartın yerini tutar.
 - Kendi görevini daha önce açmış oyuncu, yerdeki jokeri tam karşılık kartıyla
   değiştirebilir ve jokeri eline alabilir. Seride kartın sembolü ve eksik değeri
-  tam uymalıdır (Sinek 7–Joker–Sinek 9 için Sinek 8). Kütte aynı değerin grupta
-  bulunmayan sembollerinden biri kullanılabilir. Açtığı turun içinde bu işlem yapılamaz.
+  tam uymalıdır (Sinek 7–Joker–Sinek 9 için Sinek 8). Kütte joker açılırken temsil
+  ettiği eksik sembol ilan edilir; birden fazla seçenek varsa açan oyuncu seçer ve
+  seçim masada jokerin üzerinde gösterilir. Jokeri yalnızca ilan edilen değer ve
+  semboldeki kart geri alabilir. Diğer eksik semboller gruba normal kart olarak
+  işlenebilir. Açtığı turun içinde bu işlem yapılamaz.
 - İlk açılışta yalnızca o elin zorunlu grupları ve tam uzunlukları açılır.
   Açılıştan sonraki sıralarda ek grup açma ve tüm oyuncuların gruplarına işleme serbesttir.
 - İlk sıra döngüsünü bekleme şartı yoktur.
+- Masadaki herhangi bir küt veya seriye işlenebilen kartı atmak 25 ceza puanıdır.
+  Oyuncunun kendi görevini açmış olması gerekmez. İlan edilen tam kartıyla alınabilecek
+  bir jokerin karşılık kartını atmak da işlek kart sayılır.
 - Bitmek için bir kart kapalı atılır. Finalde kısmi açılış yapılamaz:
   tüm gruplar ve bitiş kartı sunucuda tek atomik hamle olarak doğrulanır.
 - Ceza puanları: joker 25, As 11, J/Q/K 10, sayılar kendi değeri.
@@ -58,5 +65,5 @@ Bu, uygulamamızın seçilmiş kural setidir; evrensel bir standart iddiası de�
   eşitlik varsa ortak kazanan gösterilir.
 
 Tek oyunculu, aynı cihaz ve çevrim içi odalar aynı kural motorunu kullanır.
-Kural sürümü: amerikano-12-v2. Eski sürüm odaları diskte korunur ancak bu sürümde
+Kural sürümü: amerikano-12-v4. Eski sürüm odaları diskte korunur ancak bu sürümde
 devam ettirilmez; yeni oda açılmalıdır.

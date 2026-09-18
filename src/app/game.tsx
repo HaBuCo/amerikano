@@ -1,16 +1,17 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameTable } from '@/components/game-table';
 import { GameTutorial } from '@/components/game-tutorial';
 import { actingPlayerId, applyAction, createGame, explainInvalidAction } from '@/game/engine';
-import { botAction } from '@/game/bot';
+import { botAction, resolveBotClaimChain } from '@/game/bot';
 import { clearSingleGame, loadSingleGame, saveSingleGame } from '@/game/local-save';
 import { projectGame } from '@/game/view';
 import { GameAction } from '@/game/types';
 import { palette as p } from '@/constants/palette';
 import { hasSeenFirstGameTutorial, markFirstGameTutorialSeen } from '@/game/tutorial';
+import { describeDebugAction, formatSingleGameDebug } from '@/game/debug-state';
 
 export default function GameScreen() {
   const params = useLocalSearchParams<{ players?: string; mode?: string }>();
@@ -22,8 +23,13 @@ export default function GameScreen() {
   const [loadState, setLoadState] = useState<'loading' | 'choice' | 'ready'>(single ? 'loading' : 'ready');
   const [tutorialChecked, setTutorialChecked] = useState(!single);
   const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [debugEvents, setDebugEvents] = useState<string[]>([]);
   const current = game.players.find(p => p.id === actingPlayerId(game))!;
   const viewerId = single ? game.players[0].id : current.id;
+  const appendDebugEvent = useCallback((message: string) => {
+    setDebugEvents(events => [message, ...events].slice(0, 16));
+  }, []);
+  const debugText = useMemo(() => formatSingleGameDebug(game, debugEvents), [debugEvents, game]);
   useEffect(() => {
     if (!single) return;
     let active = true;
@@ -52,11 +58,28 @@ export default function GameScreen() {
   useEffect(() => {
     if (!single || loadState !== 'ready' || tutorialOpen || current.id === viewerId || !['draw', 'claim', 'play'].includes(game.phase)) return;
     const timer = setTimeout(() => {
-      const action = botAction(game);
-      if (action) setGame(applyAction(game, current.id, action));
-    }, game.phase === 'draw' ? 800 : 550);
+      let next = game;
+      if (next.phase === 'claim') {
+        // A stock draw can ask several bots about the same discard. Resolve
+        // consecutive bot answers together so the human draw never waits once
+        // per bot, but stop immediately if a real player must answer.
+        next = resolveBotClaimChain(next, viewerId);
+        if (next !== game) appendDebugEvent('Botların açık kart kararları işlendi.');
+      } else {
+        const action = botAction(next);
+        if (action) {
+          const description = describeDebugAction(next, current.id, action);
+          next = applyAction(next, current.id, action);
+          if (next !== game) appendDebugEvent(description);
+        }
+      }
+      if (next !== game) setGame(next);
+    }, game.phase === 'claim' ? 60 : game.phase === 'draw' ? 320 : 240);
     return () => clearTimeout(timer);
-  }, [game, single, current.id, viewerId, loadState, tutorialOpen]);
+  }, [appendDebugEvent, game, single, current.id, viewerId, loadState, tutorialOpen]);
+  useEffect(() => {
+    if (single && loadState === 'ready' && __DEV__) console.info(`[AMERİKANO CANLI DURUM]\n${debugText}`);
+  }, [debugText, loadState, single]);
   function finishTutorial() {
     setTutorialOpen(false);
     void markFirstGameTutorialSeen();
@@ -65,19 +88,25 @@ export default function GameScreen() {
     void clearSingleGame();
     setSavedGame(null);
     setGame(createGame(['Sen', 'Defne', 'Efe', 'Ada']));
+    setDebugEvents([]);
     setLoadState('ready');
   }
   function resume() {
     if (savedGame) setGame(savedGame);
+    appendDebugEvent('Kayıtlı single oyuna devam edildi.');
     setSavedGame(null);
     setLoadState('ready');
   }
   function act(action: GameAction) {
+    const description = describeDebugAction(game, viewerId, action);
     const next = applyAction(game, viewerId, action);
     if (next === game) {
-      setError(explainInvalidAction(game, viewerId, action));
+      const reason = explainInvalidAction(game, viewerId, action);
+      setError(reason);
+      if (single) appendDebugEvent(`Reddedildi · ${description} · ${reason}`);
       return;
     }
+    if (single) appendDebugEvent(description);
     setError(''); setGame(next);
     if (!single && (actingPlayerId(next) !== actingPlayerId(game) || action.type === 'next')) setVisible(false);
   }
@@ -102,7 +131,7 @@ export default function GameScreen() {
   }
 
   return <>
-    <GameTable key={game.roundIndex + ':' + viewerId} game={projectGame(game, viewerId)} viewerId={viewerId} modeLabel={single ? 'TEK OYUNCULU · BOT MASASI' : 'AYNI CİHAZDA'} onAction={act} error={error} onExit={() => router.replace('/')} />
+    <GameTable key={game.roundIndex + ':' + viewerId} game={projectGame(game, viewerId)} viewerId={viewerId} modeLabel={single ? 'TEK OYUNCULU · BOT MASASI' : 'AYNI CİHAZDA'} onAction={act} error={error} debugText={single ? debugText : undefined} onExit={() => router.replace('/')} />
     {single && <GameTutorial visible={tutorialOpen} onDone={finishTutorial} />}
     <Modal visible={!single && !visible && !['round-over', 'game-over'].includes(game.phase)} animationType="none" onRequestClose={() => router.replace('/')}>
       <View style={s.curtain}><Text style={s.eyebrow}>TELEFONU VER</Text><Text style={s.name}>{current.name}</Text><Text style={s.copy}>Hazır olduğunda kartlarını göster.</Text><Pressable accessibilityRole="button" onPress={() => setVisible(true)} style={s.button}><Text style={s.buttonText}>Elimi göster</Text></Pressable></View>

@@ -17,6 +17,9 @@ export type Meld = {
   type: MeldType;
   cards: Card[];
   ownerId: string;
+  jokerAssignments?: Record<string, Suit>;
+  /** Turn when this meld became unable to accept cards or release a joker. */
+  closedTurn?: number;
 };
 
 export type ContractPart = {
@@ -46,10 +49,18 @@ export type RoundResult = {
   entries: {
     playerId: string;
     penalty: number;
+    playableDiscardPenalty: number;
     totalBefore: number;
     totalAfter: number;
     cards: Card[];
   }[];
+};
+
+export type GamePenalty = {
+  playerId: string;
+  points: number;
+  reason: 'playable-discard';
+  turnCount: number;
 };
 
 export type GameState = {
@@ -59,10 +70,13 @@ export type GameState = {
   startingPlayerIndex: number;
   stock: Card[];
   discard: Card[];
+  lastDiscarderId?: string;
   melds: Meld[];
   phase: 'draw' | 'claim' | 'play' | 'round-over' | 'game-over';
   roundWinnerId: string | null;
   roundResult?: RoundResult;
+  roundPenalties?: Record<string, number>;
+  lastPenalty?: GamePenalty;
   turnCount: number;
   turnDeadline?: number;
   missedTurns?: Record<string, number>;
@@ -74,8 +88,8 @@ export type GameState = {
 export type GameAction =
   | { type: 'draw'; source: 'stock' | 'discard' }
   | { type: 'discard'; cardId: string }
-  | { type: 'open'; groups: { type: MeldType; cardIds: string[] }[] }
-  | { type: 'finish'; groups: { type: MeldType; cardIds: string[] }[]; discardId: string }
+  | { type: 'open'; groups: { type: MeldType; cardIds: string[]; jokerAssignments?: Record<string, Suit> }[] }
+  | { type: 'finish'; groups: { type: MeldType; cardIds: string[]; jokerAssignments?: Record<string, Suit> }[]; discardId: string }
   | { type: 'claim'; take: boolean }
   | { type: 'layoff'; meldId: string; cardId: string }
   | { type: 'replaceJoker'; meldId: string; jokerId: string; cardId: string }

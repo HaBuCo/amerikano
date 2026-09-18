@@ -1,11 +1,17 @@
 import { ROUND_CONTRACTS } from './contracts.ts';
-import { actingPlayerId, applyAction, cardPoints, isValidMeld } from './engine.ts';
+import { actingPlayerId, applyAction, assignSetJokers, cardPoints, isPlayableDiscard, isValidMeld } from './engine.ts';
 import { RANKS, SUITS } from './types.ts';
 import type { Card, GameAction, GameState, MeldType } from './types.ts';
 
 type Group = { type: MeldType; cardIds: string[]; points: number };
 const rankValue = (c: Card) => c.rank === 'A' ? 14 : RANKS.indexOf(c.rank!) + 1;
 const overlaps = (g: Group, used: Set<string>) => g.cardIds.some(id => used.has(id));
+
+function actionGroup(group: Pick<Group, 'type' | 'cardIds'>, hand: Card[]) {
+  const cards = group.cardIds.map(id => hand.find(card => card.id === id)!);
+  const jokerAssignments = group.type === 'set' ? assignSetJokers(cards, {}, true) ?? undefined : undefined;
+  return { type: group.type, cardIds: group.cardIds, jokerAssignments };
+}
 
 // Generate plausible groups, not 2^hand-size subsets: penalty draws grow a hand.
 // Consult only the bot's hand and public cards.
@@ -122,7 +128,7 @@ function remainingPotential(hand: Card[]): number {
 function bestExtraGroup(state: GameState, playerId: string, hand: Card[]): GameAction | null {
   let best: { action: GameAction; score: number } | null = null;
   for (const group of candidates(hand)) {
-    const action: GameAction = { type: 'open', groups: [{ type: group.type, cardIds: group.cardIds }] };
+    const action: GameAction = { type: 'open', groups: [actionGroup(group, hand)] };
     const next = applyAction(state, playerId, action);
     if (next === state) continue;
     const remaining = next.players.find(player => player.id === playerId)!.hand;
@@ -178,7 +184,7 @@ export function botAction(state: GameState): GameAction | null {
   if (!p.hasOpened) {
     const opening = findOpening(state);
     if (opening.length) {
-      const groups = opening.map(({ type, cardIds }) => ({ type, cardIds }));
+      const groups = opening.map(group => actionGroup(group, p.hand));
       if (ROUND_CONTRACTS[state.roundIndex].final) {
         const used = new Set(groups.flatMap(g => g.cardIds));
         return { type: 'finish', groups, discardId: p.hand.find(c => !used.has(c.id))!.id };
@@ -195,8 +201,25 @@ export function botAction(state: GameState): GameAction | null {
   }
   const protection = protectionScores(p.hand);
   const discardable = [...p.hand].sort((a, b) => {
-    const score = (card: Card) => cardPoints(card) * 8 - usefulness(card, p.hand) * 2 - (protection.get(card.id) ?? 0) * 2;
+    const score = (card: Card) => cardPoints(card) * 8 - usefulness(card, p.hand) * 2 -
+      (protection.get(card.id) ?? 0) * 2 - (isPlayableDiscard(state, card) ? 10_000 : 0);
     return score(b) - score(a);
   });
   return discardable.length ? { type: 'discard', cardId: discardable[0].id } : null;
+}
+
+/** Resolves adjacent bot-only discard decisions without a delay per bot. */
+export function resolveBotClaimChain(state: GameState, humanPlayerId: string): GameState {
+  let next = state;
+  for (let step = 0; step < next.players.length; step += 1) {
+    if (next.phase !== 'claim') break;
+    const actorId = actingPlayerId(next);
+    if (actorId === humanPlayerId) break;
+    const action = botAction(next);
+    if (!action) break;
+    const applied = applyAction(next, actorId, action);
+    if (applied === next) break;
+    next = applied;
+  }
+  return next;
 }

@@ -8,13 +8,14 @@ import type { Card, GameState, Rank, Suit } from '../src/game/types.ts';
 
 const c = (rank: Rank, suit: Suit = 'hearts', id = rank + suit): Card => ({ id, rank, suit, isJoker: false });
 const j: Card = { id: 'j', rank: null, suit: null, isJoker: true };
+const fixedGame = (names: string[]) => createGame(names, () => 0);
 const stateWithHand = (hand: Card[]): GameState => {
-  const s = createGame(['a', 'b', 'c']); s.players[0].hand = hand; s.phase = 'play'; s.turnCount = 3; return s;
+  const s = fixedGame(['a', 'b', 'c']); s.players[0].hand = hand; s.phase = 'play'; s.turnCount = 3; return s;
 };
 test('106 unique card IDs; full deal conserves all cards for 2–6 players', () => {
   assert.equal(new Set(createDeck().map(c => c.id)).size, 106);
   for (const n of [2, 3, 4, 5, 6]) {
-    const s = createGame(Array.from({ length: n }, (_, i) => String(i)));
+    const s = fixedGame(Array.from({ length: n }, (_, i) => String(i)));
     assert.equal(s.stock.length + s.discard.length + s.players.reduce((n, p) => n + p.hand.length, 0), 106);
     assert.ok(s.players.every((p, i) => p.hand.length === (i === s.currentPlayerIndex ? 14 : 13)));
     assert.equal(s.phase, 'play');
@@ -49,7 +50,7 @@ test('rejected actions explain the exact rule to the player', () => {
   assert.match(explainInvalidAction(s, s.players[0].id, { type: 'open', groups: [{ type: 'run', cardIds: ['7hearts', '7clubs', '7spades'] }] }), /geçerli değil/);
 });
 test('a permanent departure hands the seat to a bot and can still be reclaimed by engine rules', () => {
-  const s = createGame(['a', 'b']);
+  const s = fixedGame(['a', 'b']);
   const playerId = actingPlayerId(s);
   const ceded = cedeSeatToBot(s, playerId, 1_000);
   assert.ok(ceded.botControlledPlayerIds?.includes(playerId));
@@ -69,7 +70,7 @@ test('opening locks, joker restriction, mandatory last discard and score', () =>
   assert.equal(s.phase, 'round-over'); assert.equal(s.players[1].score, expected);
   assert.equal(s.roundResult?.winnerId, 'player-1');
   assert.deepEqual(s.roundResult?.entries.find(entry => entry.playerId === 'player-1'), {
-    playerId: 'player-1', penalty: 0, totalBefore: 0, totalAfter: 0, cards: [],
+    playerId: 'player-1', penalty: 0, playableDiscardPenalty: 0, totalBefore: 0, totalAfter: 0, cards: [],
   });
   assert.equal(s.roundResult?.entries.find(entry => entry.playerId === 'player-2')?.penalty, expected);
   const jokerState = stateWithHand([c('7'), c('7', 'clubs'), j, c('A')]);
@@ -85,8 +86,77 @@ test('layoffs work only after opening and leave a discard', () => {
   assert.equal(next.players[0].hand.length, 1);
   assert.equal(next.melds[0].cards.length, 4);
 });
+test('discarding a playable table card adds 25 points even before opening', () => {
+  const s = stateWithHand([c('7', 'diamonds'), c('A')]);
+  s.melds = [{ id: 'm', type: 'set', cards: [c('7'), c('7', 'clubs'), c('7', 'spades')], ownerId: 'player-2' }];
+
+  const penalized = applyAction(s, 'player-1', { type: 'discard', cardId: '7diamonds' });
+  assert.equal(penalized.players[0].score, 25);
+  assert.equal(penalized.roundPenalties?.['player-1'], 25);
+  assert.deepEqual(penalized.lastPenalty, { playerId: 'player-1', points: 25, reason: 'playable-discard', turnCount: 3 });
+
+  const safe = stateWithHand([c('6', 'diamonds'), c('A')]);
+  safe.melds = s.melds;
+  const safelyDiscarded = applyAction(safe, 'player-1', { type: 'discard', cardId: '6diamonds' });
+  assert.equal(safelyDiscarded.players[0].score, 0);
+  assert.equal(safelyDiscarded.lastPenalty, undefined);
+});
+
+test('an exact joker replacement is playable and its discard penalty survives winning the hand', () => {
+  const s = stateWithHand([c('10', 'spades')]);
+  s.players[0].hasOpened = true;
+  s.melds = [{
+    id: 'm', type: 'set', ownerId: 'player-2',
+    cards: [c('10'), c('10', 'diamonds'), c('10', 'clubs'), j],
+    jokerAssignments: { j: 'spades' },
+  }];
+
+  const ended = applyAction(s, 'player-1', { type: 'discard', cardId: '10spades' });
+  const result = ended.roundResult?.entries.find(entry => entry.playerId === 'player-1');
+  assert.equal(ended.phase, 'round-over');
+  assert.equal(ended.players[0].score, 25);
+  assert.equal(result?.playableDiscardPenalty, 25);
+  assert.equal(result?.penalty, 0);
+  assert.equal(result?.totalBefore, 0);
+  assert.equal(result?.totalAfter, 25);
+});
+test('opened runs and later layoffs keep one stable ascending order', () => {
+  const opening = stateWithHand([c('6', 'clubs'), c('4', 'clubs'), c('5', 'clubs'), c('A')]);
+  opening.roundIndex = 1;
+  const opened = applyAction(opening, 'player-1', {
+    type: 'open',
+    groups: [{ type: 'run', cardIds: ['6clubs', '4clubs', '5clubs'] }],
+  });
+  assert.deepEqual(opened.melds[0].cards.map(card => card.rank), ['4', '5', '6']);
+
+  const playing = stateWithHand([c('8', 'clubs'), c('4', 'clubs'), c('A')]);
+  playing.players[0].hasOpened = true;
+  playing.players[0].openedTurn = 0;
+  playing.melds = [{
+    id: 'run', type: 'run', ownerId: 'player-2',
+    cards: [c('5', 'clubs'), c('6', 'clubs'), c('7', 'clubs')],
+  }];
+  const extendedLow = applyAction(playing, 'player-1', { type: 'layoff', meldId: 'run', cardId: '4clubs' });
+  assert.deepEqual(extendedLow.melds[0].cards.map(card => card.rank), ['4', '5', '6', '7']);
+  const extendedBothSides = applyAction(extendedLow, 'player-1', { type: 'layoff', meldId: 'run', cardId: '8clubs' });
+  assert.deepEqual(extendedBothSides.melds[0].cards.map(card => card.rank), ['4', '5', '6', '7', '8']);
+});
+test('an opened player can place a long run in one action', () => {
+  const s = stateWithHand([c('2', 'clubs'), c('3', 'clubs'), c('4', 'clubs'), c('5', 'clubs'), c('6', 'clubs'), c('7', 'clubs'), c('A')]);
+  s.players[0].hasOpened = true;
+  s.players[0].openedTurn = 0;
+
+  const next = applyAction(s, 'player-1', {
+    type: 'open',
+    groups: [{ type: 'run', cardIds: ['2clubs', '3clubs', '4clubs', '5clubs', '6clubs', '7clubs'] }],
+  });
+
+  assert.notEqual(next, s);
+  assert.deepEqual(next.melds[0].cards.map(card => card.rank), ['2', '3', '4', '5', '6', '7']);
+  assert.deepEqual(next.players[0].hand.map(card => card.rank), ['A']);
+});
 test('private projection contains no deck or other hand cards', () => {
-  const s = createGame(['a', 'b', 'c']);
+  const s = fixedGame(['a', 'b', 'c']);
   const v = projectGame(s, 'player-1');
   assert.ok(!('stock' in v));
   assert.equal(v.players[1].hand.length, 0);
@@ -96,7 +166,7 @@ test('private projection contains no deck or other hand cards', () => {
   assert.ok(s.players[1].hand.every(c => !json.includes(c.id)));
   const ended = { ...s, phase: 'round-over' as const, roundResult: {
     winnerId: s.players[0].id,
-    entries: s.players.map(player => ({ playerId: player.id, penalty: 0, totalBefore: 0, totalAfter: 0, cards: player.hand })),
+    entries: s.players.map(player => ({ playerId: player.id, penalty: 0, playableDiscardPenalty: 0, totalBefore: 0, totalAfter: 0, cards: player.hand })),
   } };
   assert.equal(projectGame(ended, s.players[0].id).roundResult?.entries[1].cards.length, 13);
 });
@@ -133,7 +203,12 @@ test('12 contracts and original five-round joker boundary stay unchanged', () =>
 });
 
 test('counterclockwise order and starting seat rotate independently from winner', () => {
-  const s = createGame(['a', 'b', 'c', 'd']);
+  const randomized = createGame(['a', 'b', 'c', 'd'], () => 0.74);
+  assert.equal(randomized.startingPlayerIndex, 2);
+  assert.equal(randomized.currentPlayerIndex, 2);
+  assert.equal(randomized.players[2].hand.length, 14);
+
+  const s = fixedGame(['a', 'b', 'c', 'd']);
   const next = applyAction(s, actingPlayerId(s), { type: 'discard', cardId: s.players[0].hand[0].id });
   assert.equal(next.currentPlayerIndex, 3);
   const following = nextRound({ ...next, phase: 'round-over', currentPlayerIndex: 2 });
@@ -151,12 +226,14 @@ test('opening allows only exact contract; additional groups and layoffs wait unt
   assert.equal(applyAction(opened, 'player-1', { type: 'open', groups: [extra] }), opened);
   assert.equal(applyAction(opened, 'player-1', layoff), opened);
   const later = { ...opened, turnCount: opened.turnCount + 3 };
-  assert.notEqual(applyAction(later, 'player-1', layoff), later);
+  const closed = applyAction(later, 'player-1', layoff);
+  assert.notEqual(closed, later);
+  assert.equal(closed.melds[0].closedTurn, later.turnCount);
   assert.notEqual(applyAction(later, 'player-1', { type: 'open', groups: [extra] }), later);
 });
 
 test('penalty claim has priority, adds two cards and does not consume claimant turn', () => {
-  const s = { ...createGame(['a', 'b', 'c']), phase: 'draw' as const };
+  const s = { ...fixedGame(['a', 'b', 'c']), phase: 'draw' as const };
   const offered = applyAction(s, 'player-1', { type: 'draw', source: 'stock' });
   assert.equal(offered.phase, 'claim');
   assert.deepEqual(offered.claim!.playerIds, ['player-3', 'player-2']);
@@ -179,25 +256,33 @@ test('penalty claim has priority, adds two cards and does not consume claimant t
   assert.equal(passed.stock.length, s.stock.length - 1);
 });
 
-test('two-player game offers the penalty card to the only opponent', () => {
-  const initial = createGame(['a', 'b']);
+test('a player is never offered their own discard', () => {
+  const initial = fixedGame(['a', 'b']);
   const discarded = applyAction(initial, 'player-1', { type: 'discard', cardId: initial.players[0].hand[0].id });
   assert.equal(discarded.currentPlayerIndex, 1);
   assert.equal(discarded.phase, 'draw');
+  assert.equal(discarded.lastDiscarderId, 'player-1');
 
-  const offered = applyAction(discarded, 'player-2', { type: 'draw', source: 'stock' });
+  const drawn = applyAction(discarded, 'player-2', { type: 'draw', source: 'stock' });
+  assert.equal(drawn.phase, 'play');
+  assert.equal(drawn.claim, undefined);
+  assert.equal(drawn.players[1].hand.length, 14);
+
+  const threePlayerInitial = fixedGame(['a', 'b', 'c']);
+  const threePlayerDiscard = applyAction(threePlayerInitial, 'player-1', {
+    type: 'discard', cardId: threePlayerInitial.players[0].hand[0].id,
+  });
+  const offered = applyAction(threePlayerDiscard, 'player-3', { type: 'draw', source: 'stock' });
   assert.equal(offered.phase, 'claim');
-  assert.deepEqual(offered.claim?.playerIds, ['player-1']);
+  assert.deepEqual(offered.claim?.playerIds, ['player-2']);
 
-  const claimed = applyAction(offered, 'player-1', { type: 'claim', take: true });
-  assert.equal(claimed.players[0].hand.length, 15);
-  assert.equal(claimed.players[1].hand.length, 14);
-  assert.equal(claimed.currentPlayerIndex, 1);
-  assert.equal(claimed.phase, 'play');
+  const { lastDiscarderId: _legacyMissingField, ...legacySavedGame } = threePlayerDiscard;
+  const legacyOffered = applyAction(legacySavedGame, 'player-3', { type: 'draw', source: 'stock' });
+  assert.deepEqual(legacyOffered.claim?.playerIds, ['player-2']);
 });
 
 test('no penalty offer without enough stock; exhausted stock is recycled without moving top discard', () => {
-  let s = { ...createGame(['a', 'b', 'c']), phase: 'draw' as const };
+  let s = { ...fixedGame(['a', 'b', 'c']), phase: 'draw' as const };
   s = { ...s, stock: s.stock.slice(0, 1) };
   assert.equal(applyAction(s, 'player-1', { type: 'draw', source: 'stock' }).phase, 'play');
   const top = s.discard[0];
@@ -215,6 +300,10 @@ test('final is atomic and face-down discard is hidden; no extra unopened penalty
     { type: 'set' as const, cardIds: ['7hearts', '7clubs', '7spades'] },
     { type: 'run' as const, cardIds: ['4hearts', '5hearts', '6hearts'] },
   ];
+  const ordinaryDiscard = applyAction(s, 'player-1', { type: 'discard', cardId: 'Ahearts' });
+  assert.equal(ordinaryDiscard.phase, 'draw');
+  assert.equal(ordinaryDiscard.turnCount, s.turnCount + 1);
+  assert.equal(ordinaryDiscard.currentPlayerIndex, 2);
   assert.equal(applyAction(s, 'player-1', { type: 'open', groups }), s);
   assert.equal(applyAction(s, 'player-1', { type: 'finish', groups: groups.slice(0, 1), discardId: 'Ahearts' }), s);
   assert.equal(applyAction(s, 'player-1', { type: 'finish', groups, discardId: '7hearts' }), s);
@@ -251,9 +340,12 @@ test('opened player retrieves a run joker only with its exact card', () => {
   assert.ok(!next.melds[0].cards.some(card => card.isJoker));
 });
 
-test('set joker accepts only a missing suit of the same rank and requires prior opening', () => {
+test('set joker accepts only its declared suit and requires prior opening', () => {
   const s = stateWithHand([c('5', 'clubs'), c('5', 'spades'), c('5', 'hearts', 'duplicate-heart'), c('6', 'clubs'), c('A')]);
-  s.melds = [{ id: 'set', type: 'set', cards: [c('5'), c('5', 'diamonds'), j], ownerId: 'player-2' }];
+  s.melds = [{
+    id: 'set', type: 'set', cards: [c('5'), c('5', 'diamonds'), j], ownerId: 'player-2',
+    jokerAssignments: { j: 'spades' },
+  }];
   assert.equal(replaceJoker(s, 'set', 'j', '5clubs'), s);
   s.players[0].hasOpened = true;
   s.players[0].openedTurn = s.turnCount;
@@ -262,12 +354,47 @@ test('set joker accepts only a missing suit of the same rank and requires prior 
   assert.equal(replaceJoker(s, 'set', 'j', '6clubs'), s);
   assert.equal(replaceJoker(s, 'set', 'j', 'duplicate-heart'), s);
   assert.notEqual(replaceJoker(s, 'set', 'j', '5spades'), s);
-  assert.notEqual(replaceJoker(s, 'set', 'j', '5clubs'), s);
+  assert.equal(replaceJoker(s, 'set', 'j', '5clubs'), s);
+});
+
+test('ambiguous set joker requires a declared suit when the meld is opened', () => {
+  const s = stateWithHand([c('10'), c('10', 'diamonds'), j, c('A')]);
+  s.roundIndex = 5;
+  s.players[0].hasOpened = true;
+  s.players[0].openedTurn = 0;
+  s.turnCount = 3;
+
+  const ambiguous = applyAction(s, 'player-1', {
+    type: 'open', groups: [{ type: 'set', cardIds: ['10hearts', '10diamonds', 'j'] }],
+  });
+  assert.equal(ambiguous, s);
+
+  const declared = applyAction(s, 'player-1', {
+    type: 'open',
+    groups: [{ type: 'set', cardIds: ['10hearts', '10diamonds', 'j'], jokerAssignments: { j: 'spades' } }],
+  });
+  assert.notEqual(declared, s);
+  assert.deepEqual(declared.melds[0].jokerAssignments, { j: 'spades' });
+});
+
+test('the exact declared set card must replace the joker instead of being laid off', () => {
+  const s = stateWithHand([c('10', 'clubs'), c('10', 'spades'), c('A')]);
+  s.players[0].hasOpened = true;
+  s.players[0].openedTurn = 0;
+  s.turnCount = 3;
+  s.melds = [{
+    id: 'set', type: 'set', cards: [c('10'), c('10', 'diamonds'), j], ownerId: 'player-2',
+    jokerAssignments: { j: 'spades' },
+  }];
+
+  assert.notEqual(applyAction(s, 'player-1', { type: 'layoff', meldId: 'set', cardId: '10clubs' }), s);
+  assert.equal(applyAction(s, 'player-1', { type: 'layoff', meldId: 'set', cardId: '10spades' }), s);
+  assert.notEqual(applyAction(s, 'player-1', { type: 'replaceJoker', meldId: 'set', jokerId: 'j', cardId: '10spades' }), s);
 });
 
 test('online turn timer advances only after its authoritative deadline', () => {
   const now = 1_000_000;
-  const playing = armTurnTimer(createGame(['a', 'b', 'c']), now);
+  const playing = armTurnTimer(fixedGame(['a', 'b', 'c']), now);
   assert.equal(playing.turnDeadline, now + TURN_TIMEOUT_MS);
   assert.equal(expireTurn(playing, playing.turnDeadline! - 1), playing);
 
@@ -283,7 +410,7 @@ test('online turn timer advances only after its authoritative deadline', () => {
 });
 
 test('three missed normal actions hand the seat to a bot and reclaim resets it', () => {
-  let state = armTurnTimer(createGame(['a', 'b', 'c']), 1_000);
+  let state = armTurnTimer(fixedGame(['a', 'b', 'c']), 1_000);
   const playerId = state.players[0].id;
   for (let miss = 1; miss <= MISSED_TURNS_BEFORE_BOT; miss++) {
     state = { ...state, currentPlayerIndex: 0, phase: 'play', turnDeadline: 1_000 + miss };
@@ -299,7 +426,7 @@ test('three missed normal actions hand the seat to a bot and reclaim resets it',
 });
 
 test('an expired penalty-card claim auto-passes without counting as a missed turn', () => {
-  const base = createGame(['a', 'b', 'c']);
+  const base = fixedGame(['a', 'b', 'c']);
   const claimantId = base.players[1].id;
   const claiming = {
     ...base,

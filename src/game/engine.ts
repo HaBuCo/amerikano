@@ -1,4 +1,5 @@
 import { ROUND_CONTRACTS } from './contracts.ts';
+import { isMeldClosed } from './meld-visibility.ts';
 import { RANKS, SUITS } from './types.ts';
 import type { Card, GameAction, GameState, Meld, MeldType, Player, Rank, RoundContract } from './types.ts';
 
@@ -80,6 +81,85 @@ export function isValidMeld(cards: Card[], type: MeldType): boolean {
   return type === 'set' ? isValidSet(cards) : isValidRun(cards);
 }
 
+export function isPlayableDiscard(state: Pick<GameState, 'melds'>, card: Card): boolean {
+  return state.melds.some(meld => {
+    if (isValidMeld([...meld.cards, card], meld.type)) return true;
+    if (card.isJoker) return false;
+    return meld.cards.some(joker => {
+      if (!joker.isJoker) return false;
+      if (meld.type === 'set') {
+        const rank = meld.cards.find(item => !item.isJoker)?.rank;
+        if (card.rank !== rank || card.suit !== meld.jokerAssignments?.[joker.id]) return false;
+      }
+      return isValidMeld(meld.cards.map(item => item.id === joker.id ? card : item), meld.type);
+    });
+  });
+}
+
+export function assignSetJokers(
+  cards: Card[],
+  supplied: Record<string, (typeof SUITS)[number]> = {},
+  chooseAmbiguous = false,
+): Record<string, (typeof SUITS)[number]> | null {
+  if (!isValidSet(cards)) return null;
+  const jokers = cards.filter(card => card.isJoker);
+  const jokerIds = new Set(jokers.map(card => card.id));
+  if (Object.keys(supplied).some(id => !jokerIds.has(id))) return null;
+
+  const used = new Set(cards.filter(card => !card.isJoker).map(card => card.suit!));
+  const assignments: Record<string, (typeof SUITS)[number]> = {};
+  for (const joker of jokers) {
+    const suit = supplied[joker.id];
+    if (!suit) continue;
+    if (!SUITS.includes(suit) || used.has(suit)) return null;
+    assignments[joker.id] = suit;
+    used.add(suit);
+  }
+
+  const unresolved = jokers.filter(joker => !assignments[joker.id]);
+  const available = SUITS.filter(suit => !used.has(suit));
+  if (available.length < unresolved.length) return null;
+  if (unresolved.length && available.length !== unresolved.length && !chooseAmbiguous) return null;
+  unresolved.forEach((joker, index) => { assignments[joker.id] = available[index]; });
+  return assignments;
+}
+
+/** Keeps every table meld in one deterministic visual order. */
+export function orderMeldCards(cards: Card[], type: MeldType): Card[] {
+  if (type === 'set') {
+    return [...cards].sort((a, b) => {
+      if (a.isJoker !== b.isJoker) return a.isJoker ? 1 : -1;
+      return SUITS.indexOf(a.suit!) - SUITS.indexOf(b.suit!);
+    });
+  }
+
+  const natural = cards.filter(card => !card.isJoker);
+  const jokers = cards.filter(card => card.isJoker);
+  const inputIndex = new Map(cards.map((card, index) => [card.id, index]));
+  const layouts: Card[][] = [];
+
+  for (let start = 2; start + cards.length - 1 <= 14; start += 1) {
+    if (!natural.every(card => rankValue[card.rank!] >= start && rankValue[card.rank!] < start + cards.length)) continue;
+    const byValue = new Map(natural.map(card => [rankValue[card.rank!], card]));
+    let jokerIndex = 0;
+    const layout: Card[] = [];
+    for (let offset = 0; offset < cards.length; offset += 1) {
+      const card = byValue.get(start + offset) ?? jokers[jokerIndex++];
+      if (!card) break;
+      layout.push(card);
+    }
+    if (layout.length === cards.length) layouts.push(layout);
+  }
+
+  // Ambiguous edge jokers stay on the side chosen when the meld was formed.
+  return (layouts.length ? layouts : [[...cards]])
+    .map(layout => ({
+      layout,
+      movement: layout.reduce((total, card, index) => total + Math.abs((inputIndex.get(card.id) ?? index) - index), 0),
+    }))
+    .sort((a, b) => a.movement - b.movement)[0].layout;
+}
+
 function contractSlots(contract: RoundContract) {
   return contract.parts.flatMap((part) =>
     Array.from({ length: part.count }, () => ({ type: part.type, length: part.length })),
@@ -129,7 +209,8 @@ export function createGame(playerNames: string[], random = Math.random): GameSta
     hasOpened: false,
     score: 0,
   }));
-  return dealRound(players, 0, 0, random);
+  const startingPlayerIndex = Math.min(players.length - 1, Math.max(0, Math.floor(random() * players.length)));
+  return dealRound(players, 0, startingPlayerIndex, random);
 }
 
 export function dealRound(
@@ -155,12 +236,13 @@ export function dealRound(
     melds: [],
     phase: 'play',
     roundWinnerId: null,
+    roundPenalties: {},
     turnCount: 0,
   };
 }
 
 export const CLAIM_TIMEOUT_MS = 8000;
-export const RULESET_ID = 'amerikano-12-v2';
+export const RULESET_ID = 'amerikano-12-v4';
 export const nextSeat = (index: number, count: number) => (index + count - 1) % count;
 export function actingPlayerId(state: Pick<GameState, 'claim' | 'phase' | 'players' | 'currentPlayerIndex'>): string {
   return state.phase === 'claim' ? state.claim!.playerIds[0] : state.players[state.currentPlayerIndex].id;
@@ -177,9 +259,15 @@ export function drawCard(state: GameState, source: 'stock' | 'discard', random =
   }
   // Resolve requests in counterclockwise turn order before drawing the active player's card.
   if (source === 'stock' && discard.length && stock.length >= 2) {
+    const lastDiscarderId = state.lastDiscarderId ?? (state.turnCount > 0
+      ? state.players[(state.currentPlayerIndex + 1) % state.players.length].id
+      : undefined);
     const playerIds = Array.from({ length: state.players.length - 1 }, (_, i) =>
-      state.players[(state.currentPlayerIndex + state.players.length - i - 1) % state.players.length].id);
-    return { ...state, stock, discard, phase: 'claim', claim: { playerIds, deadline: now + CLAIM_TIMEOUT_MS } };
+      state.players[(state.currentPlayerIndex + state.players.length - i - 1) % state.players.length].id)
+      .filter(playerId => playerId !== lastDiscarderId);
+    if (playerIds.length) {
+      return { ...state, stock, discard, phase: 'claim', claim: { playerIds, deadline: now + CLAIM_TIMEOUT_MS } };
+    }
   }
   const card = source === 'stock' ? stock.pop() : discard.pop();
   if (!card) return state;
@@ -282,18 +370,28 @@ export function discardCard(state: GameState, cardId: string): GameState {
   if (current.hand.length === 1 && !current.hasOpened) return state;
   if (!current.hand.some((card) => card.id === cardId)) return state;
   const discarded = current.hand.find((card) => card.id === cardId)!;
+  const playableDiscardPenalty = isPlayableDiscard(state, discarded) ? 25 : 0;
   const players = state.players.map((player, index) =>
     index === state.currentPlayerIndex
-      ? { ...player, hand: player.hand.filter((card) => card.id !== cardId) }
+      ? { ...player, hand: player.hand.filter((card) => card.id !== cardId), score: player.score + playableDiscardPenalty }
       : player,
   );
+  const roundPenalties = playableDiscardPenalty
+    ? { ...state.roundPenalties, [current.id]: (state.roundPenalties?.[current.id] ?? 0) + playableDiscardPenalty }
+    : state.roundPenalties;
+  const lastPenalty = playableDiscardPenalty
+    ? { playerId: current.id, points: playableDiscardPenalty, reason: 'playable-discard' as const, turnCount: state.turnCount }
+    : undefined;
   if (players[state.currentPlayerIndex].hand.length === 0) {
-    return finishRound({ ...state, players, discard: [...state.discard, discarded], discardFaceDown: true });
+    return finishRound({ ...state, players, roundPenalties, lastPenalty, lastDiscarderId: current.id, discard: [...state.discard, discarded], discardFaceDown: true });
   }
   return {
     ...state,
     players,
+    roundPenalties,
+    lastPenalty,
     discard: [...state.discard, discarded],
+    lastDiscarderId: current.id,
     currentPlayerIndex: nextSeat(state.currentPlayerIndex, state.players.length),
     phase: 'draw',
     turnCount: state.turnCount + 1,
@@ -311,13 +409,20 @@ export function openMelds(state: GameState, melds: Meld[], finalDiscardId?: stri
     cards: m.cards.map(c => current.hand.find(h => h.id === c.id)!),
   }));
   if (melds.some(m => m.cards.some(c => !c))) return state;
+  let jokerAssignmentsValid = true;
+  melds = melds.map(meld => {
+    if (meld.type !== 'set') return { ...meld, jokerAssignments: undefined };
+    const jokerAssignments = assignSetJokers(meld.cards, meld.jokerAssignments);
+    if (!jokerAssignments) jokerAssignmentsValid = false;
+    return { ...meld, jokerAssignments: jokerAssignments ?? undefined };
+  });
   const selectedCardIds = melds.flatMap((meld) => meld.cards.map((card) => card.id));
   const selectedIds = new Set(selectedCardIds);
   if (selectedIds.size !== selectedCardIds.length) return state;
   if (selectedIds.size >= current.hand.length) return state; // Keep the final discard.
   if (![...selectedIds].every((id) => current.hand.some((card) => card.id === id))) return state;
   const contract = ROUND_CONTRACTS[state.roundIndex];
-  const allMeldsValid = melds.every((meld) => isValidMeld(meld.cards, meld.type));
+  const allMeldsValid = jokerAssignmentsValid && melds.every((meld) => isValidMeld(meld.cards, meld.type));
   const validFinal =
     Boolean(contract.final) &&
     Boolean(finalDiscardId) &&
@@ -329,8 +434,13 @@ export function openMelds(state: GameState, melds: Meld[], finalDiscardId?: stri
   const valid = current.hasOpened
     ? allMeldsValid
     : !openingHasForbiddenJoker &&
-      (validFinal || satisfiesContract(melds, contract));
+      (validFinal || (allMeldsValid && satisfiesContract(melds, contract)));
   if (!valid) return state;
+
+  melds = melds.map(meld => {
+    const ordered = { ...meld, cards: orderMeldCards(meld.cards, meld.type) };
+    return isMeldClosed(ordered) ? { ...ordered, closedTurn: state.turnCount } : ordered;
+  });
 
   const players = state.players.map((player, index) =>
     index === state.currentPlayerIndex
@@ -348,11 +458,21 @@ export function layoffCard(state: GameState, meldId: string, cardId: string): Ga
   const meld = state.melds.find(m => m.id === meldId);
   if (!player.hasOpened || player.hand.length <= 1 || !card || !meld) return state;
   if (player.openedTurn === state.turnCount) return state;
+  if (meld.type === 'set') {
+    const rank = meld.cards.find(item => !item.isJoker)?.rank;
+    const isDeclaredJokerCard = meld.cards.some(item => item.isJoker &&
+      card.rank === rank && card.suit === meld.jokerAssignments?.[item.id]);
+    if (isDeclaredJokerCard) return state;
+  }
   if (!isValidMeld([...meld.cards, card], meld.type)) return state;
   return {
     ...state,
     players: state.players.map(p => p.id === player.id ? { ...p, hand: p.hand.filter(c => c.id !== cardId) } : p),
-    melds: state.melds.map(m => m.id === meldId ? { ...m, cards: [...m.cards, card] } : m),
+    melds: state.melds.map(m => {
+      if (m.id !== meldId) return m;
+      const updated = { ...m, cards: orderMeldCards([...m.cards, card], m.type) };
+      return isMeldClosed(updated) ? { ...updated, closedTurn: m.closedTurn ?? state.turnCount } : updated;
+    }),
   };
 }
 
@@ -367,16 +487,28 @@ export function replaceJoker(state: GameState, meldId: string, jokerId: string, 
     !replacement || replacement.isJoker || !meld || !joker?.isJoker
   ) return state;
 
-  const cards = meld.cards.map(card => card.id === jokerId ? replacement : card);
+  if (meld.type === 'set') {
+    const rank = meld.cards.find(card => !card.isJoker)?.rank;
+    if (!rank || replacement.rank !== rank || replacement.suit !== meld.jokerAssignments?.[jokerId]) return state;
+  }
+
+  const replacedCards = meld.cards.map(card => card.id === jokerId ? replacement : card);
   // This enforces the exact missing rank/suit in a run and a missing suit of the
   // same rank in a set. A merely compatible extra card cannot retrieve a joker.
-  if (!isValidMeld(cards, meld.type)) return state;
+  if (!isValidMeld(replacedCards, meld.type)) return state;
+  const cards = orderMeldCards(replacedCards, meld.type);
   return {
     ...state,
     players: state.players.map(item => item.id === player.id
       ? { ...item, hand: sortHand([...item.hand.filter(card => card.id !== cardId), joker]) }
       : item),
-    melds: state.melds.map(item => item.id === meldId ? { ...item, cards } : item),
+    melds: state.melds.map(item => {
+      if (item.id !== meldId) return item;
+      const jokerAssignments = { ...item.jokerAssignments };
+      delete jokerAssignments[jokerId];
+      const updated = { ...item, cards, jokerAssignments: Object.keys(jokerAssignments).length ? jokerAssignments : undefined };
+      return isMeldClosed(updated) ? { ...updated, closedTurn: item.closedTurn ?? state.turnCount } : updated;
+    }),
   };
 }
 
@@ -398,6 +530,7 @@ export function applyAction(state: GameState, actorId: string, action: GameActio
       const groups = action.groups.map((g, i) => ({
         id: String(i), ownerId: actorId, type: g.type,
         cards: g.cardIds.map(id => hand.find(c => c.id === id)!),
+        jokerAssignments: g.jokerAssignments,
       }));
       return groups.some(g => g.cards.some(c => !c)) ? state : openMelds(state, groups, action.type === 'finish' ? action.discardId : undefined);
     }
@@ -438,6 +571,12 @@ export function explainInvalidAction(state: GameState, actorId: string, action: 
     const card = current.hand.find((item) => item.id === action.cardId);
     const meld = state.melds.find((item) => item.id === action.meldId);
     if (!card || !meld) return 'Kart veya masa grubu artık geçerli değil.';
+    if (meld.type === 'set') {
+      const rank = meld.cards.find(item => !item.isJoker)?.rank;
+      const isDeclaredJokerCard = meld.cards.some(item => item.isJoker &&
+        card.rank === rank && card.suit === meld.jokerAssignments?.[item.id]);
+      if (isDeclaredJokerCard) return 'Bu kart jokerin ilan edilen tam karşılığı; kartı eklemek yerine jokeri almalısın.';
+    }
     return isValidMeld([...meld.cards, card], meld.type) ? '' : 'Bu kart seçtiğin küt veya seriye işlenemez.';
   }
 
@@ -448,6 +587,12 @@ export function explainInvalidAction(state: GameState, actorId: string, action: 
     const meld = state.melds.find((item) => item.id === action.meldId);
     const joker = meld?.cards.find((card) => card.id === action.jokerId);
     if (!replacement || replacement.isJoker || !meld || !joker?.isJoker) return 'Jokerin tam karşılık kartını elinden bırakmalısın.';
+    if (meld.type === 'set') {
+      const rank = meld.cards.find(card => !card.isJoker)?.rank;
+      if (!rank || replacement.rank !== rank || replacement.suit !== meld.jokerAssignments?.[joker.id]) {
+        return 'Bu joker açılırken ilan edilen tam kartla değiştirilebilir.';
+      }
+    }
     const replaced = meld.cards.map((card) => card.id === joker.id ? replacement : card);
     return isValidMeld(replaced, meld.type) ? '' : 'Bu kart yerdeki jokerin tam karşılığı değil.';
   }
@@ -465,8 +610,12 @@ export function explainInvalidAction(state: GameState, actorId: string, action: 
     const melds = action.groups.map((group) => ({
       type: group.type,
       cards: group.cardIds.map((id) => current.hand.find((card) => card.id === id)!),
+      jokerAssignments: group.jokerAssignments,
     }));
-    if (melds.some((meld) => !isValidMeld(meld.cards, meld.type))) return 'Hazırladığın küt veya serilerden biri geçerli değil.';
+    if (melds.some((meld) => !isValidMeld(meld.cards, meld.type) ||
+      (meld.type === 'set' && !assignSetJokers(meld.cards, meld.jokerAssignments)))) {
+      return 'Hazırladığın küt veya serilerden biri geçerli değil ya da jokerin temsil ettiği kart seçilmedi.';
+    }
     if (current.hand.length - cardIds.length < 1) return 'Bitiş için elinde bir atmalık kart bırakmalısın.';
     if (current.hasOpened) return '';
     if (state.roundIndex < 5 && melds.some((meld) => meld.cards.some((card) => card.isJoker))) {
@@ -488,10 +637,12 @@ function finishRound(state: GameState): GameState {
   const winner = state.players[state.currentPlayerIndex];
   const entries = state.players.map((player) => {
     const penalty = player.id === winner.id ? 0 : handPoints(player.hand);
+    const playableDiscardPenalty = state.roundPenalties?.[player.id] ?? 0;
     return {
       playerId: player.id,
       penalty,
-      totalBefore: player.score,
+      playableDiscardPenalty,
+      totalBefore: player.score - playableDiscardPenalty,
       totalAfter: player.score + penalty,
       cards: [...player.hand],
     };

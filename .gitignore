@@ -46,3 +46,6 @@ work/
 
 # Supabase CLI machine-local state
 supabase/.temp/
+
+# Local iOS signing material (private key, CSR, cert)
+ios-cert/

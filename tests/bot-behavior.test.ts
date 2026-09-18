@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { botAction } from '../src/game/bot.ts';
+import { botAction, resolveBotClaimChain } from '../src/game/bot.ts';
 import { applyAction, createGame } from '../src/game/engine.ts';
 import type { Card, GameState, Rank, Suit } from '../src/game/types.ts';
 
@@ -13,14 +13,29 @@ const card = (rank: Rank, suit: Suit = 'hearts', id = `${rank}-${suit}`): Card =
 });
 
 const joker: Card = { id: 'joker', rank: null, suit: null, isJoker: true };
+const fixedGame = (names: string[]) => createGame(names, () => 0);
 
 function stateWithHand(hand: Card[]): GameState {
-  const state = createGame(['Bot', 'Oyuncu 2', 'Oyuncu 3']);
+  const state = fixedGame(['Bot', 'Oyuncu 2', 'Oyuncu 3']);
   state.players[0].hand = hand;
   state.phase = 'play';
   state.turnCount = 3;
   return state;
 }
+
+test('consecutive bot claim decisions resolve in one state transition', () => {
+  const state = fixedGame(['Sen', 'Bot 1', 'Bot 2']);
+  state.phase = 'claim';
+  state.claim = { playerIds: ['player-3', 'player-2'], deadline: Date.now() + 8000 };
+  state.players[1].hand = [];
+  state.players[2].hand = [];
+
+  const resolved = resolveBotClaimChain(state, 'player-1');
+
+  assert.equal(resolved.phase, 'play');
+  assert.equal(resolved.claim, undefined);
+  assert.equal(resolved.players[0].hand.length, state.players[0].hand.length + 1);
+});
 
 test('bot completes the current opening contract', () => {
   const state = stateWithHand([
