@@ -4,6 +4,7 @@ import { Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { connectRoom, enterQuickRoom, enterRoom, forgetRoom, forfeitRoom, leaveWaitingRoom, sendAction, sendRoom, suspendRoom, useRoom } from '@/network/client';
 import { GameTable } from '@/components/game-table';
+import { RoundIntro } from '@/components/round-intro';
 import { palette as p } from '@/constants/palette';
 import { avatarFor, profileLevel, refreshPlayerProfile, usePlayerProfile } from '@/network/profile';
 import { MIN_GAME_PLAYERS } from '@/game/engine';
@@ -52,6 +53,7 @@ export default function OnlineScreen() {
     void leaveWaitingRoom().finally(() => router.back());
   };
   const me = room?.members.find(member => member.id === room.you);
+  const botCount = room?.members.filter(member => member.isBot).length ?? 0;
   const hostIsBot = room?.members.find(member => member.id === room.hostId)?.botControlled ?? false;
   const playerMeta = Object.fromEntries((room?.members ?? []).map((member) => {
     const avatar = avatarFor(member.avatarKey);
@@ -62,15 +64,18 @@ export default function OnlineScreen() {
     await leaveWaitingRoom();
     if (playerName) await enterRoom(playerName);
   };
-  if (room?.game) return <GameTable key={room.code + ':' + room.game.roundIndex} game={room.game} viewerId={room.you}
-    modeLabel={`ÇEVRİM İÇİ · ${room.code}`} canAdvance={room.hostId === room.you || hostIsBot} canRematch={room.hostId === room.you || hostIsBot}
-    playerMeta={playerMeta} onRematch={() => sendRoom({ type: 'rematch' })}
-    botControlled={me?.botControlled} onReclaim={() => sendRoom({ type: 'reclaim' })}
-    blocked={state.status !== 'online' || state.busy} onAction={sendAction}
-    connectionState={state.status === 'online' ? 'online' : state.status === 'connecting' ? 'reconnecting' : 'offline'}
-    error={state.error || (state.status !== 'online' ? 'Yeniden bağlanılıyor… Elin korunuyor.' : '')}
-    onForfeit={() => { void forfeitRoom().then((left) => { if (left) router.replace('/'); }); }}
-    onExit={() => { if (room.game?.phase === 'game-over') forgetRoom(); else suspendRoom(); router.replace('/'); }} />;
+  if (room?.game) return <View style={s.gameRoot}>
+    <GameTable key={room.code + ':' + room.game.roundIndex} game={room.game} viewerId={room.you}
+      modeLabel={`ÇEVRİM İÇİ · ${room.code}`} canAdvance={room.hostId === room.you || hostIsBot} canRematch={room.hostId === room.you || hostIsBot}
+      playerMeta={playerMeta} onRematch={() => sendRoom({ type: 'rematch' })}
+      botControlled={me?.botControlled} onReclaim={() => sendRoom({ type: 'reclaim' })}
+      blocked={state.status !== 'online' || state.busy} onAction={sendAction}
+      connectionState={state.status === 'online' ? 'online' : state.status === 'connecting' ? 'reconnecting' : 'offline'}
+      error={state.error || (state.status !== 'online' ? 'Yeniden bağlanılıyor… Elin korunuyor.' : '')}
+      onForfeit={() => { void forfeitRoom().then((left) => { if (left) router.replace('/'); }); }}
+      onExit={() => { if (room.game?.phase === 'game-over') forgetRoom(); else suspendRoom(); router.replace('/'); }} />
+    <RoundIntro roundIndex={room.game.roundIndex} starterName={room.game.players[room.game.startingPlayerIndex]?.name ?? 'Oyuncu'} enabled={state.status === 'online'} />
+  </View>;
   return <SafeAreaView style={s.page}>
     <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
       <Pressable accessibilityRole="button" disabled={state.busy} onPress={goBack}><Text style={s.back}>← Ana menü</Text></Pressable>
@@ -102,11 +107,18 @@ export default function OnlineScreen() {
           const avatar = avatarFor(m.avatarKey);
           return <View key={m.id} style={s.member}>
             <View style={s.memberIdentity}><View style={[s.memberAvatar, { backgroundColor: avatar.color }]}><Text style={s.memberAvatarText}>{avatar.symbol}</Text></View>
-              <View><Text style={s.white}>{m.name}{m.id === room.you ? ' (sen)' : ''}{m.id === room.hostId ? ' ♛' : ''}</Text><Text style={s.memberStats}>Sv. {m.level} · {m.gamesPlayed} maç · {m.wins} galibiyet</Text></View></View>
+              <View><Text style={s.white}>{m.name}{m.id === room.you ? ' (sen)' : ''}{m.id === room.hostId ? ' ♛' : ''}</Text><Text style={s.memberStats}>{m.isBot ? 'Oyun tarafından yönetilir' : `Sv. ${m.level} · ${m.gamesPlayed} maç · ${m.wins} galibiyet`}</Text></View></View>
             <Text style={s.status}>{!m.connected ? 'Yeniden bağlanıyor' : m.ready ? '✓ Hazır' : 'Bekleniyor'}</Text>
           </View>;
         })}
         {room.visibility === 'private' ? <>
+          {room.hostId === room.you && <View style={s.botPanel}>
+            <View style={s.botCopy}><Text style={s.white}>Yapay oyuncular</Text><Text style={s.roomHint}>{botCount ? `${botCount} yapay oyuncu masada` : 'Eksik koltukları yapay oyuncularla doldur'}</Text></View>
+            <View style={s.botActions}>
+              {botCount > 0 && <Pressable accessibilityRole="button" accessibilityLabel="Yapay oyuncu çıkar" disabled={state.busy || state.status !== 'online'} onPress={() => sendRoom({ type: 'remove-bot' })} style={[s.botButton, (state.busy || state.status !== 'online') && s.disabled]}><Text style={s.white}>−</Text></Pressable>}
+              <Pressable accessibilityRole="button" accessibilityLabel="Yapay oyuncu ekle" disabled={state.busy || state.status !== 'online' || room.members.length >= 6} onPress={() => sendRoom({ type: 'add-bot' })} style={[s.botButton, (state.busy || state.status !== 'online' || room.members.length >= 6) && s.disabled]}><Text style={s.botAddText}>+ Oyuncu ekle</Text></Pressable>
+            </View>
+          </View>}
           <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online'} onPress={() => sendRoom({ type: 'ready', ready: !me?.ready })} style={s.secondary}><Text style={s.white}>{me?.ready ? 'Hazır değilim' : 'Hazırım ✓'}</Text></Pressable>
           {room.hostId === room.you && <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online' || room.members.length < MIN_GAME_PLAYERS || room.members.some(m => !m.ready || !m.connected)} style={[s.primary, (room.members.length < MIN_GAME_PLAYERS || room.members.some(m => !m.ready || !m.connected)) && s.disabled]} onPress={() => sendRoom({ type: 'start' })}><Text style={s.primaryText}>Kartları dağıt</Text></Pressable>}
         </> : <View style={s.matchPanel}>
@@ -123,6 +135,7 @@ export default function OnlineScreen() {
   </SafeAreaView>;
 }
 const s = StyleSheet.create({
+  gameRoot: { flex: 1, backgroundColor: '#09271e' },
   page: { flex: 1, backgroundColor: p.felt }, content: { padding: 26, gap: 16, width: '100%', maxWidth: 620, alignSelf: 'center' },
   back: { color: p.cream, fontSize: 15, paddingVertical: 10 }, profileLink: { position: 'absolute', top: 26, right: 26, paddingVertical: 10 }, profileLinkText: { color: p.gold, fontSize: 13, fontWeight: '700' }, eyebrow: { color: p.gold, letterSpacing: 3, fontSize: 11, marginTop: 20, fontWeight: '800' },
   title: { color: p.cream, fontSize: 38, lineHeight: 43, fontWeight: '800' }, body: { color: p.muted, fontSize: 15, lineHeight: 23 },
@@ -139,6 +152,8 @@ const s = StyleSheet.create({
   error: { borderRadius: 12, backgroundColor: '#842c2c55', padding: 14 },
   roomHint: { color: p.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' },
   inviteButton: { minHeight: 52, paddingHorizontal: 17, borderRadius: 13, backgroundColor: '#ffffff0d', borderWidth: 1, borderColor: p.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, inviteArrow: { color: p.gold, fontSize: 22 },
+  botPanel: { minHeight: 64, padding: 12, borderRadius: 13, backgroundColor: '#ffffff08', borderWidth: 1, borderColor: p.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  botCopy: { flex: 1, gap: 3 }, botActions: { flexDirection: 'row', gap: 8 }, botButton: { minHeight: 40, minWidth: 40, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: p.gold, alignItems: 'center', justifyContent: 'center' }, botAddText: { color: p.gold, fontSize: 13, fontWeight: '800' },
   matchPanel: { gap: 10, padding: 16, borderRadius: 14, backgroundColor: '#ffffff0a', borderWidth: 1, borderColor: p.line },
   matchTitle: { color: p.cream, fontSize: 17, fontWeight: '800', textAlign: 'center' }, waitNotice: { color: p.gold, fontSize: 12, lineHeight: 18, textAlign: 'center' },
 });

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
-import { Animated, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Animated, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { palette as p } from '@/constants/palette';
 import { CARD_HEIGHT, CARD_WIDTH, PlayingCard, SMALL_CARD_HEIGHT, SMALL_CARD_WIDTH } from './playing-card';
@@ -8,6 +8,7 @@ import { PrivateGameView } from '@/game/view';
 import { SUITS } from '@/game/types';
 import type { Card, GameAction, MeldType, Rank, Suit } from '@/game/types';
 import { ROUND_CONTRACTS } from '@/game/contracts';
+import { contractForRound, roundCountForGame, rulesForGame } from '@/game/game-rules';
 import { isValidMeld } from '@/game/engine';
 import { GameSound, useGameSounds } from '@/audio/game-sounds';
 import { arrangeHand, loadHandOrder, moveCardToIndex, reconcileHandOrder, saveHandOrder } from '@/game/hand-order';
@@ -17,6 +18,8 @@ import { getHandGrid } from '@/game/hand-layout';
 import { isMeldHidden } from '@/game/meld-visibility';
 import { closestDropTarget, containsDropPoint, isTapDrop } from '@/game/drop-geometry';
 import type { DropPoint, DropRect } from '@/game/drop-geometry';
+import { scoreSummary } from '@/game/score-summary';
+import { DELETE_ACCOUNT_URL, PRIVACY_POLICY_URL, TERMS_LABEL, TERMS_URL } from '@/constants/legal';
 
 type Props = {
   game: PrivateGameView; viewerId: string; modeLabel: string; blocked?: boolean;
@@ -24,6 +27,8 @@ type Props = {
   debugText?: string;
   playerMeta?: Record<string, { avatarColor: string; avatarSymbol: string; level: number; connected: boolean; missedTurns: number; botControlled: boolean }>;
   botControlled?: boolean; onReclaim?: () => void;
+  onOpenTutorial?: () => void;
+  canUndo?: boolean; onUndo?: () => void;
   connectionState?: 'online' | 'reconnecting' | 'offline';
   onAction: (a: GameAction) => void; onRematch?: () => void; onForfeit?: () => void; onExit: () => void;
 };
@@ -37,6 +42,7 @@ const suitName: Record<Suit, string> = { hearts: 'Kupa', diamonds: 'Karo', clubs
 const suitSymbol: Record<Suit, string> = { hearts: '♥', diamonds: '♦', clubs: '♣', spades: '♠' };
 const DISCARD_DROP_PADDING = 46;
 const MELD_DROP_PADDING = 24;
+const HAND_DROP_PADDING = 64;
 
 function DropZoneView({ dropKey, onNode, ...props }: Omit<ComponentProps<typeof View>, 'ref'> & { dropKey: string; onNode: DropZoneNodeHandler }) {
   const measuredRef = useCallback((node: Measurable | null) => onNode(dropKey, node), [dropKey, onNode]);
@@ -121,7 +127,7 @@ function SettingRow({ label, value, onPress }: { label: string; value: boolean; 
   </Pressable>;
 }
 
-export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = true, canRematch = false, error, debugText, playerMeta, botControlled = false, connectionState, onReclaim, onAction, onRematch, onForfeit, onExit }: Props) {
+export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = true, canRematch = false, error, debugText, playerMeta, botControlled = false, connectionState, onReclaim, onOpenTutorial, canUndo = false, onUndo, onAction, onRematch, onForfeit, onExit }: Props) {
   const [pendingState, setPendingState] = useState<{ key: string; groups: Pending[] }>({ key: '', groups: [] });
   const [notice, setNotice] = useState('');
   const [exitOpen, setExitOpen] = useState(false);
@@ -161,7 +167,9 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   const arrangedHand = arrangeHand(me.hand, handOrder);
   const cards = arrangedHand.filter(c => !stagedIds.has(c.id));
   const activeCard = activeCardId ? me.hand.find((card) => card.id === activeCardId) : undefined;
-  const contract = ROUND_CONTRACTS[game.roundIndex];
+  const contract = contractForRound(game);
+  const roundCount = roundCountForGame(game);
+  const gameRules = rulesForGame(game);
   const dropSlots: DropSlot[] = me.hasOpened
     ? [{ type: 'set', label: 'Yeni küt' }, { type: 'run', label: 'Yeni seri' }]
     : contract.final
@@ -181,7 +189,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       game.phase,
       game.players.find(player => player.id === meld.ownerId)?.openedTurn,
     ));
-  const nextContract = game.roundIndex + 1 < ROUND_CONTRACTS.length ? ROUND_CONTRACTS[game.roundIndex + 1] : null;
+  const nextContractIndex = gameRules.contractSequence[game.roundIndex + 1];
+  const nextContract = nextContractIndex === undefined ? null : ROUND_CONTRACTS[nextContractIndex];
   const handGrid = getHandGrid(cards.length, width, settings.compactCards);
   const autoCompactHand = handGrid.compact;
   const handCardWidth = autoCompactHand ? SMALL_CARD_WIDTH : CARD_WIDTH;
@@ -190,6 +199,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   // adding a visually awkward third row that pushes the table out of view.
   const cardsPerRow = handGrid.cardsPerRow;
   const handWidth = Math.min(width, 760) - 36;
+  const playerColumns = game.players.length === 4 ? 2 : Math.min(3, game.players.length);
+  const playerTileWidth = (Math.min(width, 760) - 24 - (playerColumns - 1) * 6) / playerColumns;
   const step = cardsPerRow <= 1
     ? handCardWidth
     : Math.max(18, Math.min(autoCompactHand ? 41 : 46, (handWidth - handCardWidth) / (cardsPerRow - 1)));
@@ -538,7 +549,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     const slot = targetIndex('slot:', point);
     if (slot >= 0) return addCardToSlot(cardId, slot, withoutCard);
     if (contract.final && !me.hasOpened && isInside('discard', point, DISCARD_DROP_PADDING)) return finishFinal(cardId, withoutCard);
-    if (isInside('hand', point)) {
+    if (isInside('hand', point, HAND_DROP_PADDING)) {
       setPending(withoutCard);
       setNotice('Kart eline geri döndü.');
       return;
@@ -554,7 +565,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       else if (drawing) act({ type: 'draw', source });
       return;
     }
-    if (!isInside('hand', point)) {
+    if (!isInside('hand', point, HAND_DROP_PADDING)) {
       setNotice('Kartı almak için desteden elinin üzerine sürükle.');
       return;
     }
@@ -572,6 +583,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   }
 
   function autoArrange() {
+    setNotice('');
     const next = autoArrangeHand(me.hand, {
       contract,
       prioritizeContract: !me.hasOpened,
@@ -582,7 +594,6 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     setHandOrder(next);
     void saveHandOrder(orderKey, next);
     playSound('shuffle');
-    setNotice('Elin göreve ve en güçlü gruplara göre dizildi. İstersen elle değiştirebilirsin.');
   }
 
   function actionSound(action: GameAction): GameSound {
@@ -606,44 +617,58 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   }
   return <SafeAreaView style={s.page}>
     <View style={s.header}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Masadan çık" onPress={() => setExitOpen(true)} style={s.iconButton}><Text style={s.white}>←</Text></Pressable>
-      <View style={s.center}><Text style={s.eyebrow}>{modeLabel}</Text><Text style={s.round}>EL {game.roundIndex + 1} / 12 · {contract.shortTitle}</Text></View>
+      <Pressable accessibilityRole="button" accessibilityLabel="Masadan çık" onPress={() => setExitOpen(true)} style={s.headerMenuButton}><Text style={s.headerMenuText}>Çık</Text></Pressable>
+      <View style={s.center}><Text style={s.eyebrow}>{modeLabel}</Text><Text style={s.round}>EL {game.roundIndex + 1} / {roundCount} · {contract.shortTitle}</Text></View>
       <View style={s.headerActions}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Hızlı kural yardımı" style={s.iconButton} onPress={() => { feedback(); setHelpOpen(true); }}><Text style={s.soundIcon}>?</Text></Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Oyun ayarları" style={s.iconButton} onPress={() => { feedback(); setSettingsOpen(true); }}><Text style={s.soundIcon}>⚙</Text></Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Puan tablosu" style={s.iconButton} onPress={() => { playSound('tap'); setScoresOpen(true); }}><Text style={s.white}>≡</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Hızlı kural yardımı" style={s.headerMenuButton} onPress={() => { feedback(); setHelpOpen(true); }}><Text style={s.headerMenuText}>Kural</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Oyun ayarları" style={s.headerMenuButton} onPress={() => { feedback(); setSettingsOpen(true); }}><Text style={s.headerMenuText}>Ayar</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Puan tablosu" style={s.headerMenuButton} onPress={() => { playSound('tap'); setScoresOpen(true); }}><Text style={s.headerMenuText}>Puan</Text></Pressable>
       </View>
     </View>
     {connectionState && <View style={[s.connectionBar, connectionState === 'online' ? s.connectionOnline : connectionState === 'reconnecting' ? s.connectionWaiting : s.connectionOffline]}>
-      <Text style={s.connectionText}>{connectionState === 'online' ? '● Bağlı' : connectionState === 'reconnecting' ? '◌ Bağlanıyor' : '○ Çevrim dışı'}</Text>
+      <Text style={s.connectionText}>{connectionState === 'online' ? 'Bağlı' : connectionState === 'reconnecting' ? 'Bağlanıyor' : 'Çevrim dışı'}</Text>
     </View>}
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.playersBar} contentContainerStyle={s.players}>
-      {game.players.filter(pl => pl.id !== viewerId).map(pl => <View key={pl.id} style={[s.opponent, current.id === pl.id && s.activeOpponent]}>
-        <View style={[s.avatar, playerMeta?.[pl.id] && { backgroundColor: playerMeta[pl.id].avatarColor }]}><Text style={s.avatarText}>{playerMeta?.[pl.id]?.avatarSymbol ?? pl.name.charAt(0)}</Text></View>
-        <View><Text numberOfLines={1} style={s.opponentName}>{pl.name}{(playerMeta?.[pl.id]?.botControlled || game.botControlledPlayerIds?.includes(pl.id)) ? ' · BOT' : playerMeta?.[pl.id]?.connected === false ? ' · çevrim dışı' : ''}</Text><Text style={s.small}>{game.handCounts[pl.id]} kart · {pl.score}p{pl.hasOpened ? ' · Açtı' : ''}{playerMeta?.[pl.id]?.missedTurns ? ` · ${playerMeta[pl.id].missedTurns}/3` : ''}</Text></View>
-        <View style={{ marginLeft: 5 }}><PlayingCard hidden compact /></View>
-      </View>)}
-    </ScrollView>
+    <View style={s.playersBar}>
+      <View style={s.players}>
+        {game.players.map(pl => {
+          const isViewer = pl.id === viewerId;
+          const isCurrent = current.id === pl.id;
+          const isOffline = playerMeta?.[pl.id]?.connected === false;
+          return <View
+            key={pl.id}
+            accessibilityLabel={`${pl.name}, ${game.handCounts[pl.id]} kart, ${pl.score} puan${isCurrent ? ', sıra bu oyuncuda' : ''}`}
+            style={[s.playerTile, { width: playerTileWidth }, isViewer && s.viewerTile, isCurrent && s.activePlayerTile]}
+          >
+            <View style={[s.avatar, playerMeta?.[pl.id] && { backgroundColor: playerMeta[pl.id].avatarColor }]}><Text style={s.avatarText}>{playerMeta?.[pl.id]?.avatarSymbol ?? pl.name.charAt(0)}</Text></View>
+            <View style={s.playerInfo}>
+              <Text numberOfLines={1} style={s.playerName}>{pl.name}{isViewer ? ' · SEN' : isOffline ? ' · çevrim dışı' : ''}</Text>
+              <Text numberOfLines={1} style={s.playerStats}>{game.handCounts[pl.id]} kart · {pl.score}p{pl.hasOpened ? ' · Açtı' : ''}{playerMeta?.[pl.id]?.missedTurns ? ` · ${playerMeta[pl.id].missedTurns}/3` : ''}</Text>
+            </View>
+            {isCurrent && <View style={s.turnDot} />}
+          </View>;
+        })}
+      </View>
+    </View>
     <ScrollView scrollEnabled={!activeDrag} style={s.tableScroll} contentContainerStyle={s.table}>
       <View style={s.feltOval}>
         <View style={s.piles}>
           <View style={[s.pile, drawing && s.pileReady]}>
             <DragSurface active={drawing && Boolean(game.stockCount || game.discard.length)} onDragStart={() => beginDrag('stock')} onDrop={(point) => dropPile('stock', point)}>
-              <View style={s.pile}><View style={s.stackShadow} /><PlayingCard hidden /><Text style={s.pileLabel}>DESTE · {game.stockCount}</Text></View>
+              <View style={[s.pile, s.tablePileTouch]}><View style={s.stackShadow} /><PlayingCard hidden small /><Text style={s.pileLabel}>DESTE · {game.stockCount}</Text></View>
             </DragSurface>
           </View>
           <View style={s.tableMark}><Text style={s.tableA}>A</Text><Text style={s.tableBrand}>AMERİKANO</Text></View>
           <DropZoneView dropKey="discard" onNode={registerDropZone} style={[s.pile, (drawing || claiming || activeDrag === 'hand') && s.pileReady, activeDrag === 'hand' && s.dropTargetActive]}>
             <DragSurface active={(drawing || claiming) && Boolean(game.discard.length) && !game.discardFaceDown} onDragStart={() => beginDrag('discard')} onDrop={(point) => dropPile('discard', point)}>
-              <View style={s.pile}>{game.discardFaceDown ? <PlayingCard hidden /> : game.discard.length ? <PlayingCard card={game.discard.at(-1)} /> : <View style={s.empty} />}
+              <View style={[s.pile, s.tablePileTouch]}>{game.discardFaceDown ? <PlayingCard hidden small /> : game.discard.length ? <PlayingCard card={game.discard.at(-1)} small /> : <View style={s.empty} />}
                 <Text style={s.pileLabel}>{game.discardFaceDown ? 'BİTİŞ KARTI · KAPALI' : activeDrag === 'hand' ? 'KARTI BURAYA AT' : 'AÇIK KART'}</Text></View>
             </DragSurface>
           </DropZoneView>
         </View>
       </View>
       <View style={s.turnRow}><Text style={s.turn}>{blocked ? 'Bekleniyor…' : game.phase === 'claim' ? claiming ? 'Karar sende' : `${claimPlayer?.name} düşünüyor…` : myTurn ? drawing ? 'Sıra sende · Çek' : 'Sıra sende · Oyna' : `${current.name} oynuyor…`}</Text><TurnCountdown deadline={game.turnDeadline} warningEnabled={settings.criticalTimer} onUrgent={() => { playSound('tap'); feedback('warning'); }} /></View>
-      {game.lastPenalty?.reason === 'playable-discard' && <View style={s.playablePenaltyBanner}><Text style={s.playablePenaltyText}>⚠ {penalizedPlayer?.name ?? 'Oyuncu'} işlek kart attı · +{game.lastPenalty.points} ceza</Text></View>}
-      {botControlled && <View style={s.botNotice}><Text style={s.botNoticeText}>Üç süre kaçırdığın için bot senin yerine oynuyor.</Text><Pressable accessibilityRole="button" disabled={blocked} onPress={onReclaim} style={[s.reclaimButton, blocked && s.disabled]}><Text style={s.reclaimText}>Koltuğu geri al</Text></Pressable></View>}
+      {game.lastPenalty?.reason === 'playable-discard' && <View style={s.playablePenaltyBanner}><Text style={s.playablePenaltyText}>{penalizedPlayer?.name ?? 'Oyuncu'} işlek kart attı · +{game.lastPenalty.points} ceza</Text></View>}
+      {botControlled && <View style={s.botNotice}><Text style={s.botNoticeText}>Üç süre kaçırdığın için oyun koltuğunu otomatik yönetiyor.</Text><Pressable accessibilityRole="button" disabled={blocked} onPress={onReclaim} style={[s.reclaimButton, blocked && s.disabled]}><Text style={s.reclaimText}>Koltuğu geri al</Text></Pressable></View>}
       {claiming && <View style={s.actions}>
         <Pressable accessibilityRole="button" onPress={() => act({ type: 'claim', take: false })} style={s.secondary}><Text style={s.actionText}>Pas geç</Text></Pressable>
       </View>}
@@ -684,7 +709,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     <DropZoneView dropKey="hand" onNode={registerDropZone} style={[s.hand, (activeDrag === 'stock' || activeDrag === 'discard' || activeDrag === 'staged') && s.handDropActive]}>
       <View style={s.handHeading}>
         <Text numberOfLines={1} style={s.handName}>{me.name} <Text style={s.small}>· {me.hand.length} kart{myMissedTurns ? ` · ${myMissedTurns}/3 süre kaçtı` : ''}</Text></Text>
-        <View style={s.handMeta}><Text style={s.small}>{me.score} puan</Text><Pressable accessibilityRole="button" accessibilityLabel="Eli otomatik diz" disabled={Boolean(activeDrag)} onPress={autoArrange} style={[s.arrangeButton, activeDrag && s.disabled]}><Text style={s.gold}>Oto diz</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={arranging ? 'Kart dizmeyi bitir' : 'Eli istediğin gibi diz'} onPress={toggleArrange} style={[s.arrangeButton, arranging && s.arrangeButtonActive]}><Text style={s.gold}>{arranging ? 'Bitti' : 'Elle diz'}</Text></Pressable></View>
+        <View style={s.handMeta}><Text style={s.small}>{me.score} puan</Text>{onUndo && <Pressable accessibilityRole="button" accessibilityLabel="Son hamleyi geri al" disabled={!canUndo} onPress={onUndo} style={[s.arrangeButton, !canUndo && s.disabled]}><Text style={s.gold}>Geri al</Text></Pressable>}<Pressable accessibilityRole="button" accessibilityLabel="Eli otomatik diz" disabled={Boolean(activeDrag)} onPress={autoArrange} style={[s.arrangeButton, activeDrag && s.disabled]}><Text style={s.gold}>Oto diz</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={arranging ? 'Kart dizmeyi bitir' : 'Eli istediğin gibi diz'} onPress={toggleArrange} style={[s.arrangeButton, arranging && s.arrangeButtonActive]}><Text style={s.gold}>{arranging ? 'Bitti' : 'Elle diz'}</Text></Pressable></View>
       </View>
       {!!(notice || error) && <Text accessibilityLiveRegion="polite" style={s.notice}>{error || notice}</Text>}
       {arranging && <Text accessibilityLiveRegion="polite" style={s.arrangeHint}>Kartı tutup istediğin konuma sürükle ve bırak.</Text>}
@@ -697,17 +722,16 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     </DropZoneView>
     <Modal visible={over || scoresOpen} transparent animationType="fade" onRequestClose={() => setScoresOpen(false)}>
       <View style={s.backdrop}><View style={s.sheet}>
-        <Text style={s.resultIcon}>♛</Text>
         <Text style={s.resultTitle}>{game.phase === 'game-over' ? winners.map(w => w.name).join(' & ') + ' kazandı!' : game.phase === 'round-over' ? game.players.find(pl => pl.id === game.roundWinnerId)?.name + ' bitirdi!' : 'Puan tablosu'}</Text>
-        <Text style={s.resultCaption}>{game.phase === 'round-over' && nextContract ? `Sıradaki el: ${nextContract.title}` : game.phase === 'game-over' ? '12 el tamamlandı. En düşük toplam puan kazandı.' : 'En düşük toplam puan kazanır.'}</Text>
+        <Text style={s.resultCaption}>{game.phase === 'round-over' && nextContract ? `Sıradaki el: ${nextContract.title}` : game.phase === 'game-over' ? `${roundCount} el tamamlandı. En düşük toplam puan kazandı.` : 'En düşük toplam puan kazanır.'}</Text>
         <ScrollView style={s.resultList} contentContainerStyle={s.resultListContent} showsVerticalScrollIndicator={false}>
           {sortedPlayers.map((pl, i) => {
             const detail = over ? game.roundResult?.entries.find((entry) => entry.playerId === pl.id) : undefined;
-            const roundPenalty = detail ? detail.penalty + detail.playableDiscardPenalty : 0;
+            const score = scoreSummary(detail, pl.score);
             return <View key={pl.id} style={s.scoreBlock}>
-              <View style={s.score}><Text style={s.scoreName}>{i + 1}. {pl.name}</Text><View style={s.scoreTotal}><Text style={s.scoreTotalLabel}>TOPLAM SKOR</Text><Text style={s.scoreValue}>{detail?.totalAfter ?? pl.score}</Text></View></View>
+              <View style={s.score}><Text style={s.scoreName}>{i + 1}. {pl.name}</Text><View style={s.scoreTotal}><Text style={s.scoreTotalLabel}>TOPLAM SKOR</Text><Text style={s.scoreValue}>{score.totalAfter}</Text></View></View>
               {detail && <>
-                <Text style={s.penalty}>{roundPenalty === 0 ? `Bu el: ceza yok · Önceki toplam: ${detail.totalBefore}` : `Bu el: +${roundPenalty} ceza${detail.playableDiscardPenalty ? ` · İşlek atma: +${detail.playableDiscardPenalty}` : ''} · Önceki toplam: ${detail.totalBefore}`}</Text>
+                <Text style={s.penalty}>{score.roundPenalty === 0 ? `Bu el: ceza yok · Önceki toplam: ${score.totalBefore}` : `Bu el: +${score.roundPenalty} ceza${score.playableDiscardPenalty ? ` · İşlek atma: +${score.playableDiscardPenalty}` : ''} · Önceki toplam: ${score.totalBefore}`}</Text>
                 {detail.cards.length > 0 && <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.remainingCards}>
                   {detail.cards.map((card) => <PlayingCard key={card.id} card={card} compact />)}
                 </ScrollView>}
@@ -725,9 +749,9 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       </View></View>
     </Modal>
     <Modal visible={exitOpen} transparent animationType="fade" onRequestClose={() => setExitOpen(false)}><View style={s.backdrop}><View style={s.sheet}>
-      <Text style={s.resultTitle}>Masadan çıkılsın mı?</Text><Text style={s.resultCaption}>{onForfeit ? 'Şimdilik çıkarsan aynı cihazdan masaya dönebilirsin. Kalıcı ayrılırsan koltuğunu bot devralır.' : 'Oyun kaydedilir; aynı cihazdan kaldığın yerden devam edebilirsin.'}</Text>
+      <Text style={s.resultTitle}>Masadan çıkılsın mı?</Text><Text style={s.resultCaption}>{onForfeit ? 'Şimdilik çıkarsan aynı cihazdan masaya dönebilirsin. Kalıcı ayrılırsan koltuğun otomatik yönetilir.' : 'Oyun kaydedilir; aynı cihazdan kaldığın yerden devam edebilirsin.'}</Text>
       <Pressable style={s.resultButton} onPress={onExit}><Text style={s.actionText}>{onForfeit ? 'Şimdilik çık · koltuğumu koru' : 'Ana menüye dön'}</Text></Pressable>
-      {onForfeit && <Pressable style={s.forfeitButton} onPress={onForfeit}><Text style={s.forfeitText}>Kalıcı ayrıl · bot devam etsin</Text></Pressable>}
+      {onForfeit && <Pressable style={s.forfeitButton} onPress={onForfeit}><Text style={s.forfeitText}>Kalıcı ayrıl · oyun devam etsin</Text></Pressable>}
       <Pressable style={s.resultButtonSecondary} onPress={() => setExitOpen(false)}><Text style={s.resultButtonSecondaryText}>Oynamaya devam et</Text></Pressable>
     </View></View></Modal>
     <Modal visible={Boolean(jokerChoice)} transparent animationType="fade" onRequestClose={() => setJokerChoice(null)}><View style={s.backdrop}><View style={s.sheet}>
@@ -741,7 +765,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     </View></View></Modal>
     <Modal visible={debugOpen} transparent animationType="fade" onRequestClose={() => setDebugOpen(false)}><View style={s.backdrop}><View style={[s.sheet, s.debugSheet]}>
       <Text style={s.resultTitle}>Canlı oyun durumu</Text>
-      <Text style={s.resultCaption}>Her hamlede yenilenir. Botların elleri yalnızca bu geliştirici görünümünde gösterilir.</Text>
+      <Text style={s.resultCaption}>Her hamlede yenilenir. Rakiplerin elleri yalnızca bu geliştirici görünümünde gösterilir.</Text>
       <ScrollView style={s.debugScroll} contentContainerStyle={s.debugContent}>
         <Text selectable style={s.debugText}>{debugText}</Text>
       </ScrollView>
@@ -754,23 +778,31 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       <SettingRow label="Son 10 saniye uyarısı" value={settings.criticalTimer} onPress={() => { feedback(); updateSettings({ criticalTimer: !settings.criticalTimer }); }} />
       <SettingRow label="Eldeki kartları küçült" value={settings.compactCards} onPress={() => { feedback(); updateSettings({ compactCards: !settings.compactCards }); }} />
       <SettingRow label="Sürükleme ipuçları" value={settings.dragHints} onPress={() => { feedback(); updateSettings({ dragHints: !settings.dragHints }); }} />
+      <Text style={s.settingsSectionTitle}>YASAL VE GİZLİLİK</Text>
+      <View style={s.settingsLinks}>
+        <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)} style={s.settingsLink}><Text style={s.settingsLinkText}>Gizlilik politikası</Text><Text style={s.settingsLinkAction}>Aç</Text></Pressable>
+        <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(TERMS_URL)} style={s.settingsLink}><Text style={s.settingsLinkText}>{TERMS_LABEL}</Text><Text style={s.settingsLinkAction}>Aç</Text></Pressable>
+        <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(DELETE_ACCOUNT_URL)} style={s.settingsLink}><Text style={s.settingsLinkText}>Hesap ve veri silme</Text><Text style={s.settingsLinkAction}>Aç</Text></Pressable>
+      </View>
       {debugText && <Pressable accessibilityRole="button" onPress={() => { setSettingsOpen(false); setDebugOpen(true); }} style={s.debugEntry}>
-        <View><Text style={s.debugEntryTitle}>Canlı oyun durumu</Text><Text style={s.debugEntryCaption}>El, masa ve son hamleleri incele</Text></View><Text style={s.debugEntryArrow}>›</Text>
+        <View><Text style={s.debugEntryTitle}>Canlı oyun durumu</Text><Text style={s.debugEntryCaption}>El, masa ve son hamleleri incele</Text></View><Text style={s.settingsLinkAction}>Aç</Text>
       </Pressable>}
       <Pressable style={s.resultButton} onPress={() => setSettingsOpen(false)}><Text style={s.actionText}>Tamam</Text></Pressable>
     </View></View></Modal>
     <Modal visible={helpOpen} transparent animationType="fade" onRequestClose={() => setHelpOpen(false)}><View style={s.backdrop}><View style={s.sheet}>
       <Text style={s.resultTitle}>Bu elde ne yapacağım?</Text>
-      <View style={s.helpTask}><Text style={s.helpTaskLabel}>EL {game.roundIndex + 1} GÖREVİ</Text><Text style={s.helpTaskTitle}>{contract.title}</Text></View>
+      <View style={s.helpTask}><Text style={s.helpTaskLabel}>EL {game.roundIndex + 1} / {roundCount} GÖREVİ</Text><Text style={s.helpTaskTitle}>{contract.title}</Text></View>
       <ScrollView style={s.helpScroll} contentContainerStyle={s.helpContent}>
         <Text style={s.helpLine}><Text style={s.helpStrong}>1. Kart çek:</Text> Deste veya açık kartı eline sürükle.</Text>
         <Text style={s.helpLine}><Text style={s.helpStrong}>2. Aç / işle:</Text> Görev tepsilerini doldur. Elini açtıktan sonra 3 veya daha fazla kartı yeni küt ya da seri tepsisinde hazırlayıp tek seferde masaya açabilirsin.</Text>
         <Text style={s.helpLine}><Text style={s.helpStrong}>3. Kart at:</Text> Bir kartı açık kart alanına sürükleyerek sıranı bitir.</Text>
         <Text style={s.helpLine}><Text style={s.helpStrong}>Küt:</Text> Aynı sayı, farklı semboller. <Text style={s.helpStrong}>Seri:</Text> Aynı sembolde ardışık kartlar; As yalnızca Q-K-A sonunda kullanılır.</Text>
         <Text style={s.helpLine}><Text style={s.helpStrong}>Joker:</Text> İlk 5 elin ilk açılışında kullanılamaz. Kütte jokerin temsil ettiği sembol açılırken seçilir; joker yalnızca ilan edilen tam kartla değiştirilebilir.</Text>
+        <Text style={s.helpLine}><Text style={s.helpStrong}>Açık kart teklifi:</Text> {gameRules.claimsEnabled ? `3+ kişilik masada desteden kart seçildiğinde diğer oyuncular açık kartı 1 ceza kartıyla alabilir. Karar süresi ${gameRules.claimTimeoutMs / 1000} saniyedir; iki kişilik oyunda teklif açılmaz.` : 'Bu oyunda kapalı.'}</Text>
         <Text style={s.helpLine}><Text style={s.helpStrong}>İşlek kart:</Text> Yerdeki bir küt veya seriye işlenebilen kartı atmak +25 ceza verir. Bu kural, henüz elini açmamış oyuncuya da uygulanır.</Text>
         <Text style={s.helpLine}><Text style={s.helpStrong}>Puan:</Text> Elde kalan sayılar değeri kadar, J-Q-K 10, As 11, Joker 25 ceza verir. En düşük toplam kazanır.</Text>
       </ScrollView>
+      {onOpenTutorial && <Pressable style={s.resultButtonSecondary} onPress={() => { setHelpOpen(false); onOpenTutorial(); }}><Text style={s.resultButtonSecondaryText}>Detaylı eğitimi tekrar izle</Text></Pressable>}
       <Pressable style={s.resultButton} onPress={() => setHelpOpen(false)}><Text style={s.actionText}>Masaya dön</Text></Pressable>
     </View></View></Modal>
   </SafeAreaView>;
@@ -780,20 +812,24 @@ const s = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 6 },
   connectionBar: { marginHorizontal: 12, marginBottom: 4, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, alignItems: 'center' },
   connectionOnline: { backgroundColor: '#2f8d5b35' }, connectionWaiting: { backgroundColor: '#d9a44130' }, connectionOffline: { backgroundColor: '#a6404838' }, connectionText: { color: p.cream, fontSize: 10, fontWeight: '700' },
-  iconButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: p.line, borderRadius: 20 },
-  headerActions: { flexDirection: 'row', gap: 7 }, soundIcon: { color: p.gold, fontSize: 19, fontWeight: '800' },
-  white: { color: p.cream, fontSize: 20 }, center: { alignItems: 'center', gap: 4, marginLeft: 45 }, eyebrow: { color: p.gold, fontSize: 9, letterSpacing: 2, fontWeight: '800' },
-  round: { color: p.cream, fontWeight: '700', fontSize: 12 }, playersBar: { flexGrow: 0, maxHeight: 64, borderBottomWidth: 1, borderColor: p.line },
-  players: { gap: 8, paddingHorizontal: 12, paddingVertical: 4 }, opponent: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 4, borderRadius: 10, borderWidth: 1, borderColor: 'transparent' },
-  activeOpponent: { borderColor: p.gold, backgroundColor: '#d9a44115' }, avatar: { width: 27, height: 27, borderRadius: 14, backgroundColor: '#dcc48e', justifyContent: 'center', alignItems: 'center' },
-  avatarText: { fontWeight: '800', color: p.felt }, opponentName: { color: p.cream, fontSize: 12, fontWeight: '700', maxWidth: 85 }, small: { fontSize: 10, color: '#adc4b6', lineHeight: 16 },
+  headerMenuButton: { minHeight: 36, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: p.line, borderRadius: 18 },
+  headerMenuText: { color: p.cream, fontSize: 9, fontWeight: '900' },
+  headerActions: { flexDirection: 'row', gap: 5 },
+  white: { color: p.cream, fontSize: 20 }, center: { flex: 1, alignItems: 'center', gap: 4, paddingHorizontal: 5 }, eyebrow: { color: p.gold, fontSize: 9, letterSpacing: 2, fontWeight: '800' },
+  round: { color: p.cream, fontWeight: '700', fontSize: 12 }, playersBar: { flexGrow: 0, borderBottomWidth: 1, borderColor: p.line, backgroundColor: '#071d1766' },
+  players: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 12, paddingVertical: 6 },
+  playerTile: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 6, paddingVertical: 5, borderRadius: 10, borderWidth: 1, borderColor: '#ffffff12', backgroundColor: '#ffffff06', position: 'relative' },
+  viewerTile: { backgroundColor: '#3b9b6917', borderColor: '#79c99a42' }, activePlayerTile: { borderColor: p.gold, backgroundColor: '#d9a44120' },
+  playerInfo: { flex: 1, minWidth: 0 }, turnDot: { position: 'absolute', width: 7, height: 7, borderRadius: 4, backgroundColor: p.gold, right: 5, top: 5 },
+  avatar: { width: 25, height: 25, borderRadius: 13, backgroundColor: '#dcc48e', justifyContent: 'center', alignItems: 'center' },
+  avatarText: { fontWeight: '800', color: p.felt, fontSize: 12 }, playerName: { color: p.cream, fontSize: 10, fontWeight: '800', paddingRight: 4 }, playerStats: { fontSize: 9, color: '#adc4b6', lineHeight: 13 }, small: { fontSize: 10, color: '#adc4b6', lineHeight: 16 },
   tableScroll: { flex: 1 }, table: { padding: 8, gap: 6, flexGrow: 1 },
-  feltOval: { borderRadius: 90, backgroundColor: '#155a40', borderWidth: 3, borderColor: '#775935', paddingVertical: 8, elevation: 2 },
-  piles: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 }, pile: { alignItems: 'center', gap: 4, borderRadius: 8, padding: 3 }, pileReady: { backgroundColor: '#ffe1a410' },
+  feltOval: { borderRadius: 54, backgroundColor: '#155a40', borderWidth: 2, borderColor: '#775935', paddingVertical: 4, elevation: 2 },
+  piles: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }, pile: { alignItems: 'center', gap: 2, borderRadius: 8, padding: 2 }, tablePileTouch: { minWidth: 78, minHeight: 92, justifyContent: 'center' }, pileReady: { backgroundColor: '#ffe1a410' },
   dropTargetActive: { borderColor: p.gold, borderWidth: 2, backgroundColor: '#d9a44122' },
-  stackShadow: { position: 'absolute', width: CARD_WIDTH, height: CARD_HEIGHT, borderRadius: 5, backgroundColor: '#bda886', left: 7, top: 7, borderWidth: 1, borderColor: '#624a32' },
-  pileLabel: { color: '#e1d2ad', fontSize: 8, letterSpacing: 1, fontWeight: '700' }, empty: { width: CARD_WIDTH, height: CARD_HEIGHT, borderWidth: 1, borderColor: '#ffffff25', borderRadius: 5 },
-  tableMark: { alignItems: 'center', opacity: 0.25 }, tableA: { color: '#e1d2ad', fontFamily: 'serif', fontSize: 25 }, tableBrand: { color: '#e1d2ad', fontSize: 6, letterSpacing: 1.5 },
+  stackShadow: { position: 'absolute', width: SMALL_CARD_WIDTH, height: SMALL_CARD_HEIGHT, borderRadius: 5, backgroundColor: '#bda886', left: 15, top: 7, borderWidth: 1, borderColor: '#624a32' },
+  pileLabel: { color: '#e1d2ad', fontSize: 8, letterSpacing: 0.8, fontWeight: '700' }, empty: { width: SMALL_CARD_WIDTH, height: SMALL_CARD_HEIGHT, borderWidth: 1, borderColor: '#ffffff25', borderRadius: 5 },
+  tableMark: { alignItems: 'center', opacity: 0.25 }, tableA: { color: '#e1d2ad', fontFamily: 'serif', fontSize: 20 }, tableBrand: { color: '#e1d2ad', fontSize: 5, letterSpacing: 1.2 },
   turnRow: { minHeight: 26, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }, turn: { color: '#e8d0a1', fontSize: 12, textAlign: 'center', fontWeight: '600' },
   playablePenaltyBanner: { marginHorizontal: 12, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: '#a6404838', borderWidth: 1, borderColor: '#d87878' }, playablePenaltyText: { color: '#ffd7d7', textAlign: 'center', fontSize: 11, fontWeight: '900' },
   timer: { minWidth: 28, height: 23, paddingHorizontal: 5, borderRadius: 12, backgroundColor: '#d9a44130', alignItems: 'center', justifyContent: 'center' }, timerUrgent: { backgroundColor: '#a64048' }, timerText: { color: p.cream, fontSize: 11, fontWeight: '900' },
@@ -833,10 +869,14 @@ const s = StyleSheet.create({
   jokerChoiceSymbol: { color: '#17251e', fontSize: 24, fontWeight: '900' }, jokerChoiceRed: { color: '#b33b3b' }, jokerChoiceText: { color: '#253a2e', fontSize: 13, fontWeight: '800' },
   settingRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderColor: '#d5cdbb' }, settingLabel: { color: '#253a2e', fontSize: 14, fontWeight: '700' },
   switchTrack: { width: 43, height: 25, padding: 3, borderRadius: 13, backgroundColor: '#a9a398' }, switchTrackOn: { backgroundColor: '#2f7454' }, switchKnob: { width: 19, height: 19, borderRadius: 10, backgroundColor: '#fff' }, switchKnobOn: { alignSelf: 'flex-end' },
+  settingsSectionTitle: { color: '#80602b', fontSize: 9, letterSpacing: 1.4, fontWeight: '900', marginTop: 8 },
+  settingsLinks: { borderWidth: 1, borderColor: '#d5cdbb', borderRadius: 12, overflow: 'hidden' },
+  settingsLink: { minHeight: 43, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#d5cdbb' },
+  settingsLinkText: { color: '#253a2e', fontSize: 12, fontWeight: '800' }, settingsLinkAction: { color: '#80602b', fontSize: 10, fontWeight: '900' },
   helpTask: { padding: 13, borderRadius: 12, backgroundColor: '#e8ddc6', gap: 4 }, helpTaskLabel: { color: '#80602b', fontSize: 9, letterSpacing: 1.5, fontWeight: '900' }, helpTaskTitle: { color: '#253a2e', fontSize: 18, fontWeight: '900' },
   helpScroll: { flexGrow: 0 }, helpContent: { gap: 12 }, helpLine: { color: '#59675f', fontSize: 13, lineHeight: 20 }, helpStrong: { color: '#253a2e', fontWeight: '900' },
   debugEntry: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#b9914e55', backgroundColor: '#d9a44112', borderRadius: 12, padding: 12 },
-  debugEntryTitle: { color: '#253a2e', fontSize: 14, fontWeight: '900' }, debugEntryCaption: { color: '#59675f', fontSize: 11, marginTop: 2 }, debugEntryArrow: { color: '#8d6729', fontSize: 24, fontWeight: '700' },
+  debugEntryTitle: { color: '#253a2e', fontSize: 14, fontWeight: '900' }, debugEntryCaption: { color: '#59675f', fontSize: 11, marginTop: 2 },
   debugSheet: { maxWidth: 620, maxHeight: '88%' }, debugScroll: { width: '100%', maxHeight: 520, borderRadius: 12, backgroundColor: '#102b22' },
   debugContent: { padding: 14 }, debugText: { color: '#dbe9df', fontSize: 12, lineHeight: 19 },
 });

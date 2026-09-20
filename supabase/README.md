@@ -17,10 +17,13 @@ Security model:
 - three consecutive 45-second action expiries hand that seat to a server-run bot until the player reclaims it;
 - the separate 8-second discard-claim window auto-passes and never counts toward bot takeover;
 - private Realtime broadcasts only tell room members that a new view is ready.
-- friendships and invitations have no direct client grants; the `social` Edge Function
+- usernames are normalized, unique and searchable only through the authenticated app flow;
+  friendships and invitations have no direct client grants, and the `social` Edge Function
   reveals joinable room codes only to accepted friends.
 - quick play atomically fills the oldest compatible public waiting table, creating an
   ephemeral table only when no seat is available; presence keeps occupied lobbies alive.
+- private-room hosts can add or remove server-owned bot seats before a match; bots
+  count toward the six-seat limit, are always ready and never expose a private hand.
 
 Never add a service-role key to an Expo environment variable. It belongs only in
 Supabase's server environment.

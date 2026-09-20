@@ -63,6 +63,22 @@ export type GamePenalty = {
   turnCount: number;
 };
 
+export type BotDifficulty = 'easy' | 'normal' | 'hard';
+export type BotSpeed = 'fast' | 'normal' | 'relaxed';
+export type RoundIntroMode = 'short' | 'detailed' | 'off';
+
+export type GameRules = {
+  contractSequence: number[];
+  claimsEnabled: boolean;
+  claimTimeoutMs: number;
+  playableDiscardPenalty: boolean;
+  jokerOpeningRestriction: boolean;
+  botDifficulty: BotDifficulty;
+  botSpeed: BotSpeed;
+  undoEnabled: boolean;
+  roundIntro: RoundIntroMode;
+};
+
 export type GameState = {
   roundIndex: number;
   players: Player[];
@@ -83,6 +99,7 @@ export type GameState = {
   botControlledPlayerIds?: string[];
   discardFaceDown?: boolean;
   claim?: { playerIds: string[]; deadline: number };
+  rules?: GameRules;
 };
 
 export type GameAction =

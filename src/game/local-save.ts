@@ -17,7 +17,7 @@ function isGameState(value: unknown): value is GameState {
   return (
     Number.isInteger(game.roundIndex) &&
     Array.isArray(game.players) &&
-    game.players.length >= 3 &&
+    game.players.length >= 2 &&
     game.players.length <= 6 &&
     Array.isArray(game.stock) &&
     Array.isArray(game.discard) &&

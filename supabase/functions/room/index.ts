@@ -15,6 +15,8 @@ type Command =
   | { type: 'matchmake'; name: string }
   | { type: 'fetch'; roomId: string }
   | { type: 'ready'; roomId: string; ready: boolean }
+  | { type: 'add-bot'; roomId: string }
+  | { type: 'remove-bot'; roomId: string }
   | { type: 'start'; roomId: string }
   | { type: 'rematch'; roomId: string }
   | { type: 'reclaim'; roomId: string }
@@ -61,6 +63,13 @@ function advanceBots(state: GameState) {
   return current;
 }
 
+function createRoomGame(members: { id: string; name: string; isBot: boolean }[]) {
+  let game = createGame(members.map((member) => member.name), secureRandom);
+  game.players = game.players.map((player, index) => ({ ...player, id: members[index].id }));
+  game = { ...game, botControlledPlayerIds: members.filter((member) => member.isBot).map((member) => member.id) };
+  return advanceBots(armTurnTimer(game));
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (request.method !== 'POST') return json({ error: 'Yalnızca POST desteklenir.' }, 405);
@@ -105,12 +114,13 @@ Deno.serve(async (request) => {
         await admin.from('room_members').update({ ready: true }).eq('room_id', roomId).eq('ready', false);
       }
 
-      const [roomResult, membersResult, stateResult] = await Promise.all([
+      const [roomResult, membersResult, stateResult, botsResult] = await Promise.all([
         Promise.resolve({ data: activeRoom, error: null }),
         admin.from('room_members').select('user_id, display_name, ready, seat, last_seen_at').eq('room_id', roomId).order('seat'),
         admin.from('room_states').select('state').eq('room_id', roomId).maybeSingle(),
+        admin.from('room_bots').select('id, display_name, created_at').eq('room_id', roomId).order('created_at'),
       ]);
-      if (roomResult.error || membersResult.error) throw new Error('Oda bilgisi alınamadı.');
+      if (roomResult.error || membersResult.error || botsResult.error) throw new Error('Oda bilgisi alınamadı.');
       let roomRecord = roomResult.data;
       const state = stateResult.data?.state as GameState | undefined;
       const memberIds = membersResult.data.map((member) => member.user_id);
@@ -118,7 +128,7 @@ Deno.serve(async (request) => {
         ? await admin.from('profiles').select('user_id, avatar_key, experience, games_played, wins').in('user_id', memberIds)
         : { data: [], error: null };
       const profiles = new Map((profilesResult.data ?? []).map((profile) => [profile.user_id, profile]));
-      const memberViews = membersResult.data.map((member) => ({
+      const humanMemberViews = membersResult.data.map((member) => ({
         ...(() => {
           const profile = profiles.get(member.user_id);
           return {
@@ -134,9 +144,24 @@ Deno.serve(async (request) => {
         connected: Date.now() - Date.parse(member.last_seen_at) < 45_000,
         missedTurns: state?.missedTurns?.[member.user_id] ?? 0,
         botControlled: state?.botControlledPlayerIds?.includes(member.user_id) ?? false,
+        isBot: false,
       }));
-      if (roomRecord.status === 'waiting' && !memberViews.some((member) => member.id === roomRecord.host_id && member.connected)) {
-        const replacement = memberViews.find((member) => member.connected);
+      const botMemberViews = (botsResult.data ?? []).map((bot) => ({
+        id: bot.id,
+        name: bot.display_name,
+        ready: true,
+        connected: true,
+        avatarKey: 'gold',
+        level: 1,
+        gamesPlayed: 0,
+        wins: 0,
+        missedTurns: state?.missedTurns?.[bot.id] ?? 0,
+        botControlled: true,
+        isBot: true,
+      }));
+      const memberViews = [...humanMemberViews, ...botMemberViews];
+      if (roomRecord.status === 'waiting' && !humanMemberViews.some((member) => member.id === roomRecord.host_id && member.connected)) {
+        const replacement = humanMemberViews.find((member) => member.connected);
         if (replacement) {
           const transferred = await admin.from('rooms').update({
             host_id: replacement.id,
@@ -188,8 +213,7 @@ Deno.serve(async (request) => {
       }
       const activeMembers = currentView.members.filter((member) => member.connected);
       if (currentView.status !== 'waiting' || activeMembers.length < MIN_GAME_PLAYERS) return false;
-      const game = armTurnTimer(createGame(activeMembers.map((member) => member.name), secureRandom));
-      game.players = game.players.map((player, index) => ({ ...player, id: activeMembers[index].id }));
+      const game = createRoomGame(activeMembers);
       const commit = await admin.rpc('commit_room_state', {
         target_room: targetRoomId,
         expected_revision: currentView.revision,
@@ -287,6 +311,23 @@ Deno.serve(async (request) => {
       return json({ roomId: command.roomId, room: await roomView(command.roomId) });
     }
 
+    if (command.type === 'add-bot' || command.type === 'remove-bot') {
+      const result = await admin.rpc('change_online_room_bots', {
+        p_room_id: command.roomId,
+        p_user_id: user.id,
+        p_delta: command.type === 'add-bot' ? 1 : -1,
+      });
+      if (result.error) {
+        const message = result.error.message.includes('host only') ? 'Yapay oyuncuları yalnızca oda sahibi değiştirebilir.'
+          : result.error.message.includes('room is full') ? 'Oda dolu (6 oyuncu).'
+          : result.error.message.includes('no bot') ? 'Masada çıkarılacak yapay oyuncu yok.'
+          : result.error.message.includes('private waiting') ? 'Yapay oyuncular yalnızca özel bekleme odasında değiştirilebilir.'
+          : 'Yapay oyuncu değiştirilemedi.';
+        throw new Error(message);
+      }
+      return json({ roomId: command.roomId, room: await roomView(command.roomId) });
+    }
+
     if (command.type === 'leave') {
       const result = await admin.rpc('leave_online_room', { p_room_id: command.roomId, p_user_id: user.id });
       if (result.error) {
@@ -339,8 +380,7 @@ Deno.serve(async (request) => {
       if (currentView.members.length < MIN_GAME_PLAYERS || currentView.members.some((member) => !member.ready || !member.connected)) {
         throw new Error('En az 2 oyuncu hazır olmalı.');
       }
-      const game = armTurnTimer(createGame(currentView.members.map((member) => member.name), secureRandom));
-      game.players = game.players.map((player, index) => ({ ...player, id: currentView.members[index].id }));
+      const game = createRoomGame(currentView.members);
       const commit = await admin.rpc('commit_room_state', {
         target_room: command.roomId,
         expected_revision: currentView.revision,
@@ -358,8 +398,7 @@ Deno.serve(async (request) => {
       if (currentView.hostId !== user.id && !hostIsBot) throw new Error('Yeni maçı yalnızca oda sahibi başlatabilir.');
       if (currentView.status !== 'finished' || currentView.game?.phase !== 'game-over') throw new Error('Maç henüz tamamlanmadı.');
       await recordResult(command.roomId, roomState?.state as GameState);
-      const game = armTurnTimer(createGame(currentView.members.map((member) => member.name), secureRandom));
-      game.players = game.players.map((player, index) => ({ ...player, id: currentView.members[index].id }));
+      const game = createRoomGame(currentView.members);
       const commit = await admin.rpc('commit_room_state', {
         target_room: command.roomId,
         expected_revision: currentView.revision,
@@ -397,7 +436,7 @@ Deno.serve(async (request) => {
       if (command.action.type === 'next' && currentView.hostId !== user.id && !hostIsBot) {
         throw new Error('Sonraki eli yalnızca oda sahibi başlatabilir.');
       }
-      if (stored.botControlledPlayerIds?.includes(user.id)) throw new Error('Önce koltuğunu bottan geri al.');
+      if (stored.botControlledPlayerIds?.includes(user.id)) throw new Error('Önce koltuğunu geri al.');
       const timed = advanceBots(expireTurn(stored, Date.now(), secureRandom));
       if (timed !== stored) {
         await admin.rpc('commit_room_state', {

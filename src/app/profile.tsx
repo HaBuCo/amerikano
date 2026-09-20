@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { palette as p } from '@/constants/palette';
 import { AVATAR_OPTIONS, AvatarKey, PlayerProfile, profileLevel, refreshPlayerProfile, savePlayerProfile, usePlayerProfile } from '@/network/profile';
+import { normalizeUsername, usernameError } from '@/network/usernames';
 
 export default function ProfileScreen() {
   const state = usePlayerProfile();
@@ -25,12 +26,13 @@ export default function ProfileScreen() {
 
 function ProfileForm({ profile, loading, saving, error }: { profile: PlayerProfile; loading: boolean; saving: boolean; error: string }) {
   const [name, setName] = useState(profile.displayName);
+  const [username, setUsername] = useState(profile.username || '');
   const [avatar, setAvatar] = useState<AvatarKey>(profile.avatarKey);
   const [saved, setSaved] = useState('');
   const save = async () => {
     setSaved('');
     try {
-      await savePlayerProfile(name, avatar);
+      await savePlayerProfile(name, username, avatar);
       setSaved('Profilin kaydedildi.');
     } catch { /* Store exposes a user-facing error. */ }
   };
@@ -42,7 +44,7 @@ function ProfileForm({ profile, loading, saving, error }: { profile: PlayerProfi
       </View>
 
       <View style={s.friendCodePanel}>
-        <View><Text style={s.label}>ARKADAŞ KODUN</Text><Text selectable style={s.friendCode}>{profile.friendCode || 'Hazırlanıyor'}</Text></View>
+        <View><Text style={s.label}>KULLANICI ADIN</Text><Text selectable style={s.friendCode}>@{profile.username || 'hazırlanıyor'}</Text></View>
         <Pressable accessibilityRole="button" onPress={() => router.push('/friends' as Href)}><Text style={s.friendLink}>Arkadaşlar →</Text></Pressable>
       </View>
 
@@ -56,8 +58,12 @@ function ProfileForm({ profile, loading, saving, error }: { profile: PlayerProfi
       <Text style={s.label}>OYUNCU ADI</Text>
       <TextInput accessibilityLabel="Oyuncu adı" maxLength={18} value={name} onChangeText={(value) => { setName(value); setSaved(''); }}
         placeholder="Adını yaz" placeholderTextColor={p.muted} style={s.input} />
-      <Pressable accessibilityRole="button" disabled={!name.trim() || saving || loading}
-        style={[s.primary, (!name.trim() || saving || loading) && s.disabled]} onPress={() => void save()}>
+      <Text style={s.label}>KULLANICI ADI</Text>
+      <TextInput accessibilityLabel="Kullanıcı adı" autoCapitalize="none" autoCorrect={false} maxLength={20} value={username}
+        onChangeText={(value) => { setUsername(normalizeUsername(value)); setSaved(''); }} placeholder="kullaniciadi" placeholderTextColor={p.muted} style={s.input} />
+      <Text style={s.usernameHint}>Arkadaşların seni @{username || 'kullaniciadi'} yazarak bulabilir.</Text>
+      <Pressable accessibilityRole="button" disabled={!name.trim() || !!usernameError(username) || saving || loading}
+        style={[s.primary, (!name.trim() || !!usernameError(username) || saving || loading) && s.disabled]} onPress={() => void save()}>
         <Text style={s.primaryText}>{saving ? 'Kaydediliyor…' : 'Profili kaydet'}</Text>
       </Pressable>
       {!!saved && <Text style={s.success}>{saved}</Text>}
@@ -75,6 +81,7 @@ const s = StyleSheet.create({
   avatarRing: { padding: 3, borderWidth: 2, borderColor: 'transparent', borderRadius: 30 }, avatarSelected: { borderColor: p.gold },
   avatar: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' }, avatarText: { color: '#fff', fontSize: 20, fontWeight: '900' },
   input: { padding: 17, minHeight: 55, borderRadius: 12, borderWidth: 1, borderColor: p.line, color: p.cream, backgroundColor: '#ffffff08', fontSize: 17 },
+  usernameHint: { color: p.muted, fontSize: 12, lineHeight: 18 },
   primary: { borderRadius: 13, minHeight: 54, alignItems: 'center', justifyContent: 'center', backgroundColor: p.gold }, primaryText: { color: p.ink, fontWeight: '800', fontSize: 16 },
   disabled: { opacity: 0.4 }, success: { color: '#9bd5b5', textAlign: 'center' }, error: { color: '#f0aaa4', textAlign: 'center' },
   friendCodePanel: { borderWidth: 1, borderColor: p.line, borderRadius: 14, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },

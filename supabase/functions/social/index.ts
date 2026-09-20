@@ -7,7 +7,8 @@ const corsHeaders = {
 
 type Command =
   | { type: 'list' }
-  | { type: 'request'; friendCode: string }
+  | { type: 'search'; query: string }
+  | { type: 'request'; userId?: string; friendCode?: string }
   | { type: 'respond'; userId: string; accept: boolean }
   | { type: 'remove'; userId: string }
   | { type: 'invite'; userId: string; roomCode: string }
@@ -48,7 +49,7 @@ Deno.serve(async (request) => {
     const list = async () => {
       const now = new Date();
       const [{ data: me }, { data: relations, error: relationError }, { data: inviteRows, error: inviteError }] = await Promise.all([
-        admin.from('profiles').select('friend_code').eq('user_id', user.id).single(),
+        admin.from('profiles').select('friend_code, username').eq('user_id', user.id).single(),
         admin.from('friendships').select('user_low, user_high, requested_by, status, created_at')
           .or(`user_low.eq.${user.id},user_high.eq.${user.id}`),
         admin.from('room_invites').select('id, room_id, sender_id, expires_at')
@@ -60,7 +61,7 @@ Deno.serve(async (request) => {
       const inviteSenders = (inviteRows ?? []).map((row) => row.sender_id);
       const profileIds = [...new Set([...relationUsers, ...inviteSenders])];
       const { data: profiles, error: profilesError } = profileIds.length
-        ? await admin.from('profiles').select('user_id, display_name, avatar_key, experience, games_played, wins, last_active_at').in('user_id', profileIds)
+        ? await admin.from('profiles').select('user_id, display_name, username, avatar_key, experience, games_played, wins, last_active_at').in('user_id', profileIds)
         : { data: [], error: null };
       if (profilesError) throw profilesError;
       const profileMap = new Map((profiles ?? []).map((profile) => [profile.user_id, profile]));
@@ -96,6 +97,7 @@ Deno.serve(async (request) => {
         return {
           userId: id,
           displayName: profile?.display_name ?? 'Oyuncu',
+          username: profile?.username ?? '',
           avatarKey: profile?.avatar_key ?? 'emerald',
           level: Math.floor(Math.sqrt(Math.max(0, profile?.experience ?? 0) / 100)) + 1,
           gamesPlayed: profile?.games_played ?? 0,
@@ -127,16 +129,68 @@ Deno.serve(async (request) => {
         }] : [];
       });
 
-      return { friendCode: me?.friend_code ?? '', friends, incoming, outgoing, invites };
+      return { friendCode: me?.friend_code ?? '', username: me?.username ?? '', friends, incoming, outgoing, invites };
     };
 
     if (command.type === 'list') return json(await list());
 
+    if (command.type === 'search') {
+      const query = String(command.query ?? '').trim().toLowerCase().replace(/[^a-z0-9._]/g, '').slice(0, 20);
+      if (query.length < 3) return json({ results: [] });
+      const { data: matches, error: searchError } = await admin.from('profiles')
+        .select('user_id, display_name, username, avatar_key, experience, games_played, wins')
+        .neq('user_id', user.id)
+        .gte('username', query)
+        .lt('username', `${query}\uffff`)
+        .order('username')
+        .limit(12);
+      if (searchError) throw searchError;
+
+      const { data: relations, error: relationError } = await admin.from('friendships')
+        .select('user_low, user_high, requested_by, status')
+        .or(`user_low.eq.${user.id},user_high.eq.${user.id}`);
+      if (relationError) throw relationError;
+      const relationMap = new Map((relations ?? []).map((relation) => [
+        relation.user_low === user.id ? relation.user_high : relation.user_low,
+        relation.status === 'accepted'
+          ? 'friend'
+          : relation.requested_by === user.id ? 'outgoing' : 'incoming',
+      ]));
+      const results = (matches ?? [])
+        .sort((a, b) => Number(b.username === query) - Number(a.username === query))
+        .map((profile) => ({
+          userId: profile.user_id,
+          displayName: profile.display_name,
+          username: profile.username,
+          avatarKey: profile.avatar_key,
+          level: Math.floor(Math.sqrt(Math.max(0, profile.experience ?? 0) / 100)) + 1,
+          gamesPlayed: profile.games_played ?? 0,
+          wins: profile.wins ?? 0,
+          // Presence and room codes remain visible only after friendship is accepted.
+          online: false,
+          roomCode: null,
+          relationship: relationMap.get(profile.user_id) ?? null,
+        }));
+      return json({ results });
+    }
+
     if (command.type === 'request') {
-      const friendCode = String(command.friendCode ?? '').trim().toUpperCase();
-      if (!/^[A-F0-9]{8}$/.test(friendCode)) throw new Error('8 karakterlik geçerli bir arkadaş kodu yaz.');
-      const { data: target } = await admin.from('profiles').select('user_id').eq('friend_code', friendCode).maybeSingle();
-      if (!target) throw new Error('Bu arkadaş koduyla bir oyuncu bulunamadı.');
+      let target: { user_id: string } | null = null;
+      if (command.userId) {
+        const userId = String(command.userId);
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId)) {
+          throw new Error('Oyuncu bilgisi geçersiz. Yeniden aramayı dene.');
+        }
+        const result = await admin.from('profiles').select('user_id').eq('user_id', userId).maybeSingle();
+        target = result.data;
+      } else {
+        // Backward compatibility for installed builds that still submit friend codes.
+        const friendCode = String(command.friendCode ?? '').trim().toUpperCase();
+        if (!/^[A-F0-9]{8}$/.test(friendCode)) throw new Error('Geçerli bir kullanıcı seç.');
+        const result = await admin.from('profiles').select('user_id').eq('friend_code', friendCode).maybeSingle();
+        target = result.data;
+      }
+      if (!target) throw new Error('Oyuncu bulunamadı.');
       if (target.user_id === user.id) throw new Error('Kendini arkadaş olarak ekleyemezsin.');
       const [userLow, userHigh] = pair(user.id, target.user_id);
       const { data: existing } = await admin.from('friendships').select('status, requested_by')

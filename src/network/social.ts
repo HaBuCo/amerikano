@@ -1,16 +1,19 @@
 import { useSyncExternalStore } from 'react';
 
 import { supabase } from './supabase';
+import { normalizeUsername } from './usernames';
 
 export type FriendPlayer = {
   userId: string;
   displayName: string;
+  username: string;
   avatarKey: string;
   level: number;
   gamesPlayed: number;
   wins: number;
   online: boolean;
   roomCode: string | null;
+  relationship?: 'friend' | 'incoming' | 'outgoing' | null;
 };
 export type RoomInvite = {
   inviteId: string;
@@ -20,14 +23,16 @@ export type RoomInvite = {
 };
 type SocialData = {
   friendCode: string;
+  username: string;
   friends: FriendPlayer[];
   incoming: FriendPlayer[];
   outgoing: FriendPlayer[];
   invites: RoomInvite[];
 };
-type State = SocialData & { loading: boolean; busy: boolean; error: string; info: string };
+type State = SocialData & { searchResults: FriendPlayer[]; loading: boolean; searching: boolean; busy: boolean; error: string; info: string };
 
-let snapshot: State = { friendCode: '', friends: [], incoming: [], outgoing: [], invites: [], loading: false, busy: false, error: '', info: '' };
+let snapshot: State = { friendCode: '', username: '', friends: [], incoming: [], outgoing: [], invites: [], searchResults: [], loading: false, searching: false, busy: false, error: '', info: '' };
+let searchSequence = 0;
 const listeners = new Set<() => void>();
 const update = (patch: Partial<State>) => {
   snapshot = { ...snapshot, ...patch };
@@ -52,7 +57,7 @@ async function functionError(error: unknown) {
 
 async function invoke(body: Record<string, unknown>) {
   if (!supabase) throw new Error('Supabase bağlantısı yapılandırılmadı.');
-  const { data, error } = await supabase.functions.invoke<SocialData & { social?: SocialData; error?: string }>('social', { body });
+  const { data, error } = await supabase.functions.invoke<SocialData & { social?: SocialData; results?: FriendPlayer[]; error?: string }>('social', { body });
   if (error) throw new Error(await functionError(error));
   if (data?.error) throw new Error(data.error);
   return data;
@@ -72,6 +77,29 @@ export async function refreshSocial(silent = false) {
   }
 }
 
+export async function searchPlayers(rawQuery: string) {
+  const query = normalizeUsername(rawQuery);
+  const sequence = ++searchSequence;
+  if (query.length < 3) {
+    update({ searchResults: [], searching: false, error: '' });
+    return;
+  }
+  update({ searching: true, error: '', info: '' });
+  try {
+    const result = await invoke({ type: 'search', query });
+    if (sequence !== searchSequence) return;
+    update({ searchResults: result?.results ?? [], searching: false });
+  } catch (error) {
+    if (sequence !== searchSequence) return;
+    update({ searchResults: [], searching: false, error: error instanceof Error ? error.message : 'Oyuncu aranamadı.' });
+  }
+}
+
+export function clearPlayerSearch() {
+  searchSequence += 1;
+  update({ searchResults: [], searching: false });
+}
+
 async function mutate(body: Record<string, unknown>, info: string) {
   if (snapshot.busy) return false;
   update({ busy: true, error: '', info: '' });
@@ -86,8 +114,8 @@ async function mutate(body: Record<string, unknown>, info: string) {
   }
 }
 
-export const requestFriend = (friendCode: string) => mutate({ type: 'request', friendCode }, 'Arkadaşlık isteği gönderildi.');
+export const requestFriend = (userId: string) => mutate({ type: 'request', userId }, 'Arkadaşlık isteği gönderildi.');
 export const respondFriend = (userId: string, accept: boolean) => mutate({ type: 'respond', userId, accept }, accept ? 'Arkadaşlık isteği kabul edildi.' : 'İstek reddedildi.');
-export const removeFriend = (userId: string) => mutate({ type: 'remove', userId }, 'Arkadaş kaldırıldı.');
+export const removeFriend = (userId: string, info = 'Arkadaş kaldırıldı.') => mutate({ type: 'remove', userId }, info);
 export const inviteFriend = (userId: string, roomCode: string) => mutate({ type: 'invite', userId, roomCode }, 'Masa daveti gönderildi.');
 export const dismissInvite = (inviteId: string) => mutate({ type: 'dismiss-invite', inviteId }, 'Davet kapatıldı.');

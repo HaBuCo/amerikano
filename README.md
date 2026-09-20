@@ -46,7 +46,7 @@ EAS ortamına eklenmeli hem de `app.json` içindeki Google URL şemasına yazıl
 - Kart çekme, ortaya atma, görev açma, gruba işleme ve joker değiştirme için doğrudan sürükle-bırak masa hareketleri
 - Mobil bellek kullanımı için 300×420 boyutuna optimize edilmiş kart görselleri ve hafif masa gölgeleri
 - Kalıcı oyuncu adı, avatar, seviye, maç ve galibiyet istatistikleri
-- Arkadaş kodu, arkadaşlık istekleri, çevrim içi durumu, açık arkadaş masasına katılma ve 10 dakikalık masa davetleri
+- Benzersiz kullanıcı adıyla oyuncu arama, arkadaşlık istekleri, çevrim içi durumu, açık arkadaş masasına katılma ve 10 dakikalık masa davetleri
 - Hemen Oyna ile en eski uygun açık masayı dolduran, gerekirse geçici yeni masa oluşturan hızlı eşleşme
 - Çevrim içi masaya otomatik dönüş, bağlantı durumu ve sunucu kontrollü 45 saniyelik sıra süresi
 - Maç sonunda aynı oyuncularla tek dokunuşla yeniden oynama

@@ -148,3 +148,45 @@ test('three real clients: rooms, authority, privacy, deduplication, reconnect an
   const completed = await afterRestart.room(r => r.game?.phase === 'play' && !r.game.claim);
   assert.equal(completed.game!.handCounts[claimant.room.you], 16);
 });
+
+test('online room host can add and remove server-controlled bot seats', { timeout: 20000 }, async t => {
+  const port = randomInt(29001, 39000);
+  const data = join(mkdtempSync(join(tmpdir(), 'amerikano-bot-test-')), 'rooms.sqlite');
+  const server = spawn(process.execPath, ['server/index.ts'], {
+    cwd: process.cwd(), env: { ...process.env, PORT: String(port), ROOM_DB: data }, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Server startup timeout')), 8000);
+    server.stdout!.on('data', chunk => { if (String(chunk).includes('Amerikano rooms:')) { clearTimeout(timeout); resolve(); } });
+    server.once('error', reject);
+    server.once('exit', code => { clearTimeout(timeout); if (code) reject(new Error('Server exited ' + code)); });
+  });
+  const host = new Peer(port);
+  t.after(async () => {
+    host.ws.terminate();
+    if (server.exitCode === null) { const exited = once(server, 'exit'); server.kill(); await exited; }
+  });
+  await once(host.ws, 'open');
+  host.send({ type: 'create', name: 'Ayşe' });
+  await host.wait(message => message.type === 'session');
+
+  host.send({ type: 'add-bot' });
+  const withBot = await host.room(room => room.members.length === 2 && room.members.some(member => member.isBot));
+  const bot = withBot.members.find(member => member.isBot)!;
+  assert.doesNotMatch(bot.name, /bot/i);
+  assert.ok(bot.name.length > 1);
+  assert.equal(bot.ready, true);
+  assert.equal(bot.connected, true);
+  assert.equal(bot.botControlled, true);
+
+  host.send({ type: 'remove-bot' });
+  const withoutBot = await host.room(room => room.revision > withBot.revision && room.members.length === 1);
+  host.send({ type: 'add-bot' });
+  const ready = await host.room(room => room.revision > withoutBot.revision && room.members.length === 2 && room.members.some(member => member.isBot));
+  const activeBotId = ready.members.find(member => member.isBot)!.id;
+  host.send({ type: 'start' });
+  const started = await host.room(room => !!room.game);
+  assert.ok(started.game!.players.some(player => player.id === activeBotId));
+  assert.ok(started.game!.botControlledPlayerIds?.includes(activeBotId));
+  assert.equal(started.game!.players.find(player => player.id === activeBotId)!.hand.length, 0);
+});

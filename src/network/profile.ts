@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 import { supabase } from './supabase';
+import { normalizeUsername, usernameError } from './usernames';
 
 export const AVATAR_OPTIONS = [
   { key: 'emerald', color: '#2d8b65', symbol: 'A' },
@@ -15,6 +16,7 @@ export type AvatarKey = (typeof AVATAR_OPTIONS)[number]['key'];
 export type PlayerProfile = {
   userId: string;
   displayName: string;
+  username: string;
   avatarKey: AvatarKey;
   friendCode: string;
   experience: number;
@@ -42,6 +44,7 @@ function mapProfile(row: Record<string, unknown>): PlayerProfile {
   return {
     userId: String(row.user_id),
     displayName: String(row.display_name || 'Oyuncu'),
+    username: String(row.username || ''),
     avatarKey: AVATAR_OPTIONS.some((avatar) => avatar.key === row.avatar_key)
       ? row.avatar_key as AvatarKey : 'emerald',
     friendCode: String(row.friend_code || ''),
@@ -71,7 +74,7 @@ export function refreshPlayerProfile() {
 
     const session = await ensureSession();
     const { data, error } = await supabase!.from('profiles')
-      .select('user_id, display_name, avatar_key, friend_code, experience, games_played, wins')
+      .select('user_id, display_name, username, avatar_key, friend_code, experience, games_played, wins')
       .eq('user_id', session.user.id).maybeSingle();
     if (error) throw error;
     const profile = data ? mapProfile(data) : cached;
@@ -85,17 +88,20 @@ export function refreshPlayerProfile() {
   return loading;
 }
 
-export async function savePlayerProfile(displayName: string, avatarKey: AvatarKey) {
+export async function savePlayerProfile(displayName: string, username: string, avatarKey: AvatarKey) {
   const cleanName = displayName.trim();
+  const cleanUsername = normalizeUsername(username);
   if (!cleanName || cleanName.length > 18) throw new Error('Oyuncu adı 1–18 karakter olmalı.');
+  const usernameValidation = usernameError(cleanUsername);
+  if (usernameValidation) throw new Error(usernameValidation);
   if (!AVATAR_OPTIONS.some((avatar) => avatar.key === avatarKey)) throw new Error('Avatar geçersiz.');
   update({ saving: true, error: '' });
   try {
     const session = await ensureSession();
     const { data, error } = await supabase!.from('profiles')
-      .update({ display_name: cleanName, avatar_key: avatarKey })
+      .update({ display_name: cleanName, username: cleanUsername, avatar_key: avatarKey })
       .eq('user_id', session.user.id)
-      .select('user_id, display_name, avatar_key, friend_code, experience, games_played, wins')
+      .select('user_id, display_name, username, avatar_key, friend_code, experience, games_played, wins')
       .single();
     if (error) throw error;
     const profile = mapProfile(data);
@@ -103,9 +109,16 @@ export async function savePlayerProfile(displayName: string, avatarKey: AvatarKe
     update({ profile, saving: false, error: '' });
     return profile;
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Profil kaydedilemedi.';
+    const rawMessage = error instanceof Error
+      ? error.message
+      : error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : 'Profil kaydedilemedi.';
+    const message = /profiles_username_idx|duplicate key/i.test(rawMessage)
+      ? 'Bu kullanıcı adı alınmış. Başka bir tane dene.'
+      : rawMessage;
     update({ saving: false, error: message });
-    throw error;
+    throw new Error(message);
   }
 }
 

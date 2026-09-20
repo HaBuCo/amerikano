@@ -9,8 +9,9 @@ import { botAction } from '../src/game/bot.ts';
 import { projectGame } from '../src/game/view.ts';
 import type { GameState } from '../src/game/types.ts';
 import type { ClientMessage, ServerMessage } from '../src/network/types.ts';
+import { pickOpponentNames } from '../src/game/opponent-names.ts';
 
-type Member = { id: string; name: string; token: string; ready: boolean };
+type Member = { id: string; name: string; token: string; ready: boolean; bot?: boolean };
 type Room = { ruleset: string; code: string; hostId: string; members: Member[]; game: GameState | null; revision: number; updated: number; requests: string[] };
 const port = Number(process.env.PORT || 8090);
 const dbPath = process.env.ROOM_DB || 'work/rooms.sqlite';
@@ -46,6 +47,12 @@ function advanceBots(state: GameState) {
   }
   return current;
 }
+function createRoomGame(members: Member[]) {
+  let game = createGame(members.map(member => member.name), secureRandom);
+  game.players = game.players.map((player, index) => ({ ...player, id: members[index].id }));
+  game = { ...game, botControlledPlayerIds: members.filter(member => member.bot).map(member => member.id) };
+  return advanceBots(armTurnTimer(game));
+}
 function publish(room: Room) {
   for (const [ws, s] of sockets) {
     if (s.code !== room.code) continue;
@@ -53,14 +60,14 @@ function publish(room: Room) {
       code: room.code, hostId: room.hostId, you: s.id, revision: room.revision,
       status: !room.game ? 'waiting' : room.game.phase === 'game-over' ? 'finished' : 'playing',
       visibility: 'private',
-      members: room.members.map(m => ({ id: m.id, name: m.name, ready: m.ready, connected: connected(room.code, m.id), avatarKey: 'emerald', level: 1, gamesPlayed: 0, wins: 0, missedTurns: room.game?.missedTurns?.[m.id] ?? 0, botControlled: room.game?.botControlledPlayerIds?.includes(m.id) ?? false })),
+      members: room.members.map(m => ({ id: m.id, name: m.name, ready: m.ready, connected: !!m.bot || connected(room.code, m.id), avatarKey: m.bot ? 'gold' : 'emerald', level: 1, gamesPlayed: 0, wins: 0, missedTurns: room.game?.missedTurns?.[m.id] ?? 0, botControlled: !!m.bot || (room.game?.botControlledPlayerIds?.includes(m.id) ?? false), isBot: !!m.bot })),
       game: room.game ? projectGame(room.game, s.id) : null,
     } });
   }
 }
 function promote(room: Room) {
   if (!connected(room.code, room.hostId)) {
-    room.hostId = room.members.find(m => connected(room.code, m.id))?.id ?? room.hostId;
+    room.hostId = room.members.find(m => !m.bot && connected(room.code, m.id))?.id ?? room.hostId;
   }
 }
 function expireRoomTurn(room: Room) {
@@ -147,17 +154,27 @@ wss.on('connection', (ws, req) => {
       if (msg.type === 'ready') {
         if (room.game || typeof msg.ready !== 'boolean') throw new Error('Hazırlık aşaması bitti.');
         room.members.find(m => m.id === session.id)!.ready = msg.ready;
+      } else if (msg.type === 'add-bot') {
+        if (room.hostId !== session.id) throw new Error('Yapay oyuncuları yalnızca oda sahibi değiştirebilir.');
+        if (room.game) throw new Error('Oyun başladıktan sonra yapay oyuncu eklenemez.');
+        if (room.members.length >= 6) throw new Error('Oda dolu (6 oyuncu).');
+        const opponentName = pickOpponentNames(1, secureRandom, room.members.map(member => member.name))[0] ?? 'Misafir';
+        room.members.push({ id: randomUUID(), name: opponentName, token: randomBytes(32).toString('hex'), ready: true, bot: true });
+      } else if (msg.type === 'remove-bot') {
+        if (room.hostId !== session.id) throw new Error('Yapay oyuncuları yalnızca oda sahibi değiştirebilir.');
+        if (room.game) throw new Error('Oyun başladıktan sonra yapay oyuncu çıkarılamaz.');
+        const botIndex = room.members.map(member => !!member.bot).lastIndexOf(true);
+        if (botIndex < 0) throw new Error('Masada çıkarılacak yapay oyuncu yok.');
+        room.members.splice(botIndex, 1);
       } else if (msg.type === 'start') {
         if (room.hostId !== session.id) throw new Error('Oyunu oda sahibi başlatabilir.');
         if (room.game) throw new Error('Oyun zaten başladı.');
-        if (room.members.length < MIN_GAME_PLAYERS || room.members.some(m => !m.ready || !connected(room.code, m.id))) throw new Error('En az 2 oyuncu bağlı ve hazır olmalı.');
-        room.game = armTurnTimer(createGame(room.members.map(m => m.name), secureRandom));
-        room.game.players = room.game.players.map((p, i) => ({ ...p, id: room.members[i].id }));
+        if (room.members.length < MIN_GAME_PLAYERS || room.members.some(m => !m.ready || (!m.bot && !connected(room.code, m.id)))) throw new Error('En az 2 oyuncu bağlı ve hazır olmalı.');
+        room.game = createRoomGame(room.members);
       } else if (msg.type === 'rematch') {
         if (room.hostId !== session.id && !room.game?.botControlledPlayerIds?.includes(room.hostId)) throw new Error('Yeni maçı oda sahibi başlatabilir.');
         if (room.game?.phase !== 'game-over') throw new Error('Maç henüz tamamlanmadı.');
-        room.game = armTurnTimer(createGame(room.members.map(m => m.name), secureRandom));
-        room.game.players = room.game.players.map((p, i) => ({ ...p, id: room.members[i].id }));
+        room.game = createRoomGame(room.members);
       } else if (msg.type === 'reclaim') {
         if (!room.game) throw new Error('Oyun henüz başlamadı.');
         const next = reclaimBotSeat(room.game, session.id);
@@ -170,7 +187,7 @@ wss.on('connection', (ws, req) => {
         if (room.requests.includes(requestKey)) { publish(room); return; }
         if (msg.revision !== room.revision) { publish(room); throw new Error('Masa güncellendi; hamleni yeniden seç.'); }
         if (msg.action.type === 'next' && room.hostId !== session.id && !room.game.botControlledPlayerIds?.includes(room.hostId)) throw new Error('Sonraki eli oda sahibi başlatır.');
-        if (room.game.botControlledPlayerIds?.includes(session.id)) throw new Error('Önce koltuğunu bottan geri al.');
+        if (room.game.botControlledPlayerIds?.includes(session.id)) throw new Error('Önce koltuğunu geri al.');
         const next = applyAction(room.game, session.id, msg.action, secureRandom);
         if (next === room.game) throw new Error('Hamle geçersiz: sıranı, kartlarını ve el görevini kontrol et.');
         room.game = advanceBots(armTurnTimer(resetMissedTurns(next, session.id)));

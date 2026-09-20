@@ -102,6 +102,33 @@ test('discarding a playable table card adds 25 points even before opening', () =
   assert.equal(safelyDiscarded.lastPenalty, undefined);
 });
 
+test('single-player rule options disable claims, playable-card penalties and opening Joker restriction', () => {
+  const noClaim = createGame(['a', 'b', 'c'], () => 0, { claimsEnabled: false });
+  noClaim.phase = 'draw';
+  const drawn = applyAction(noClaim, actingPlayerId(noClaim), { type: 'draw', source: 'stock' });
+  assert.equal(drawn.phase, 'play');
+  assert.equal(drawn.claim, undefined);
+
+  const noPenalty = stateWithHand([c('7', 'diamonds'), c('A')]);
+  noPenalty.rules = { ...noPenalty.rules!, playableDiscardPenalty: false };
+  noPenalty.melds = [{ id: 'm', type: 'set', cards: [c('7'), c('7', 'clubs'), c('7', 'spades')], ownerId: 'player-2' }];
+  const discarded = applyAction(noPenalty, 'player-1', { type: 'discard', cardId: '7diamonds' });
+  assert.equal(discarded.players[0].score, 0);
+  assert.equal(discarded.lastPenalty, undefined);
+
+  const jokerAllowed = stateWithHand([c('7'), c('7', 'clubs'), j, c('A')]);
+  jokerAllowed.rules = { ...jokerAllowed.rules!, jokerOpeningRestriction: false };
+  const opened = applyAction(jokerAllowed, 'player-1', { type: 'open', groups: [{ type: 'set', cardIds: ['7hearts', '7clubs', 'j'], jokerAssignments: { j: 'diamonds' } }] });
+  assert.notEqual(opened, jokerAllowed);
+});
+
+test('a configured contract sequence controls short-game completion', () => {
+  const state = createGame(['a', 'b', 'c'], () => 0, { contractSequence: [0, 4, 11] });
+  state.roundIndex = 2;
+  state.phase = 'round-over';
+  assert.equal(nextRound(state).phase, 'game-over');
+});
+
 test('an exact joker replacement is playable and its discard penalty survives winning the hand', () => {
   const s = stateWithHand([c('10', 'spades')]);
   s.players[0].hasOpened = true;
@@ -256,7 +283,15 @@ test('penalty claim has priority, adds two cards and does not consume claimant t
   assert.equal(passed.stock.length, s.stock.length - 1);
 });
 
-test('a player is never offered their own discard', () => {
+test('two-player games skip claims and a player is never offered their own discard', () => {
+  const openingTwoPlayerDraw = applyAction(
+    { ...fixedGame(['a', 'b']), phase: 'draw' as const },
+    'player-1',
+    { type: 'draw', source: 'stock' },
+  );
+  assert.equal(openingTwoPlayerDraw.phase, 'play');
+  assert.equal(openingTwoPlayerDraw.claim, undefined);
+
   const initial = fixedGame(['a', 'b']);
   const discarded = applyAction(initial, 'player-1', { type: 'discard', cardId: initial.players[0].hand[0].id });
   assert.equal(discarded.currentPlayerIndex, 1);

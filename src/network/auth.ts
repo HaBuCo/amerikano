@@ -1,6 +1,9 @@
 import type { Session, User } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as Crypto from 'expo-crypto';
 import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import { useSyncExternalStore } from 'react';
 import { Platform } from 'react-native';
 
@@ -8,7 +11,7 @@ import { parseAuthLink } from './auth-links';
 import { isSupabaseConfigured, supabase } from './supabase';
 
 type State = {
-  status: 'loading' | 'signed-out' | 'signed-in';
+  status: 'loading' | 'signed-out' | 'anonymous' | 'signed-in';
   user: User | null;
   busy: boolean;
   error: string;
@@ -31,7 +34,8 @@ const subscribe = (listener: () => void) => {
 export const useAuth = () => useSyncExternalStore(subscribe, () => snapshot, () => snapshot);
 
 function statusFor(session: Session | null): State['status'] {
-  if (!session || session.user.is_anonymous) return 'signed-out';
+  if (!session) return 'signed-out';
+  if (session.user.is_anonymous) return 'anonymous';
   return 'signed-in';
 }
 
@@ -54,9 +58,25 @@ if (supabase) {
 const configuredValue = (value: string | undefined) => Boolean(value && !value.startsWith('REPLACE_WITH') && !value.includes('placeholder'));
 export const googleSignInConfigured = configuredValue(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID)
   && (Platform.OS !== 'ios' || configuredValue(process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID));
+export const googleNativeSignInAvailable = Platform.OS !== 'web'
+  && Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
 
 function redirectTo(flow: 'signup' | 'upgrade' | 'recovery') {
   return Linking.createURL('login', { queryParams: { flow } });
+}
+
+async function signInWithBrowserOAuth(provider: 'google' | 'apple') {
+  const { data: sessionData, error: sessionError } = await supabase!.auth.getSession();
+  if (sessionError) throw sessionError;
+  const redirectUrl = redirectTo(sessionData.session?.user.is_anonymous ? 'upgrade' : 'signup');
+  const credentials = { provider, options: { redirectTo: redirectUrl, skipBrowserRedirect: true } };
+  const { data, error } = sessionData.session?.user.is_anonymous
+    ? await supabase!.auth.linkIdentity(credentials)
+    : await supabase!.auth.signInWithOAuth(credentials);
+  if (error) throw error;
+  if (!data.url) throw new Error('Giriş bağlantısı oluşturulamadı.');
+  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+  if (result.type === 'success') await handleAuthLink(result.url);
 }
 
 function authErrorMessage(error: unknown) {
@@ -124,6 +144,19 @@ export function signInWithEmail(email: string, password: string) {
   });
 }
 
+export function continueAnonymously() {
+  return run(async () => {
+    const { data: sessionData, error: sessionError } = await supabase!.auth.getSession();
+    if (sessionError) throw sessionError;
+    if (sessionData.session?.user.is_anonymous) {
+      update({ status: 'anonymous', user: sessionData.session.user });
+      return;
+    }
+    const { data, error } = await supabase!.auth.signInAnonymously();
+    if (error || !data.session) throw error ?? new Error('Misafir oturumu oluşturulamadı.');
+  });
+}
+
 export function signUpWithEmail(email: string, password: string) {
   return run(async () => {
     const normalizedEmail = email.trim();
@@ -170,7 +203,10 @@ export function updatePassword(password: string) {
 
 export function signInWithApple() {
   return run(async () => {
-    if (Platform.OS !== 'ios') throw new Error('Apple ile giriş yalnızca iOS cihazlarda kullanılabilir.');
+    if (Platform.OS !== 'ios') {
+      await signInWithBrowserOAuth('apple');
+      return;
+    }
     const AppleAuthentication = await import('expo-apple-authentication');
     const nonce = Crypto.randomUUID();
     let credential;
@@ -205,6 +241,10 @@ export function signInWithGoogle() {
     const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
     if (!googleSignInConfigured || !webClientId) {
       throw new Error('Google girişi henüz yapılandırılmadı.');
+    }
+    if (!googleNativeSignInAvailable) {
+      await signInWithBrowserOAuth('google');
+      return;
     }
     const { GoogleSignin, isSuccessResponse } = await import('@react-native-google-signin/google-signin');
     GoogleSignin.configure({ webClientId, iosClientId: iosClientId || undefined });
@@ -266,6 +306,12 @@ export function deleteAccount() {
         await GoogleSignin.revokeAccess();
       } catch { /* The server-side account deletion has already succeeded. */ }
     }
+    const localKeys = await AsyncStorage.getAllKeys();
+    const accountKeys = localKeys.filter((key) => key === 'amerikano-player-profile-v1'
+      || key === 'amerikano-supabase-room-v1'
+      || key.startsWith('amerikano:single:')
+      || key.startsWith('amerikano-hand-order-v1:'));
+    if (accountKeys.length) await AsyncStorage.multiRemove(accountKeys);
     await supabase!.auth.signOut({ scope: 'local' });
     update({ status: 'signed-out', user: null, recovery: false, info: 'Hesabın ve profil verilerin silindi.' });
   });

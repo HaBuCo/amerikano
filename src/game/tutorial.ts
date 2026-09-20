@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const TUTORIAL_KEY = 'amerikano:first-game-tutorial:v1';
+const TUTORIAL_KEY = 'amerikano:first-game-tutorial:v2';
 
 export async function hasSeenFirstGameTutorial() {
   try {

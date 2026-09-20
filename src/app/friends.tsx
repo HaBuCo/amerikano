@@ -1,25 +1,37 @@
 import { useEffect, useState } from 'react';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { palette as p } from '@/constants/palette';
 import { connectRoom, enterRoom, leaveWaitingRoom, useRoom } from '@/network/client';
 import { avatarFor, refreshPlayerProfile } from '@/network/profile';
-import { dismissInvite, FriendPlayer, inviteFriend, refreshSocial, requestFriend, respondFriend, useSocial } from '@/network/social';
+import { clearPlayerSearch, dismissInvite, FriendPlayer, inviteFriend, refreshSocial, removeFriend, requestFriend, respondFriend, searchPlayers, useSocial } from '@/network/social';
+import { normalizeUsername } from '@/network/usernames';
 
 export default function FriendsScreen() {
   const { roomCode } = useLocalSearchParams<{ roomCode?: string }>();
   const social = useSocial();
   const roomState = useRoom();
-  const [code, setCode] = useState('');
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
-    void connectRoom();
-    void refreshSocial();
+    // A first-time player may not have a Supabase session yet. Wait for the
+    // anonymous/authenticated session before invoking the protected function.
+    void connectRoom().then(() => refreshSocial());
     const timer = setInterval(() => { void refreshSocial(true); }, 30_000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const normalized = normalizeUsername(query);
+    if (normalized.length < 3) {
+      clearPlayerSearch();
+      return;
+    }
+    const timer = setTimeout(() => { void searchPlayers(normalized); }, 300);
+    return () => clearTimeout(timer);
+  }, [query]);
 
   const joinRoom = async (targetCode: string) => {
     if (roomState.room?.game && roomState.room.status === 'playing') return;
@@ -34,8 +46,22 @@ export default function FriendsScreen() {
     if (joined) router.replace('/online');
   };
 
-  const addFriend = async () => {
-    if (await requestFriend(code)) setCode('');
+  const addFriend = async (userId: string) => {
+    if (await requestFriend(userId)) {
+      setQuery('');
+      clearPlayerSearch();
+    }
+  };
+
+  const confirmRemove = (player: FriendPlayer) => {
+    Alert.alert(
+      'Arkadaş kaldırılsın mı?',
+      `${player.displayName} arkadaş listenden kaldırılacak.`,
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        { text: 'Kaldır', style: 'destructive', onPress: () => { void removeFriend(player.userId); } },
+      ],
+    );
   };
 
   return <SafeAreaView style={s.page}>
@@ -47,16 +73,25 @@ export default function FriendsScreen() {
       <Text style={s.body}>{roomCode ? 'Arkadaşların daveti alır ve tek dokunuşla bekleyen masaya oturur.' : 'Arkadaş ekle, çevrim içi olduklarını gör ve açık masalarına katıl.'}</Text>
 
       <View style={s.codePanel}>
-        <View><Text style={s.label}>ARKADAŞ KODUN</Text><Text selectable style={s.ownCode}>{social.friendCode || '••••••••'}</Text></View>
-        <Pressable disabled={!social.friendCode} onPress={() => void Share.share({ message: `Amerikano arkadaş kodum: ${social.friendCode}` })}><Text style={s.link}>Paylaş ↗</Text></Pressable>
+        <View><Text style={s.label}>KULLANICI ADIN</Text><Text selectable style={s.ownCode}>@{social.username || 'hazırlanıyor'}</Text></View>
+        <Pressable disabled={!social.username} onPress={() => void Share.share({ message: `Amerikano'da beni ekle: @${social.username}` })}><Text style={s.link}>Paylaş ↗</Text></Pressable>
       </View>
 
-      <Text style={s.label}>ARKADAŞ EKLE</Text>
-      <View style={s.addRow}>
-        <TextInput accessibilityLabel="Arkadaş kodu" autoCapitalize="characters" autoCorrect={false} maxLength={8} value={code}
-          onChangeText={(value) => setCode(value.toUpperCase().replace(/[^A-F0-9]/g, ''))} placeholder="8 HANELİ KOD" placeholderTextColor={p.muted} style={s.input} />
-        <Pressable disabled={code.length !== 8 || social.busy} onPress={() => void addFriend()} style={[s.addButton, (code.length !== 8 || social.busy) && s.disabled]}><Text style={s.addButtonText}>Ekle</Text></Pressable>
-      </View>
+      <Text style={s.label}>KULLANICI ADIYLA ARA</Text>
+      <TextInput accessibilityLabel="Kullanıcı adıyla arkadaş ara" autoCapitalize="none" autoCorrect={false} maxLength={20} value={query}
+        onChangeText={(value) => setQuery(normalizeUsername(value))} placeholder="@kullaniciadi" placeholderTextColor={p.muted} style={s.input} />
+      {query.length > 0 && query.length < 3 && <Text style={s.searchHint}>Aramak için en az 3 karakter yaz.</Text>}
+      {social.searching && <Text style={s.searchHint}>Oyuncular aranıyor…</Text>}
+      {query.length >= 3 && !social.searching && social.searchResults.length === 0 && !social.error && <Text style={s.searchHint}>Bu kullanıcı adıyla eşleşen oyuncu bulunamadı.</Text>}
+      {social.searchResults.length > 0 && <Section title="ARAMA SONUÇLARI">{social.searchResults.map((player) => <PlayerRow key={player.userId} player={player}
+        detail={`@${player.username} · Sv. ${player.level}`}
+        actions={player.relationship === 'friend'
+          ? <SmallButton label="Arkadaşın" disabled onPress={() => {}} />
+          : player.relationship === 'outgoing'
+            ? <SmallButton label="İstek gönderildi" disabled onPress={() => {}} />
+            : player.relationship === 'incoming'
+              ? <SmallButton label="Kabul et" filled disabled={social.busy} onPress={() => void respondFriend(player.userId, true)} />
+              : <SmallButton label="Ekle" filled disabled={social.busy} onPress={() => void addFriend(player.userId)} />} />)}</Section>}
 
       {!!social.error && <Text style={s.error}>{social.error}</Text>}
       {!!social.info && <Text style={s.success}>{social.info}</Text>}
@@ -67,23 +102,27 @@ export default function FriendsScreen() {
           <SmallButton label="Kapat" onPress={() => void dismissInvite(invite.inviteId)} />
         </>} />)}</Section>}
 
-      {social.incoming.length > 0 && <Section title="GELEN İSTEKLER">{social.incoming.map((player) => <PlayerRow key={player.userId} player={player} detail="Arkadaşlık isteği gönderdi" actions={<>
+      {social.incoming.length > 0 && <Section title="GELEN İSTEKLER">{social.incoming.map((player) => <PlayerRow key={player.userId} player={player} detail={`@${player.username} · Arkadaşlık isteği gönderdi`} actions={<>
         <SmallButton label="Kabul" filled onPress={() => void respondFriend(player.userId, true)} />
         <SmallButton label="Reddet" onPress={() => void respondFriend(player.userId, false)} />
       </>} />)}</Section>}
 
       <Section title={`ARKADAŞLAR · ${social.friends.length}`}>
-        {social.friends.length === 0 && !social.loading ? <Text style={s.empty}>Henüz arkadaşın yok. Kodunu paylaşarak ilk masanı kurabilirsin.</Text> : null}
+        {social.friends.length === 0 && !social.loading ? <Text style={s.empty}>Henüz arkadaşın yok. Kullanıcı adıyla arayarak ilk arkadaşını ekleyebilirsin.</Text> : null}
         {social.friends.map((player) => <PlayerRow key={player.userId} player={player}
-          detail={`${player.online ? '● Çevrim içi' : '○ Çevrim dışı'} · Sv. ${player.level} · ${player.wins}/${player.gamesPlayed} galibiyet`}
-          actions={roomCode
-            ? <SmallButton label="Davet et" filled disabled={social.busy} onPress={() => void inviteFriend(player.userId, roomCode)} />
-            : player.roomCode
-              ? <SmallButton label="Masaya otur" filled disabled={roomState.room?.status === 'playing'} onPress={() => void joinRoom(player.roomCode!)} />
-              : undefined} />)}
+          detail={`@${player.username} · ${player.online ? '● Çevrim içi' : '○ Çevrim dışı'} · Sv. ${player.level} · ${player.wins}/${player.gamesPlayed} galibiyet`}
+          actions={<>
+            {roomCode
+              ? <SmallButton label="Davet et" filled disabled={social.busy} onPress={() => void inviteFriend(player.userId, roomCode)} />
+              : player.roomCode
+                ? <SmallButton label="Masaya otur" filled disabled={roomState.room?.status === 'playing'} onPress={() => void joinRoom(player.roomCode!)} />
+                : null}
+            <SmallButton label="Kaldır" disabled={social.busy} onPress={() => confirmRemove(player)} />
+          </>} />)}
       </Section>
 
-      {social.outgoing.length > 0 && <Section title="BEKLEYEN İSTEKLER">{social.outgoing.map((player) => <PlayerRow key={player.userId} player={player} detail="İstek gönderildi" />)}</Section>}
+      {social.outgoing.length > 0 && <Section title="BEKLEYEN İSTEKLER">{social.outgoing.map((player) => <PlayerRow key={player.userId} player={player} detail={`@${player.username} · İstek gönderildi`}
+        actions={<SmallButton label="İptal et" disabled={social.busy} onPress={() => void removeFriend(player.userId, 'Arkadaşlık isteği iptal edildi.')} />} />)}</Section>}
       {social.loading && <Text style={s.empty}>Arkadaşların yükleniyor…</Text>}
       {roomState.room?.status === 'playing' && <Text style={s.note}>Devam eden oyun varken başka bir masaya geçemezsin.</Text>}
     </ScrollView>
@@ -117,8 +156,8 @@ const s = StyleSheet.create({
   title: { color: p.cream, fontSize: 34, lineHeight: 40, fontWeight: '800' }, body: { color: p.muted, fontSize: 15, lineHeight: 22 }, label: { color: p.gold, fontSize: 10, letterSpacing: 2, fontWeight: '800' },
   codePanel: { borderWidth: 1, borderColor: p.line, borderRadius: 15, padding: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   ownCode: { color: p.cream, fontSize: 23, fontWeight: '900', letterSpacing: 4, marginTop: 7 }, link: { color: p.gold, fontWeight: '700', padding: 8 },
-  addRow: { flexDirection: 'row', gap: 9 }, input: { flex: 1, minHeight: 52, borderRadius: 12, borderWidth: 1, borderColor: p.line, color: p.cream, backgroundColor: '#ffffff08', paddingHorizontal: 15, letterSpacing: 2 },
-  addButton: { minWidth: 78, borderRadius: 12, backgroundColor: p.gold, alignItems: 'center', justifyContent: 'center' }, addButtonText: { color: p.ink, fontWeight: '900' }, disabled: { opacity: 0.4 },
+  input: { minHeight: 52, borderRadius: 12, borderWidth: 1, borderColor: p.line, color: p.cream, backgroundColor: '#ffffff08', paddingHorizontal: 15, fontSize: 16 },
+  searchHint: { color: p.muted, fontSize: 12, lineHeight: 18 }, disabled: { opacity: 0.4 },
   section: { gap: 9, marginTop: 8 }, playerRow: { borderWidth: 1, borderColor: p.line, borderRadius: 14, padding: 13, gap: 12 },
   playerMain: { flexDirection: 'row', alignItems: 'center', gap: 11 }, avatar: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }, avatarText: { color: '#fff', fontWeight: '900', fontSize: 17 },
   playerCopy: { flex: 1 }, playerName: { color: p.cream, fontSize: 15, fontWeight: '800' }, playerDetail: { color: p.muted, fontSize: 11, marginTop: 4 }, online: { color: '#9bd5b5' },

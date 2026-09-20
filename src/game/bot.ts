@@ -1,5 +1,5 @@
-import { ROUND_CONTRACTS } from './contracts.ts';
 import { actingPlayerId, applyAction, assignSetJokers, cardPoints, isPlayableDiscard, isValidMeld } from './engine.ts';
+import { contractForRound, openingJokerRestricted, rulesForGame } from './game-rules.ts';
 import { RANKS, SUITS } from './types.ts';
 import type { Card, GameAction, GameState, MeldType } from './types.ts';
 
@@ -52,9 +52,9 @@ export function candidates(hand: Card[]): Group[] {
 
 export function findOpening(state: GameState): Group[] {
   const p = state.players[state.currentPlayerIndex];
-  const contract = ROUND_CONTRACTS[state.roundIndex];
+  const contract = contractForRound(state);
   const groups = candidates(p.hand).filter(g =>
-    state.roundIndex >= 5 || !g.cardIds.some(id => p.hand.find(c => c.id === id)!.isJoker));
+    !openingJokerRestricted(state) || !g.cardIds.some(id => p.hand.find(c => c.id === id)!.isJoker));
   let budget = 30000;
   if (contract.final) {
     const dead = new Set<string>();
@@ -171,13 +171,16 @@ function bestJokerReplacement(state: GameState, playerId: string, hand: Card[]):
 
 export function botAction(state: GameState): GameAction | null {
   const p = state.players.find(p => p.id === actingPlayerId(state))!;
+  const difficulty = rulesForGame(state).botDifficulty;
   if (state.phase === 'claim') {
     const top = state.discard.at(-1);
-    return { type: 'claim', take: Boolean(top && p.hand.length < 18 && (top.isJoker || usefulness(top, p.hand) >= 20)) };
+    const claimThreshold = difficulty === 'easy' ? 30 : difficulty === 'hard' ? 14 : 20;
+    return { type: 'claim', take: Boolean(top && p.hand.length < 18 && (top.isJoker || usefulness(top, p.hand) >= claimThreshold)) };
   }
   if (state.phase === 'draw') {
     const top = state.discard.at(-1);
-    const source = top && (top.isJoker || usefulness(top, p.hand) >= 12) ? 'discard' : 'stock';
+    const drawThreshold = difficulty === 'easy' ? 20 : difficulty === 'hard' ? 8 : 12;
+    const source = top && (top.isJoker || usefulness(top, p.hand) >= drawThreshold) ? 'discard' : 'stock';
     return { type: 'draw', source: state.stock.length === 0 && state.discard.length <= 1 ? 'discard' : source };
   }
   if (state.phase !== 'play') return null;
@@ -185,7 +188,7 @@ export function botAction(state: GameState): GameAction | null {
     const opening = findOpening(state);
     if (opening.length) {
       const groups = opening.map(group => actionGroup(group, p.hand));
-      if (ROUND_CONTRACTS[state.roundIndex].final) {
+      if (contractForRound(state).final) {
         const used = new Set(groups.flatMap(g => g.cardIds));
         return { type: 'finish', groups, discardId: p.hand.find(c => !used.has(c.id))!.id };
       }
@@ -199,7 +202,7 @@ export function botAction(state: GameState): GameAction | null {
     const layoff = bestLayoff(state, p.id, p.hand);
     if (layoff) return layoff;
   }
-  const protection = protectionScores(p.hand);
+  const protection = difficulty === 'easy' ? new Map<string, number>() : protectionScores(p.hand);
   const discardable = [...p.hand].sort((a, b) => {
     const score = (card: Card) => cardPoints(card) * 8 - usefulness(card, p.hand) * 2 -
       (protection.get(card.id) ?? 0) * 2 - (isPlayableDiscard(state, card) ? 10_000 : 0);

@@ -1,4 +1,4 @@
-import { ROUND_CONTRACTS } from './contracts.ts';
+import { contractForRound, roundCountForGame } from './game-rules.ts';
 import type { Card, GameAction, GameState, Suit } from './types.ts';
 
 const suitSymbol: Record<Suit, string> = {
@@ -45,7 +45,7 @@ export function formatSingleGameDebug(state: GameState, events: string[] = []): 
   const lastDiscarder = state.players.find(player => player.id === state.lastDiscarderId);
   const penalizedPlayer = state.players.find(player => player.id === state.lastPenalty?.playerId);
   const lines = [
-    `EL ${state.roundIndex + 1}/12 · ${ROUND_CONTRACTS[state.roundIndex].title}`,
+    `EL ${state.roundIndex + 1}/${roundCountForGame(state)} · ${contractForRound(state).title}`,
     `Tur ${state.turnCount} · Sıra: ${current.name} · Aşama: ${phaseLabel[state.phase]}`,
     `Deste: ${state.stock.length} · Açık kart: ${state.discardFaceDown ? 'Kapalı bitiş kartı' : debugCard(state.discard.at(-1))} · Son atan: ${lastDiscarder?.name ?? '—'}`,
     state.lastPenalty ? `Son ceza: ${penalizedPlayer?.name ?? state.lastPenalty.playerId} işlek kart attı · +${state.lastPenalty.points}` : 'Son ceza: —',

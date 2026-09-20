@@ -32,7 +32,7 @@ Bu, uygulamamızın seçilmiş kural setidir; evrensel bir standart iddiası de�
   dağıtıcıdır. Her el dağıtıcı ve başlangıç koltuğu aynı yönde birer yer ilerler; önceki elin
   kazananı bunu değiştirmez.
 - Sıradaki oyuncu açık kartı doğrudan alabilir veya kapalı desteyi seçebilir.
-- Kapalı deste seçildiğinde diğer oyuncular açık kartı isteyebilir. Alan oyuncu
+- Üç veya daha fazla oyunculu masada kapalı deste seçildiğinde diğer oyuncular açık kartı isteyebilir. İki kişilik oyunda bu teklif aşaması atlanır. Alan oyuncu
   açık kartı ve desteden bir kapalı ceza kartını eline ekler; sırası değişmez.
 - Çakışan istekler için uygulama tercihi: diğer oyunculara oyun yönünde sırayla
   al/pas seçeneği sunulur. İlk alanın ardından teklif kapanır. Herkes pas geçerse

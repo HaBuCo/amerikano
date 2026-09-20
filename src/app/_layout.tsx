@@ -23,10 +23,12 @@ export default function RootLayout() {
         }}>
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="setup" options={{ title: 'Oyunu Kur' }} />
+        <Stack.Screen name="single-setup" options={{ title: 'Tek Oyunculu' }} />
         <Stack.Screen name="rules" options={{ title: 'Nasıl Oynanır' }} />
         <Stack.Screen name="game" options={{ headerShown: false, gestureEnabled: false, fullScreenGestureEnabled: false }} />
         <Stack.Screen name="online" options={{ headerShown: false, gestureEnabled: false, fullScreenGestureEnabled: false }} />
         <Stack.Screen name="friends" options={{ headerShown: false }} />
+        <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
       </Stack>
     </GameSoundsProvider></GameSettingsProvider></AppErrorBoundary>

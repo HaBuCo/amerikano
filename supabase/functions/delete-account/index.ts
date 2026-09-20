@@ -90,7 +90,7 @@ Deno.serve(async (request) => {
       auth: { persistSession: false },
     });
     const { data: { user }, error: authError } = await authClient.auth.getUser();
-    if (authError || !user || user.is_anonymous) return json({ error: 'Kalıcı bir kullanıcı hesabı bulunamadı.' }, 401);
+    if (authError || !user) return json({ error: 'Silinecek kullanıcı hesabı bulunamadı.' }, 401);
 
     const body = await request.json().catch(() => ({})) as { appleAuthorizationCode?: unknown };
     const appleIdentity = user.identities?.find((identity) => identity.provider === 'apple');
@@ -113,4 +113,3 @@ Deno.serve(async (request) => {
     return json({ error: message }, 400);
   }
 });
-

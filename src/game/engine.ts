@@ -1,7 +1,7 @@
-import { ROUND_CONTRACTS } from './contracts.ts';
+import { contractForRound, normalizeGameRules, openingJokerRestricted, roundCountForGame, rulesForGame } from './game-rules.ts';
 import { isMeldClosed } from './meld-visibility.ts';
 import { RANKS, SUITS } from './types.ts';
-import type { Card, GameAction, GameState, Meld, MeldType, Player, Rank, RoundContract } from './types.ts';
+import type { Card, GameAction, GameRules, GameState, Meld, MeldType, Player, Rank, RoundContract } from './types.ts';
 
 const rankValue: Record<Rank, number> = Object.fromEntries(
   RANKS.map((rank, index) => [rank, rank === 'A' ? 14 : index + 1]),
@@ -200,7 +200,7 @@ export function satisfiesContract(
 export const MIN_GAME_PLAYERS = 2;
 export const MAX_GAME_PLAYERS = 6;
 
-export function createGame(playerNames: string[], random = Math.random): GameState {
+export function createGame(playerNames: string[], random = Math.random, rules?: Partial<GameRules>): GameState {
   if (playerNames.length < MIN_GAME_PLAYERS || playerNames.length > MAX_GAME_PLAYERS) throw new Error('2–6 oyuncu gerekli.');
   const players: Player[] = playerNames.map((name, index) => ({
     id: `player-${index + 1}`,
@@ -210,7 +210,8 @@ export function createGame(playerNames: string[], random = Math.random): GameSta
     score: 0,
   }));
   const startingPlayerIndex = Math.min(players.length - 1, Math.max(0, Math.floor(random() * players.length)));
-  return dealRound(players, 0, startingPlayerIndex, random);
+  const normalizedRules = normalizeGameRules(rules);
+  return dealRound(players, 0, startingPlayerIndex, random, normalizedRules);
 }
 
 export function dealRound(
@@ -218,6 +219,7 @@ export function dealRound(
   roundIndex: number,
   startingPlayerIndex: number,
   random = Math.random,
+  rules?: Partial<GameRules>,
 ): GameState {
   const deck = shuffle(createDeck(), random);
   const freshPlayers = players.map((player) => ({ ...player, hand: [] as Card[], hasOpened: false, openedTurn: undefined }));
@@ -238,6 +240,7 @@ export function dealRound(
     roundWinnerId: null,
     roundPenalties: {},
     turnCount: 0,
+    rules: normalizeGameRules(rules),
   };
 }
 
@@ -258,7 +261,7 @@ export function drawCard(state: GameState, source: 'stock' | 'discard', random =
     discard.splice(0, discard.length, top);
   }
   // Resolve requests in counterclockwise turn order before drawing the active player's card.
-  if (source === 'stock' && discard.length && stock.length >= 2) {
+  if (source === 'stock' && rulesForGame(state).claimsEnabled && state.players.length > 2 && discard.length && stock.length >= 2) {
     const lastDiscarderId = state.lastDiscarderId ?? (state.turnCount > 0
       ? state.players[(state.currentPlayerIndex + 1) % state.players.length].id
       : undefined);
@@ -266,7 +269,7 @@ export function drawCard(state: GameState, source: 'stock' | 'discard', random =
       state.players[(state.currentPlayerIndex + state.players.length - i - 1) % state.players.length].id)
       .filter(playerId => playerId !== lastDiscarderId);
     if (playerIds.length) {
-      return { ...state, stock, discard, phase: 'claim', claim: { playerIds, deadline: now + CLAIM_TIMEOUT_MS } };
+      return { ...state, stock, discard, phase: 'claim', claim: { playerIds, deadline: now + rulesForGame(state).claimTimeoutMs } };
     }
   }
   const card = source === 'stock' ? stock.pop() : discard.pop();
@@ -288,7 +291,7 @@ export function resolveClaim(state: GameState, actorId: string, take: boolean, n
     const claimed = discard.pop()!, penalty = stock.pop()!;
     players = players.map(p => p.id === actorId ? { ...p, hand: sortHand([...p.hand, claimed, penalty]) } : p);
   } else if (state.claim.playerIds.length > 1) {
-    return { ...state, claim: { playerIds: state.claim.playerIds.slice(1), deadline: now + CLAIM_TIMEOUT_MS } };
+    return { ...state, claim: { playerIds: state.claim.playerIds.slice(1), deadline: now + rulesForGame(state).claimTimeoutMs } };
   }
   const drawn = stock.pop();
   if (!drawn) return state;
@@ -370,7 +373,7 @@ export function discardCard(state: GameState, cardId: string): GameState {
   if (current.hand.length === 1 && !current.hasOpened) return state;
   if (!current.hand.some((card) => card.id === cardId)) return state;
   const discarded = current.hand.find((card) => card.id === cardId)!;
-  const playableDiscardPenalty = isPlayableDiscard(state, discarded) ? 25 : 0;
+  const playableDiscardPenalty = rulesForGame(state).playableDiscardPenalty && isPlayableDiscard(state, discarded) ? 25 : 0;
   const players = state.players.map((player, index) =>
     index === state.currentPlayerIndex
       ? { ...player, hand: player.hand.filter((card) => card.id !== cardId), score: player.score + playableDiscardPenalty }
@@ -421,7 +424,7 @@ export function openMelds(state: GameState, melds: Meld[], finalDiscardId?: stri
   if (selectedIds.size !== selectedCardIds.length) return state;
   if (selectedIds.size >= current.hand.length) return state; // Keep the final discard.
   if (![...selectedIds].every((id) => current.hand.some((card) => card.id === id))) return state;
-  const contract = ROUND_CONTRACTS[state.roundIndex];
+  const contract = contractForRound(state);
   const allMeldsValid = jokerAssignmentsValid && melds.every((meld) => isValidMeld(meld.cards, meld.type));
   const validFinal =
     Boolean(contract.final) &&
@@ -430,7 +433,7 @@ export function openMelds(state: GameState, melds: Meld[], finalDiscardId?: stri
     allMeldsValid &&
     current.hand.length - selectedIds.size === 1;
   const openingHasForbiddenJoker =
-    !current.hasOpened && state.roundIndex < 5 && melds.some((meld) => meld.cards.some((card) => card.isJoker));
+    !current.hasOpened && openingJokerRestricted(state) && melds.some((meld) => meld.cards.some((card) => card.isJoker));
   const valid = current.hasOpened
     ? allMeldsValid
     : !openingHasForbiddenJoker &&
@@ -523,7 +526,7 @@ export function applyAction(state: GameState, actorId: string, action: GameActio
     case 'replaceJoker': return replaceJoker(state, action.meldId, action.jokerId, action.cardId);
     case 'finish':
     case 'open': {
-      if (action.type === 'finish' && !ROUND_CONTRACTS[state.roundIndex].final) return state;
+      if (action.type === 'finish' && !contractForRound(state).final) return state;
       if (!Array.isArray(action.groups) || action.groups.length > 35 ||
           action.groups.some(g => !g || (g.type !== 'set' && g.type !== 'run') || !Array.isArray(g.cardIds))) return state;
       const hand = state.players[state.currentPlayerIndex].hand;
@@ -597,7 +600,7 @@ export function explainInvalidAction(state: GameState, actorId: string, action: 
     return isValidMeld(replaced, meld.type) ? '' : 'Bu kart yerdeki jokerin tam karşılığı değil.';
   }
 
-  if (action.type === 'finish' && !ROUND_CONTRACTS[state.roundIndex].final) return 'Elden bitme yalnızca final elinde kullanılabilir.';
+  if (action.type === 'finish' && !contractForRound(state).final) return 'Elden bitme yalnızca final elinde kullanılabilir.';
   if (action.type === 'open' || action.type === 'finish') {
     if (current.hasOpened && current.openedTurn === state.turnCount) return 'Aynı turda ikinci kez grup açamazsın.';
     if (!Array.isArray(action.groups) || !action.groups.length) return 'Açmak için en az bir geçerli grup hazırlamalısın.';
@@ -618,10 +621,10 @@ export function explainInvalidAction(state: GameState, actorId: string, action: 
     }
     if (current.hand.length - cardIds.length < 1) return 'Bitiş için elinde bir atmalık kart bırakmalısın.';
     if (current.hasOpened) return '';
-    if (state.roundIndex < 5 && melds.some((meld) => meld.cards.some((card) => card.isJoker))) {
+    if (openingJokerRestricted(state) && melds.some((meld) => meld.cards.some((card) => card.isJoker))) {
       return 'İlk beş elin açılış görevinde joker kullanılamaz.';
     }
-    const contract = ROUND_CONTRACTS[state.roundIndex];
+    const contract = contractForRound(state);
     if (contract.final) {
       if (action.type !== 'finish') return 'Final elinde bütün grupları ve bitiş kartını tek hamlede tamamlamalısın.';
       if (!current.hand.some((card) => card.id === action.discardId) || cardIds.includes(action.discardId)) return 'Final için grupların dışında bir bitiş kartı bırak.';
@@ -663,12 +666,13 @@ function finishRound(state: GameState): GameState {
 export function nextRound(state: GameState, random = Math.random): GameState {
   if (state.phase !== 'round-over') return state;
   const roundIndex = state.roundIndex + 1;
-  if (roundIndex >= ROUND_CONTRACTS.length) return { ...state, phase: 'game-over' };
+  if (roundIndex >= roundCountForGame(state)) return { ...state, phase: 'game-over' };
   const next = dealRound(
     state.players,
     roundIndex,
     nextSeat(state.startingPlayerIndex, state.players.length),
     random,
+    state.rules,
   );
   return {
     ...next,

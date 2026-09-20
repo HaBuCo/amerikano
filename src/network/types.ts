@@ -12,7 +12,7 @@ export type RoomView = {
   members: {
     id: string; name: string; connected: boolean; ready: boolean;
     avatarKey: string; level: number; gamesPlayed: number; wins: number;
-    missedTurns: number; botControlled: boolean;
+    missedTurns: number; botControlled: boolean; isBot: boolean;
   }[];
   game: PrivateGameView | null;
 };
@@ -23,6 +23,8 @@ export type ClientMessage =
   // Kept while the legacy self-hosted server remains available as a fallback.
   | { type: 'resume'; code: string; token: string }
   | { type: 'ready'; ready: boolean }
+  | { type: 'add-bot' }
+  | { type: 'remove-bot' }
   | { type: 'start' }
   | { type: 'rematch' }
   | { type: 'reclaim' }
