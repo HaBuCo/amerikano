@@ -3,7 +3,7 @@ import type { ComponentProps, ReactNode } from 'react';
 import { Animated, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { palette as p } from '@/constants/palette';
-import { CARD_HEIGHT, CARD_WIDTH, PlayingCard, SMALL_CARD_HEIGHT, SMALL_CARD_WIDTH } from './playing-card';
+import { CARD_HEIGHT, CARD_WIDTH, PlayingCard, SMALL_CARD_HEIGHT, SMALL_CARD_WIDTH, TABLET_CARD_HEIGHT, TABLET_CARD_WIDTH, TABLET_SMALL_CARD_HEIGHT, TABLET_SMALL_CARD_WIDTH } from './playing-card';
 import { PrivateGameView } from '@/game/view';
 import { SUITS } from '@/game/types';
 import type { Card, GameAction, MeldType, Rank, Suit } from '@/game/types';
@@ -83,13 +83,13 @@ function DragSurface({ active, children, onDragStart, onDrop, style }: {
 
 type DraggableCardProps = {
   card: Card; index: number; step: number; cardsPerRow: number;
-  cardWidth: number; cardHeight: number; compactCard: boolean;
+  cardWidth: number; cardHeight: number; compactCard: boolean; tabletCards: boolean;
   arranging: boolean; gameplayEnabled: boolean; onDragStart: () => void;
   onReorder: (cardId: string, targetIndex: number) => void;
   onGameplayDrop: (cardId: string, point: DropPoint) => void;
 };
 
-function DraggableHandCard({ card, index, step, cardsPerRow, cardWidth, cardHeight, compactCard, arranging, gameplayEnabled, onDragStart, onReorder, onGameplayDrop }: DraggableCardProps) {
+function DraggableHandCard({ card, index, step, cardsPerRow, cardWidth, cardHeight, compactCard, tabletCards, arranging, gameplayEnabled, onDragStart, onReorder, onGameplayDrop }: DraggableCardProps) {
   return <DragSurface active={arranging || gameplayEnabled} onDragStart={onDragStart} onDrop={(point) => {
     if (arranging) {
       const columnMove = Math.round(point.dx / step);
@@ -97,7 +97,7 @@ function DraggableHandCard({ card, index, step, cardsPerRow, cardWidth, cardHeig
       onReorder(card.id, index + columnMove + rowMove * cardsPerRow);
     } else onGameplayDrop(card.id, point);
   }} style={{ marginLeft: index % cardsPerRow ? step - cardWidth : 0, zIndex: index % cardsPerRow }}>
-    <PlayingCard card={card} small={compactCard} />
+    <PlayingCard card={card} small={compactCard} tablet={tabletCards} />
   </DragSurface>;
 }
 
@@ -146,7 +146,9 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   const { settings, updateSettings, feedback } = useGameSettings();
   const previousPhase = useRef(game.phase);
   const previousError = useRef(error);
-  const { width } = useWindowDimensions();
+  const window = useWindowDimensions();
+  const width = Math.max(1, Number.isFinite(window.width) ? window.width : 1);
+  const height = Math.max(1, Number.isFinite(window.height) ? window.height : 1);
   const me = game.players.find(player => player.id === viewerId)!;
   const myMissedTurns = playerMeta?.[viewerId]?.missedTurns ?? 0;
   const orderKey = `${modeLabel}:${game.roundIndex}:${viewerId}`;
@@ -193,17 +195,23 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   const nextContract = nextContractIndex === undefined ? null : ROUND_CONTRACTS[nextContractIndex];
   const handGrid = getHandGrid(cards.length, width, settings.compactCards);
   const autoCompactHand = handGrid.compact;
-  const handCardWidth = autoCompactHand ? SMALL_CARD_WIDTH : CARD_WIDTH;
-  const handCardHeight = autoCompactHand ? SMALL_CARD_HEIGHT : CARD_HEIGHT;
   // Penalty draws can make a hand unusually large. Increase overlap instead of
   // adding a visually awkward third row that pushes the table out of view.
   const cardsPerRow = handGrid.cardsPerRow;
-  const handWidth = Math.min(width, 760) - 36;
-  const playerColumns = game.players.length === 4 ? 2 : Math.min(3, game.players.length);
-  const playerTileWidth = (Math.min(width, 760) - 24 - (playerColumns - 1) * 6) / playerColumns;
+  const tableWidth = Math.min(width, 1180);
+  const tabletLandscape = width >= 700 && width > height;
+  const handCardWidth = tabletLandscape
+    ? autoCompactHand ? TABLET_SMALL_CARD_WIDTH : TABLET_CARD_WIDTH
+    : autoCompactHand ? SMALL_CARD_WIDTH : CARD_WIDTH;
+  const handCardHeight = tabletLandscape
+    ? autoCompactHand ? TABLET_SMALL_CARD_HEIGHT : TABLET_CARD_HEIGHT
+    : autoCompactHand ? SMALL_CARD_HEIGHT : CARD_HEIGHT;
+  const handWidth = tableWidth - 36;
+  const playerColumns = width >= 700 ? game.players.length : game.players.length === 4 ? 2 : Math.min(3, game.players.length);
+  const playerTileWidth = Math.max(72, (tableWidth - 28 - Math.max(0, playerColumns - 1) * 6) / Math.max(1, playerColumns));
   const step = cardsPerRow <= 1
     ? handCardWidth
-    : Math.max(18, Math.min(autoCompactHand ? 41 : 46, (handWidth - handCardWidth) / (cardsPerRow - 1)));
+    : Math.max(18, Math.min(tabletLandscape ? autoCompactHand ? 50 : 57 : autoCompactHand ? 41 : 46, (handWidth - handCardWidth) / (cardsPerRow - 1)));
   const rows = Array.from({ length: Math.ceil(cards.length / cardsPerRow) }, (_, i) => cards.slice(i * cardsPerRow, i * cardsPerRow + cardsPerRow));
 
   useEffect(() => {
@@ -615,7 +623,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     feedback(action.type === 'open' || action.type === 'finish' ? 'success' : 'impact');
     onAction(action);
   }
-  return <SafeAreaView style={s.page}>
+  return <SafeAreaView style={[s.page, tabletLandscape && s.pageTabletLandscape]}>
     <View style={s.header}>
       <Pressable accessibilityRole="button" accessibilityLabel="Masadan çık" onPress={() => setExitOpen(true)} style={s.headerMenuButton}><Text style={s.headerMenuText}>Çık</Text></Pressable>
       <View style={s.center}><Text style={s.eyebrow}>{modeLabel}</Text><Text style={s.round}>EL {game.roundIndex + 1} / {roundCount} · {contract.shortTitle}</Text></View>
@@ -654,13 +662,13 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
         <View style={s.piles}>
           <View style={[s.pile, drawing && s.pileReady]}>
             <DragSurface active={drawing && Boolean(game.stockCount || game.discard.length)} onDragStart={() => beginDrag('stock')} onDrop={(point) => dropPile('stock', point)}>
-              <View style={[s.pile, s.tablePileTouch]}><View style={s.stackShadow} /><PlayingCard hidden small /><Text style={s.pileLabel}>DESTE · {game.stockCount}</Text></View>
+              <View style={[s.pile, s.tablePileTouch, tabletLandscape && s.tablePileTouchTablet]}><View style={[s.stackShadow, tabletLandscape && s.stackShadowTablet]} /><PlayingCard hidden small tablet={tabletLandscape} /><Text style={s.pileLabel}>DESTE · {game.stockCount}</Text></View>
             </DragSurface>
           </View>
           <View style={s.tableMark}><Text style={s.tableA}>A</Text><Text style={s.tableBrand}>AMERİKANO</Text></View>
           <DropZoneView dropKey="discard" onNode={registerDropZone} style={[s.pile, (drawing || claiming || activeDrag === 'hand') && s.pileReady, activeDrag === 'hand' && s.dropTargetActive]}>
             <DragSurface active={(drawing || claiming) && Boolean(game.discard.length) && !game.discardFaceDown} onDragStart={() => beginDrag('discard')} onDrop={(point) => dropPile('discard', point)}>
-              <View style={[s.pile, s.tablePileTouch]}>{game.discardFaceDown ? <PlayingCard hidden small /> : game.discard.length ? <PlayingCard card={game.discard.at(-1)} small /> : <View style={s.empty} />}
+              <View style={[s.pile, s.tablePileTouch, tabletLandscape && s.tablePileTouchTablet]}>{game.discardFaceDown ? <PlayingCard hidden small tablet={tabletLandscape} /> : game.discard.length ? <PlayingCard card={game.discard.at(-1)} small tablet={tabletLandscape} /> : <View style={[s.empty, tabletLandscape && s.emptyTablet]} />}
                 <Text style={s.pileLabel}>{game.discardFaceDown ? 'BİTİŞ KARTI · KAPALI' : activeDrag === 'hand' ? 'KARTI BURAYA AT' : 'AÇIK KART'}</Text></View>
             </DragSurface>
           </DropZoneView>
@@ -678,7 +686,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
           return <DropZoneView key={m.id} dropKey={`meld:${index}`} onNode={registerDropZone} style={[s.meld, activeDrag === 'hand' && acceptsCard(index) && s.dropTargetActive, activeDrag === 'hand' && !acceptsCard(index) && s.meldInactive]}>
             <Text style={s.small}>{game.players.find(pl => pl.id === m.ownerId)?.name} · {m.type === 'set' ? 'Küt' : 'Seri'}</Text>
             <View style={s.meldCards}>{m.cards.map((c, i) => <View key={c.id} style={[s.meldCard, { marginLeft: i ? -16 : 0 }]}>
-              <PlayingCard card={c} compact />
+              <PlayingCard card={c} compact tablet={tabletLandscape} />
               {c.isJoker && meldRank && m.jokerAssignments?.[c.id] && <Text style={s.jokerBadge}>{suitSymbol[m.jokerAssignments[c.id]]}{meldRank}</Text>}
             </View>)}</View>
             {settings.dragHints && activeDrag === 'hand' && acceptsCard(index) && <Text style={s.meldDropHint}>Buraya işlenebilir</Text>}
@@ -699,24 +707,24 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
           const groupCards = group.cardIds.map(id => me.hand.find(card => card.id === id)).filter((card): card is Card => Boolean(card));
           const valid = groupCards.length >= 3 && Boolean(group.type ? isValidMeld(groupCards, group.type) : inferType(group.cardIds));
           const limit = slotLimit(slot);
-          return <DropZonePressable key={index} dropKey={`slot:${index}`} onNode={registerDropZone} accessibilityRole="button" accessibilityState={{ selected: activeSlotIndex === index }} onPress={() => { setActiveSlotIndex(index); feedback('selection'); }} style={[s.dropSlot, activeSlotIndex === index && s.dropSlotSelected, activeDrag === 'hand' && (!limit || group.cardIds.length < limit) && s.dropTargetActive, valid && s.dropSlotValid]}>
+          return <DropZonePressable key={index} dropKey={`slot:${index}`} onNode={registerDropZone} accessibilityRole="button" accessibilityState={{ selected: activeSlotIndex === index }} onPress={() => { setActiveSlotIndex(index); feedback('selection'); }} style={[s.dropSlot, tabletLandscape && s.dropSlotTablet, activeSlotIndex === index && s.dropSlotSelected, activeDrag === 'hand' && (!limit || group.cardIds.length < limit) && s.dropTargetActive, valid && s.dropSlotValid]}>
             <Text style={s.dropSlotLabel}>{activeSlotIndex === index ? 'SEÇİLİ · ' : ''}{slot.label} · {group.cardIds.length}{slot.length ? `/${slot.length}` : ''}</Text>
-            <View style={s.slotCards}>{groupCards.map((card, cardIndex) => <DragSurface key={card.id} active={playing} onDragStart={() => beginDrag('staged', card.id)} onDrop={(point) => dropStagedCard(card.id, point)} style={{ marginLeft: cardIndex ? -10 : 0 }}><PlayingCard card={card} compact /></DragSurface>)}</View>
+            <View style={[s.slotCards, tabletLandscape && s.slotCardsTablet]}>{groupCards.map((card, cardIndex) => <DragSurface key={card.id} active={playing} onDragStart={() => beginDrag('staged', card.id)} onDrop={(point) => dropStagedCard(card.id, point)} style={{ marginLeft: cardIndex ? -10 : 0 }}><PlayingCard card={card} compact tablet={tabletLandscape} /></DragSurface>)}</View>
           </DropZonePressable>;
         })}
       </ScrollView>
     </View>}
-    <DropZoneView dropKey="hand" onNode={registerDropZone} style={[s.hand, (activeDrag === 'stock' || activeDrag === 'discard' || activeDrag === 'staged') && s.handDropActive]}>
+    <DropZoneView dropKey="hand" onNode={registerDropZone} style={[s.hand, tabletLandscape && s.handTablet, (activeDrag === 'stock' || activeDrag === 'discard' || activeDrag === 'staged') && s.handDropActive]}>
       <View style={s.handHeading}>
         <Text numberOfLines={1} style={s.handName}>{me.name} <Text style={s.small}>· {me.hand.length} kart{myMissedTurns ? ` · ${myMissedTurns}/3 süre kaçtı` : ''}</Text></Text>
         <View style={s.handMeta}><Text style={s.small}>{me.score} puan</Text>{onUndo && <Pressable accessibilityRole="button" accessibilityLabel="Son hamleyi geri al" disabled={!canUndo} onPress={onUndo} style={[s.arrangeButton, !canUndo && s.disabled]}><Text style={s.gold}>Geri al</Text></Pressable>}<Pressable accessibilityRole="button" accessibilityLabel="Eli otomatik diz" disabled={Boolean(activeDrag)} onPress={autoArrange} style={[s.arrangeButton, activeDrag && s.disabled]}><Text style={s.gold}>Oto diz</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={arranging ? 'Kart dizmeyi bitir' : 'Eli istediğin gibi diz'} onPress={toggleArrange} style={[s.arrangeButton, arranging && s.arrangeButtonActive]}><Text style={s.gold}>{arranging ? 'Bitti' : 'Elle diz'}</Text></Pressable></View>
       </View>
       {!!(notice || error) && <Text accessibilityLiveRegion="polite" style={s.notice}>{error || notice}</Text>}
       {arranging && <Text accessibilityLiveRegion="polite" style={s.arrangeHint}>Kartı tutup istediğin konuma sürükle ve bırak.</Text>}
-      <ScrollView scrollEnabled={!activeDrag} removeClippedSubviews={false} style={s.handCards} contentContainerStyle={s.handScroll}>
+      <ScrollView scrollEnabled={!activeDrag} removeClippedSubviews={false} style={[s.handCards, tabletLandscape && s.handCardsTablet]} contentContainerStyle={s.handScroll}>
         <View style={s.rows}>{rows.map((row, index) => <View key={index} style={s.cardRow}>
           {row.map((c, i) => <DraggableHandCard key={c.id} card={c} index={index * cardsPerRow + i} step={step} cardsPerRow={cardsPerRow}
-            cardWidth={handCardWidth} cardHeight={handCardHeight} compactCard={autoCompactHand} arranging={arranging} gameplayEnabled={playing} onDragStart={() => beginDrag(arranging ? 'arranging' : 'hand', c.id)} onReorder={reorderCard} onGameplayDrop={dropHandCard} />)}
+            cardWidth={handCardWidth} cardHeight={handCardHeight} compactCard={autoCompactHand} tabletCards={tabletLandscape} arranging={arranging} gameplayEnabled={playing} onDragStart={() => beginDrag(arranging ? 'arranging' : 'hand', c.id)} onReorder={reorderCard} onGameplayDrop={dropHandCard} />)}
         </View>)}</View>
       </ScrollView>
     </DropZoneView>
@@ -808,7 +816,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   </SafeAreaView>;
 }
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: '#09271e', width: '100%', maxWidth: 760, alignSelf: 'center' },
+  page: { flex: 1, backgroundColor: '#09271e', width: '100%', maxWidth: 1180, alignSelf: 'center' },
+  pageTabletLandscape: { borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#ffffff0d' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 6 },
   connectionBar: { marginHorizontal: 12, marginBottom: 4, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, alignItems: 'center' },
   connectionOnline: { backgroundColor: '#2f8d5b35' }, connectionWaiting: { backgroundColor: '#d9a44130' }, connectionOffline: { backgroundColor: '#a6404838' }, connectionText: { color: p.cream, fontSize: 10, fontWeight: '700' },
@@ -826,9 +835,12 @@ const s = StyleSheet.create({
   tableScroll: { flex: 1 }, table: { padding: 8, gap: 6, flexGrow: 1 },
   feltOval: { borderRadius: 54, backgroundColor: '#155a40', borderWidth: 2, borderColor: '#775935', paddingVertical: 4, elevation: 2 },
   piles: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }, pile: { alignItems: 'center', gap: 2, borderRadius: 8, padding: 2 }, tablePileTouch: { minWidth: 78, minHeight: 92, justifyContent: 'center' }, pileReady: { backgroundColor: '#ffe1a410' },
+  tablePileTouchTablet: { minWidth: 92, minHeight: 112 },
   dropTargetActive: { borderColor: p.gold, borderWidth: 2, backgroundColor: '#d9a44122' },
   stackShadow: { position: 'absolute', width: SMALL_CARD_WIDTH, height: SMALL_CARD_HEIGHT, borderRadius: 5, backgroundColor: '#bda886', left: 15, top: 7, borderWidth: 1, borderColor: '#624a32' },
+  stackShadowTablet: { width: TABLET_SMALL_CARD_WIDTH, height: TABLET_SMALL_CARD_HEIGHT, left: 17 },
   pileLabel: { color: '#e1d2ad', fontSize: 8, letterSpacing: 0.8, fontWeight: '700' }, empty: { width: SMALL_CARD_WIDTH, height: SMALL_CARD_HEIGHT, borderWidth: 1, borderColor: '#ffffff25', borderRadius: 5 },
+  emptyTablet: { width: TABLET_SMALL_CARD_WIDTH, height: TABLET_SMALL_CARD_HEIGHT, borderRadius: 6 },
   tableMark: { alignItems: 'center', opacity: 0.25 }, tableA: { color: '#e1d2ad', fontFamily: 'serif', fontSize: 20 }, tableBrand: { color: '#e1d2ad', fontSize: 5, letterSpacing: 1.2 },
   turnRow: { minHeight: 26, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }, turn: { color: '#e8d0a1', fontSize: 12, textAlign: 'center', fontWeight: '600' },
   playablePenaltyBanner: { marginHorizontal: 12, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: '#a6404838', borderWidth: 1, borderColor: '#d87878' }, playablePenaltyText: { color: '#ffd7d7', textAlign: 'center', fontSize: 11, fontWeight: '900' },
@@ -838,17 +850,21 @@ const s = StyleSheet.create({
   trayArea: { flexShrink: 0, gap: 5, paddingVertical: 7, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#dab77b50', backgroundColor: '#0d3327' }, trays: { gap: 7, paddingHorizontal: 12 },
   quickOpenButton: { minHeight: 36, marginHorizontal: 12, borderRadius: 10, backgroundColor: p.gold, alignItems: 'center', justifyContent: 'center' }, quickOpenText: { color: p.ink, fontSize: 12, fontWeight: '900' },
   dropSlot: { minWidth: 92, minHeight: 72, padding: 6, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: '#ffffff38', backgroundColor: '#ffffff08' },
+  dropSlotTablet: { minWidth: 112, minHeight: 88 },
   dropSlotSelected: { borderStyle: 'solid', borderColor: p.gold, backgroundColor: '#d9a44118' },
   dropSlotValid: { borderColor: '#79c99a', backgroundColor: '#3b9b6922' }, dropSlotLabel: { color: p.gold, fontSize: 9, fontWeight: '800' },
   slotCards: { minHeight: 53, flexDirection: 'row', alignItems: 'center', paddingTop: 3 },
+  slotCardsTablet: { minHeight: 66 },
   melds: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, meld: { padding: 8, borderWidth: 1, borderColor: p.line, borderRadius: 10, gap: 4 }, meldCards: { flexDirection: 'row' }, meldCard: { position: 'relative' },
   jokerBadge: { position: 'absolute', left: 3, right: 3, bottom: 3, borderRadius: 4, paddingVertical: 2, backgroundColor: '#071d17e8', color: p.gold, fontSize: 9, fontWeight: '900', textAlign: 'center', overflow: 'hidden' },
   meldInactive: { opacity: 0.45 },
   meldDropHint: { color: p.gold, fontSize: 9, fontWeight: '700' },
   hand: { paddingTop: 10, paddingBottom: 8, borderTopWidth: 1, borderColor: '#dab77b50', backgroundColor: '#071d17', overflow: 'visible' }, handDropActive: { borderTopWidth: 3, borderTopColor: p.gold, backgroundColor: '#0d3327' },
+  handTablet: { paddingTop: 12, paddingBottom: 10 },
   handHeading: { flexDirection: 'row', paddingHorizontal: 18, justifyContent: 'space-between', alignItems: 'center' }, handName: { color: p.cream, fontSize: 15, fontWeight: '700', flexShrink: 1, marginRight: 6 },
   handMeta: { flexDirection: 'row', alignItems: 'center', gap: 5 }, arrangeButton: { minHeight: 30, paddingHorizontal: 8, borderWidth: 1, borderColor: p.line, borderRadius: 9, justifyContent: 'center' }, arrangeButtonActive: { backgroundColor: '#d9a44120', borderColor: p.gold },
   handCards: { maxHeight: 210, overflow: 'visible' },
+  handCardsTablet: { maxHeight: 260 },
   handScroll: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 4, flexGrow: 1, justifyContent: 'center' },
   rows: { gap: 8 }, cardRow: { flexDirection: 'row' }, actions: { flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingTop: 10 },
   secondary: { minHeight: 44, borderWidth: 1, borderColor: p.line, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flex: 1 },

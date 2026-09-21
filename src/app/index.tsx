@@ -7,6 +7,7 @@ import { AuthPanel } from '@/components/auth-panel';
 import { PlayingCard } from '@/components/playing-card';
 import { palette as p } from '@/constants/palette';
 import { Card } from '@/game/types';
+import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
 import { useAuth } from '@/network/auth';
 
 const sampleCards: Card[] = [
@@ -24,6 +25,7 @@ function greetingFor(hour: number) {
 
 export default function HomeScreen() {
   const auth = useAuth();
+  const { isTablet, isWideTablet } = useResponsiveLayout();
   const [accountOpenFor, setAccountOpenFor] = useState<'anonymous' | 'signed-in' | null>(null);
 
   if (auth.status === 'loading') return <LoadingScreen />;
@@ -33,7 +35,7 @@ export default function HomeScreen() {
   const accountLabel = auth.status === 'signed-in' ? firstName(auth.user?.user_metadata?.full_name || auth.user?.email) : 'Misafir';
 
   return <SafeAreaView style={s.page}>
-    <ScrollView contentContainerStyle={s.homeContent} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[s.homeContent, isTablet && s.homeContentTablet]} showsVerticalScrollIndicator={false}>
       <BrandHeader accountLabel={accountLabel} onAccount={() => setAccountOpenFor(auth.status === 'signed-in' ? 'signed-in' : 'anonymous')} />
 
       <View style={s.heroCard}>
@@ -46,62 +48,73 @@ export default function HomeScreen() {
         <CardFan compact />
       </View>
 
-      <Text style={s.sectionLabel}>NASIL OYNAMAK İSTERSİN?</Text>
-      <Pressable accessibilityRole="button" onPress={() => router.push('/single-setup' as Href)} style={({ pressed }) => [s.featureButton, pressed && s.pressed]}>
-        <View style={s.buttonCopy}><View style={s.titleLine}><Text style={s.featureTitle}>Tek oyunculu</Text><View style={s.offlineBadge}><Text style={s.offlineText}>ÇEVRİMDIŞI</Text></View></View><Text style={s.featureCaption}>Rakip sayısını ve oyun uzunluğunu seç</Text></View>
-      </Pressable>
+      <View style={[s.dashboard, isWideTablet && s.dashboardWide]}>
+        <View style={s.dashboardColumn}>
+          <Text style={s.sectionLabel}>NASIL OYNAMAK İSTERSİN?</Text>
+          <Pressable accessibilityRole="button" onPress={() => router.push('/single-setup' as Href)} style={({ pressed }) => [s.featureButton, pressed && s.pressed]}>
+            <View style={s.buttonCopy}><View style={s.titleLine}><Text style={s.featureTitle}>Tek oyunculu</Text><View style={s.offlineBadge}><Text style={s.offlineText}>ÇEVRİMDIŞI</Text></View></View><Text style={s.featureCaption}>Rakip sayısını ve oyun uzunluğunu seç</Text></View>
+          </Pressable>
 
-      <View style={s.playGrid}>
-        <Pressable accessibilityRole="button" onPress={() => router.push('/online?quick=1')} style={({ pressed }) => [s.playCard, s.quickCard, pressed && s.pressed]}>
-          <Text style={s.playEyebrowDark}>HIZLI EŞLEŞME</Text>
-          <Text style={s.playTitleDark}>Hemen oyna</Text>
-          <Text style={s.playCaptionDark}>Uygun çevrim içi masaya otomatik katıl</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" onPress={() => router.push('/online')} style={({ pressed }) => [s.playCard, pressed && s.pressed]}>
-          <Text style={s.playEyebrow}>ARKADAŞLARINLA</Text>
-          <Text style={s.playTitle}>Özel masa</Text>
-          <Text style={s.playCaption}>Masa kur, kodla katıl veya arkadaşını çağır</Text>
-        </Pressable>
+          <View style={s.playGrid}>
+            <Pressable accessibilityRole="button" onPress={() => router.push('/online?quick=1')} style={({ pressed }) => [s.playCard, s.quickCard, pressed && s.pressed]}>
+              <Text style={s.playEyebrowDark}>HIZLI EŞLEŞME</Text>
+              <Text style={s.playTitleDark}>Hemen oyna</Text>
+              <Text style={s.playCaptionDark}>Uygun çevrim içi masaya otomatik katıl</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={() => router.push('/online')} style={({ pressed }) => [s.playCard, pressed && s.pressed]}>
+              <Text style={s.playEyebrow}>ARKADAŞLARINLA</Text>
+              <Text style={s.playTitle}>Özel masa</Text>
+              <Text style={s.playCaption}>Masa kur, kodla katıl veya arkadaşını çağır</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={s.dashboardColumn}>
+          <View style={s.utilityCard}>
+            <MenuLink label="Arkadaşlar" detail="Oyuncu ara ve ekle" onPress={() => router.push('/friends' as Href)} />
+            <View style={s.utilityLine} />
+            <MenuLink label="İstatistiklerim" detail="Kariyerini ve rekorlarını gör" onPress={() => router.push('/stats' as Href)} />
+            <View style={s.utilityLine} />
+            <MenuLink label="Aynı cihazda" detail="Yan yana oyna" onPress={() => router.push('/setup')} />
+            <View style={s.utilityLine} />
+            <MenuLink label="Nasıl oynanır?" detail="Kurallara göz at" onPress={() => router.push('/rules')} />
+            <View style={s.utilityLine} />
+            <MenuLink label="Ayarlar" detail="Oyun, hesap ve gizlilik" onPress={() => router.push('/settings' as Href)} />
+          </View>
+
+          {auth.status === 'anonymous' && <Pressable accessibilityRole="button" onPress={() => setAccountOpenFor('anonymous')} style={s.guestNotice}>
+            <View><Text style={s.guestNoticeTitle}>Misafir olarak oynuyorsun</Text><Text style={s.guestNoticeText}>İlerlemeni korumak için ücretsiz hesap oluşturabilirsin.</Text></View>
+            <Text style={s.guestNoticeAction}>KAYDET</Text>
+          </Pressable>}
+        </View>
       </View>
-
-      <View style={s.utilityCard}>
-        <MenuLink label="Arkadaşlar" detail="Oyuncu ara ve ekle" onPress={() => router.push('/friends' as Href)} />
-        <View style={s.utilityLine} />
-        <MenuLink label="Aynı cihazda" detail="Yan yana oyna" onPress={() => router.push('/setup')} />
-        <View style={s.utilityLine} />
-        <MenuLink label="Nasıl oynanır?" detail="Kurallara göz at" onPress={() => router.push('/rules')} />
-        <View style={s.utilityLine} />
-        <MenuLink label="Ayarlar" detail="Oyun, hesap ve gizlilik" onPress={() => router.push('/settings' as Href)} />
-      </View>
-
-      {auth.status === 'anonymous' && <Pressable accessibilityRole="button" onPress={() => setAccountOpenFor('anonymous')} style={s.guestNotice}>
-        <View><Text style={s.guestNoticeTitle}>Misafir olarak oynuyorsun</Text><Text style={s.guestNoticeText}>İlerlemeni korumak için ücretsiz hesap oluşturabilirsin.</Text></View>
-        <Text style={s.guestNoticeAction}>KAYDET</Text>
-      </Pressable>}
 
       <Text style={s.footer}>AMERİKANO · 12 EL · KLASİK KURALLAR</Text>
     </ScrollView>
 
     <Modal visible={accountOpenFor !== null && !(accountOpenFor === 'anonymous' && auth.status === 'signed-in')} transparent animationType="slide" onRequestClose={() => setAccountOpenFor(null)}>
-      <View style={s.modalRoot}>
+      <View style={[s.modalRoot, isTablet && s.modalRootTablet]}>
         <Pressable accessibilityLabel="Hesap penceresini kapat" style={s.modalBackdrop} onPress={() => setAccountOpenFor(null)} />
-        <View style={s.sheet}><View style={s.sheetHandle} /><ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}><AuthPanel onClose={() => setAccountOpenFor(null)} /></ScrollView></View>
+        <View style={[s.sheet, isTablet && s.sheetTablet]}><View style={s.sheetHandle} /><ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}><AuthPanel onClose={() => setAccountOpenFor(null)} /></ScrollView></View>
       </View>
     </Modal>
   </SafeAreaView>;
 }
 
 function EntryScreen() {
+  const { isTabletLandscape } = useResponsiveLayout();
   return <SafeAreaView style={s.page}>
-    <ScrollView contentContainerStyle={s.entryContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[s.entryContent, isTabletLandscape && s.entryContentWide]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <View style={s.entryBrand}><Text style={s.brand}>AMERİKANO</Text></View>
-      <View style={s.entryHero}>
-        <CardFan />
-        <Text style={s.entryKicker}>KLASİK OYUN · YENİ MASA</Text>
-        <Text style={s.entryTitle}>Kartlar hazır.{`\n`}Masadaki yerin belli.</Text>
-        <Text style={s.entrySubtitle}>Hesabınla devam et veya misafir olarak hemen oyuna katıl.</Text>
+      <View style={[s.entryBody, isTabletLandscape && s.entryBodyWide]}>
+        <View style={[s.entryHero, isTabletLandscape && s.entryHeroWide]}>
+          <CardFan />
+          <Text style={s.entryKicker}>KLASİK OYUN · YENİ MASA</Text>
+          <Text style={s.entryTitle}>Kartlar hazır.{`\n`}Masadaki yerin belli.</Text>
+          <Text style={s.entrySubtitle}>Hesabınla devam et veya misafir olarak hemen oyuna katıl.</Text>
+        </View>
+        <View style={[s.authCard, isTabletLandscape && s.authCardWide]}><AuthPanel entry /></View>
       </View>
-      <View style={s.authCard}><AuthPanel entry /></View>
       <Text style={s.privacyNote}>Devam ederek oyun verilerinin cihazında ve güvenli sunucularda saklanmasını kabul edersin.</Text>
     </ScrollView>
   </SafeAreaView>;
@@ -139,6 +152,7 @@ function firstName(value: unknown) {
 const s = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#0c3022' },
   homeContent: { flexGrow: 1, width: '100%', maxWidth: 620, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 26, gap: 15 },
+  homeContentTablet: { maxWidth: 1080, paddingHorizontal: 32, paddingBottom: 34 },
   brandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 52 },
   brandLockup: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   brand: { color: p.cream, fontSize: 15, fontWeight: '900', letterSpacing: 2.6 },
@@ -163,6 +177,9 @@ const s = StyleSheet.create({
   offlineBadge: { borderRadius: 999, backgroundColor: '#d9a4412c', paddingHorizontal: 7, paddingVertical: 4 },
   offlineText: { color: '#8a621e', fontSize: 7, letterSpacing: 0.7, fontWeight: '900' },
   playGrid: { flexDirection: 'row', gap: 11 },
+  dashboard: { gap: 15 },
+  dashboardWide: { flexDirection: 'row', alignItems: 'flex-start', gap: 18 },
+  dashboardColumn: { flex: 1, gap: 15, minWidth: 0 },
   playCard: { flex: 1, minHeight: 150, borderRadius: 19, borderWidth: 1, borderColor: p.line, backgroundColor: '#ffffff08', padding: 15 },
   quickCard: { backgroundColor: p.gold, borderColor: p.gold },
   playEyebrow: { color: p.gold, fontSize: 8, letterSpacing: 1.2, fontWeight: '900', marginBottom: 20 },
@@ -183,16 +200,23 @@ const s = StyleSheet.create({
   guestNoticeAction: { color: p.gold, fontSize: 9, letterSpacing: 1, fontWeight: '900', marginLeft: 'auto' },
   footer: { color: '#708f7d', fontSize: 8, fontWeight: '800', letterSpacing: 1.5, textAlign: 'center', marginTop: 3 },
   entryContent: { flexGrow: 1, width: '100%', maxWidth: 620, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 28 },
+  entryContentWide: { maxWidth: 1040, paddingHorizontal: 32 },
   entryBrand: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  entryBody: { width: '100%' },
+  entryBodyWide: { flexDirection: 'row', alignItems: 'center', gap: 54, flex: 1 },
   entryHero: { alignItems: 'center', paddingTop: 26, paddingBottom: 25 },
+  entryHeroWide: { flex: 1, minWidth: 0 },
   entryKicker: { color: p.gold, fontSize: 9, letterSpacing: 2, fontWeight: '900', marginTop: 8, marginBottom: 10 },
   entryTitle: { color: p.cream, fontSize: 34, lineHeight: 39, textAlign: 'center', fontWeight: '900', letterSpacing: -1 },
   entrySubtitle: { color: p.muted, fontSize: 14, lineHeight: 20, textAlign: 'center', maxWidth: 330, marginTop: 10 },
   authCard: { borderRadius: 24, padding: 20, borderWidth: 1, borderColor: p.line, backgroundColor: '#123d2bf0' },
+  authCardWide: { flex: 1, minWidth: 0, maxWidth: 480 },
   privacyNote: { color: '#708f7d', fontSize: 9, lineHeight: 14, textAlign: 'center', paddingHorizontal: 20, marginTop: 14 },
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
+  modalRootTablet: { justifyContent: 'center', padding: 32 },
   modalBackdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: '#03110bc7' },
   sheet: { maxHeight: '88%', borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: '#123d2b', borderWidth: 1, borderBottomWidth: 0, borderColor: p.line, paddingHorizontal: 22, paddingBottom: 30, paddingTop: 9 },
+  sheetTablet: { width: '100%', maxWidth: 620, alignSelf: 'center', borderRadius: 28, borderBottomWidth: 1 },
   sheetHandle: { width: 42, height: 4, borderRadius: 2, backgroundColor: '#ffffff36', alignSelf: 'center', marginBottom: 17 },
   loading: { alignItems: 'center', justifyContent: 'center' },
   loadingBrand: { color: p.cream, fontSize: 19, letterSpacing: 4, fontWeight: '900', marginTop: 20 },

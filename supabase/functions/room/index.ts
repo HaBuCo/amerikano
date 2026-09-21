@@ -193,7 +193,12 @@ Deno.serve(async (request) => {
       if (state.phase !== 'game-over') return;
       const minimum = Math.min(...state.players.map((player) => player.score));
       const winnerIds = state.players.filter((player) => player.score === minimum).map((player) => player.id);
-      const result = await admin.rpc('record_online_game_result', { p_room_id: targetRoomId, p_winner_ids: winnerIds });
+      const scores = Object.fromEntries(state.players.map((player) => [player.id, player.score]));
+      const result = await admin.rpc('record_online_game_result', {
+        p_room_id: targetRoomId,
+        p_winner_ids: winnerIds,
+        p_scores: scores,
+      });
       if (result.error) console.error('Could not record room result', result.error.message);
     };
 

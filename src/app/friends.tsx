@@ -4,12 +4,14 @@ import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View 
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { palette as p } from '@/constants/palette';
+import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
 import { connectRoom, enterRoom, leaveWaitingRoom, useRoom } from '@/network/client';
 import { avatarFor, refreshPlayerProfile } from '@/network/profile';
 import { clearPlayerSearch, dismissInvite, FriendPlayer, inviteFriend, refreshSocial, removeFriend, requestFriend, respondFriend, searchPlayers, useSocial } from '@/network/social';
 import { normalizeUsername } from '@/network/usernames';
 
 export default function FriendsScreen() {
+  const { isTablet } = useResponsiveLayout();
   const { roomCode } = useLocalSearchParams<{ roomCode?: string }>();
   const social = useSocial();
   const roomState = useRoom();
@@ -66,7 +68,7 @@ export default function FriendsScreen() {
 
   return <SafeAreaView style={s.page}>
     <Stack.Screen options={{ headerShown: false }} />
-    <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+    <ScrollView contentContainerStyle={[s.content, isTablet && s.contentTablet]} keyboardShouldPersistTaps="handled">
       <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>← Geri</Text></Pressable>
       <Text style={s.eyebrow}>ARKADAŞLAR</Text>
       <Text style={s.title}>{roomCode ? 'Masaya kimi çağıralım?' : 'Masan artık bir koddan fazlası.'}</Text>
@@ -130,12 +132,14 @@ export default function FriendsScreen() {
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return <View style={s.section}><Text style={s.label}>{title}</Text>{children}</View>;
+  const { isTablet } = useResponsiveLayout();
+  return <View style={s.section}><Text style={s.label}>{title}</Text><View style={[s.sectionItems, isTablet && s.sectionItemsTablet]}>{children}</View></View>;
 }
 
 function PlayerRow({ player, detail, actions }: { player: FriendPlayer; detail: string; actions?: React.ReactNode }) {
+  const { isTablet } = useResponsiveLayout();
   const avatar = avatarFor(player.avatarKey);
-  return <View style={s.playerRow}>
+  return <View style={[s.playerRow, isTablet && s.playerRowTablet]}>
     <View style={s.playerMain}>
       <View style={[s.avatar, { backgroundColor: avatar.color }]}><Text style={s.avatarText}>{avatar.symbol}</Text></View>
       <View style={s.playerCopy}><Text numberOfLines={1} style={s.playerName}>{player.displayName}</Text><Text style={[s.playerDetail, player.online && s.online]}>{detail}</Text></View>
@@ -152,16 +156,17 @@ function SmallButton({ label, onPress, filled = false, disabled = false }: { lab
 
 const s = StyleSheet.create({
   page: { flex: 1, backgroundColor: p.felt }, content: { padding: 26, paddingBottom: 50, gap: 15, width: '100%', maxWidth: 680, alignSelf: 'center' },
+  contentTablet: { maxWidth: 1080, paddingHorizontal: 34, paddingTop: 30 },
   back: { color: p.cream, fontSize: 15, paddingVertical: 10 }, eyebrow: { color: p.gold, letterSpacing: 3, fontSize: 11, marginTop: 8, fontWeight: '800' },
   title: { color: p.cream, fontSize: 34, lineHeight: 40, fontWeight: '800' }, body: { color: p.muted, fontSize: 15, lineHeight: 22 }, label: { color: p.gold, fontSize: 10, letterSpacing: 2, fontWeight: '800' },
   codePanel: { borderWidth: 1, borderColor: p.line, borderRadius: 15, padding: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   ownCode: { color: p.cream, fontSize: 23, fontWeight: '900', letterSpacing: 4, marginTop: 7 }, link: { color: p.gold, fontWeight: '700', padding: 8 },
   input: { minHeight: 52, borderRadius: 12, borderWidth: 1, borderColor: p.line, color: p.cream, backgroundColor: '#ffffff08', paddingHorizontal: 15, fontSize: 16 },
   searchHint: { color: p.muted, fontSize: 12, lineHeight: 18 }, disabled: { opacity: 0.4 },
-  section: { gap: 9, marginTop: 8 }, playerRow: { borderWidth: 1, borderColor: p.line, borderRadius: 14, padding: 13, gap: 12 },
+  section: { gap: 9, marginTop: 8 }, sectionItems: { gap: 9 }, sectionItemsTablet: { flexDirection: 'row', flexWrap: 'wrap' }, playerRow: { borderWidth: 1, borderColor: p.line, borderRadius: 14, padding: 13, gap: 12 }, playerRowTablet: { width: '48%', flexGrow: 1 },
   playerMain: { flexDirection: 'row', alignItems: 'center', gap: 11 }, avatar: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }, avatarText: { color: '#fff', fontWeight: '900', fontSize: 17 },
   playerCopy: { flex: 1 }, playerName: { color: p.cream, fontSize: 15, fontWeight: '800' }, playerDetail: { color: p.muted, fontSize: 11, marginTop: 4 }, online: { color: '#9bd5b5' },
   rowActions: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end' }, smallButton: { minHeight: 36, borderRadius: 9, borderWidth: 1, borderColor: p.line, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
   smallFilled: { backgroundColor: p.gold, borderColor: p.gold }, smallText: { color: p.cream, fontSize: 12, fontWeight: '800' }, smallFilledText: { color: p.ink },
-  empty: { color: p.muted, fontSize: 13, lineHeight: 20, borderWidth: 1, borderColor: p.line, borderRadius: 14, padding: 15 }, note: { color: p.gold, fontSize: 12, textAlign: 'center' }, error: { color: '#f0aaa4', textAlign: 'center' }, success: { color: '#9bd5b5', textAlign: 'center' },
+  empty: { width: '100%', color: p.muted, fontSize: 13, lineHeight: 20, borderWidth: 1, borderColor: p.line, borderRadius: 14, padding: 15 }, note: { color: p.gold, fontSize: 12, textAlign: 'center' }, error: { color: '#f0aaa4', textAlign: 'center' }, success: { color: '#9bd5b5', textAlign: 'center' },
 });

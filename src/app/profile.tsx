@@ -3,28 +3,30 @@ import { Href, router, Stack } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { palette as p } from '@/constants/palette';
+import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
 import { AVATAR_OPTIONS, AvatarKey, PlayerProfile, profileLevel, refreshPlayerProfile, savePlayerProfile, usePlayerProfile } from '@/network/profile';
 import { normalizeUsername, usernameError } from '@/network/usernames';
 
 export default function ProfileScreen() {
+  const { isTablet } = useResponsiveLayout();
   const state = usePlayerProfile();
   useEffect(() => { void refreshPlayerProfile(); }, []);
   const profile = state.profile;
   return <SafeAreaView style={s.page}>
     <Stack.Screen options={{ headerShown: false }} />
-    <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+    <ScrollView contentContainerStyle={[s.content, isTablet && s.contentTablet]} keyboardShouldPersistTaps="handled">
       <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>← Geri</Text></Pressable>
       <Text style={s.eyebrow}>OYUNCU PROFİLİ</Text>
       <Text style={s.title}>Masadaki sen.</Text>
       <Text style={s.body}>Adın ve avatarın bütün çevrim içi masalarda görünür.</Text>
 
-      {profile ? <ProfileForm key={`${profile.userId}:${profile.displayName}:${profile.avatarKey}`} profile={profile} loading={state.loading} saving={state.saving} error={state.error} />
+      {profile ? <ProfileForm key={`${profile.userId}:${profile.displayName}:${profile.avatarKey}`} profile={profile} loading={state.loading} saving={state.saving} error={state.error} tablet={isTablet} />
         : <Text style={state.error ? s.error : s.body}>{state.error || 'Profil hazırlanıyor…'}</Text>}
     </ScrollView>
   </SafeAreaView>;
 }
 
-function ProfileForm({ profile, loading, saving, error }: { profile: PlayerProfile; loading: boolean; saving: boolean; error: string }) {
+function ProfileForm({ profile, loading, saving, error, tablet = false }: { profile: PlayerProfile; loading: boolean; saving: boolean; error: string; tablet?: boolean }) {
   const [name, setName] = useState(profile.displayName);
   const [username, setUsername] = useState(profile.username || '');
   const [avatar, setAvatar] = useState<AvatarKey>(profile.avatarKey);
@@ -36,47 +38,59 @@ function ProfileForm({ profile, loading, saving, error }: { profile: PlayerProfi
       setSaved('Profilin kaydedildi.');
     } catch { /* Store exposes a user-facing error. */ }
   };
-  return <>
+  return <View style={s.form}>
       <View style={s.stats}>
         <View style={s.stat}><Text style={s.statValue}>{profileLevel(profile?.experience ?? 0)}</Text><Text style={s.statLabel}>SEVİYE</Text></View>
         <View style={s.stat}><Text style={s.statValue}>{profile?.gamesPlayed ?? 0}</Text><Text style={s.statLabel}>MAÇ</Text></View>
         <View style={s.stat}><Text style={s.statValue}>{profile?.wins ?? 0}</Text><Text style={s.statLabel}>GALİBİYET</Text></View>
       </View>
+      <Pressable accessibilityRole="button" onPress={() => router.push('/stats' as Href)} style={s.statsLink}>
+        <Text style={s.statsLinkText}>Tüm istatistiklerimi gör</Text><Text style={s.statsLinkArrow}>→</Text>
+      </Pressable>
 
       <View style={s.friendCodePanel}>
         <View><Text style={s.label}>KULLANICI ADIN</Text><Text selectable style={s.friendCode}>@{profile.username || 'hazırlanıyor'}</Text></View>
         <Pressable accessibilityRole="button" onPress={() => router.push('/friends' as Href)}><Text style={s.friendLink}>Arkadaşlar →</Text></Pressable>
       </View>
 
-      <Text style={s.label}>AVATAR</Text>
-      <View style={s.avatars}>{AVATAR_OPTIONS.map((option) => <Pressable key={option.key} accessibilityRole="button"
-        accessibilityLabel={`${option.key} avatarı`} accessibilityState={{ selected: avatar === option.key }}
-        onPress={() => setAvatar(option.key)} style={[s.avatarRing, avatar === option.key && s.avatarSelected]}>
-        <View style={[s.avatar, { backgroundColor: option.color }]}><Text style={s.avatarText}>{option.symbol}</Text></View>
-      </Pressable>)}</View>
-
-      <Text style={s.label}>OYUNCU ADI</Text>
-      <TextInput accessibilityLabel="Oyuncu adı" maxLength={18} value={name} onChangeText={(value) => { setName(value); setSaved(''); }}
-        placeholder="Adını yaz" placeholderTextColor={p.muted} style={s.input} />
-      <Text style={s.label}>KULLANICI ADI</Text>
-      <TextInput accessibilityLabel="Kullanıcı adı" autoCapitalize="none" autoCorrect={false} maxLength={20} value={username}
-        onChangeText={(value) => { setUsername(normalizeUsername(value)); setSaved(''); }} placeholder="kullaniciadi" placeholderTextColor={p.muted} style={s.input} />
-      <Text style={s.usernameHint}>Arkadaşların seni @{username || 'kullaniciadi'} yazarak bulabilir.</Text>
-      <Pressable accessibilityRole="button" disabled={!name.trim() || !!usernameError(username) || saving || loading}
-        style={[s.primary, (!name.trim() || !!usernameError(username) || saving || loading) && s.disabled]} onPress={() => void save()}>
-        <Text style={s.primaryText}>{saving ? 'Kaydediliyor…' : 'Profili kaydet'}</Text>
-      </Pressable>
+      <View style={[s.editor, tablet && s.editorTablet]}>
+        <View style={s.editorColumn}>
+          <Text style={s.label}>AVATAR</Text>
+          <View style={s.avatars}>{AVATAR_OPTIONS.map((option) => <Pressable key={option.key} accessibilityRole="button"
+            accessibilityLabel={`${option.key} avatarı`} accessibilityState={{ selected: avatar === option.key }}
+            onPress={() => setAvatar(option.key)} style={[s.avatarRing, avatar === option.key && s.avatarSelected]}>
+            <View style={[s.avatar, { backgroundColor: option.color }]}><Text style={s.avatarText}>{option.symbol}</Text></View>
+          </Pressable>)}</View>
+        </View>
+        <View style={s.editorColumn}>
+          <Text style={s.label}>OYUNCU ADI</Text>
+          <TextInput accessibilityLabel="Oyuncu adı" maxLength={18} value={name} onChangeText={(value) => { setName(value); setSaved(''); }}
+            placeholder="Adını yaz" placeholderTextColor={p.muted} style={s.input} />
+          <Text style={s.label}>KULLANICI ADI</Text>
+          <TextInput accessibilityLabel="Kullanıcı adı" autoCapitalize="none" autoCorrect={false} maxLength={20} value={username}
+            onChangeText={(value) => { setUsername(normalizeUsername(value)); setSaved(''); }} placeholder="kullaniciadi" placeholderTextColor={p.muted} style={s.input} />
+          <Text style={s.usernameHint}>Arkadaşların seni @{username || 'kullaniciadi'} yazarak bulabilir.</Text>
+          <Pressable accessibilityRole="button" disabled={!name.trim() || !!usernameError(username) || saving || loading}
+            style={[s.primary, (!name.trim() || !!usernameError(username) || saving || loading) && s.disabled]} onPress={() => void save()}>
+            <Text style={s.primaryText}>{saving ? 'Kaydediliyor…' : 'Profili kaydet'}</Text>
+          </Pressable>
+        </View>
+      </View>
       {!!saved && <Text style={s.success}>{saved}</Text>}
       {!!error && <Text style={s.error}>{error}</Text>}
-    </>;
+    </View>;
 }
 
 const s = StyleSheet.create({
   page: { flex: 1, backgroundColor: p.felt }, content: { padding: 26, gap: 15, width: '100%', maxWidth: 620, alignSelf: 'center' },
+  contentTablet: { maxWidth: 960, paddingHorizontal: 34, paddingTop: 30 },
+  form: { gap: 15 }, editor: { gap: 15 }, editorTablet: { flexDirection: 'row', gap: 24, alignItems: 'flex-start' }, editorColumn: { flex: 1, minWidth: 0, gap: 10 },
   back: { color: p.cream, fontSize: 15, paddingVertical: 10 }, eyebrow: { color: p.gold, letterSpacing: 3, fontSize: 11, marginTop: 12, fontWeight: '800' },
   title: { color: p.cream, fontSize: 34, fontWeight: '800' }, body: { color: p.muted, fontSize: 15, lineHeight: 22 },
   stats: { flexDirection: 'row', borderWidth: 1, borderColor: p.line, borderRadius: 16, paddingVertical: 16, marginVertical: 5 },
   stat: { flex: 1, alignItems: 'center', gap: 3 }, statValue: { color: p.cream, fontSize: 22, fontWeight: '900' }, statLabel: { color: p.muted, fontSize: 9, letterSpacing: 1.5 },
+  statsLink: { minHeight: 48, borderRadius: 13, backgroundColor: '#d9a44112', borderWidth: 1, borderColor: '#d9a44142', paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  statsLinkText: { color: p.gold, fontSize: 13, fontWeight: '800' }, statsLinkArrow: { color: p.gold, fontSize: 18 },
   label: { color: p.gold, fontSize: 10, letterSpacing: 2, fontWeight: '800', marginTop: 5 }, avatars: { flexDirection: 'row', flexWrap: 'wrap', gap: 11 },
   avatarRing: { padding: 3, borderWidth: 2, borderColor: 'transparent', borderRadius: 30 }, avatarSelected: { borderColor: p.gold },
   avatar: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' }, avatarText: { color: '#fff', fontSize: 20, fontWeight: '900' },

@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameTable } from '@/components/game-table';
@@ -17,6 +17,7 @@ import { contractIndexForRound, openingJokerRestricted, roundCountForGame, rules
 import { parseSingleGameOptions, rulesFromSingleOptions } from '@/game/single-game-options';
 import type { SingleGameOptions } from '@/game/single-game-options';
 import { pickOpponentNames } from '@/game/opponent-names';
+import { recordSinglePlayerResult } from '@/game/single-stats';
 
 function createSingleGame(options: SingleGameOptions) {
   const names = ['Sen', ...pickOpponentNames(options.playerCount - 1, Math.random, ['Sen'])];
@@ -37,6 +38,7 @@ export default function GameScreen() {
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [debugEvents, setDebugEvents] = useState<string[]>([]);
   const [undoGame, setUndoGame] = useState<typeof game | null>(null);
+  const resultRecorded = useRef(false);
   const current = game.players.find(p => p.id === actingPlayerId(game))!;
   const viewerId = single ? game.players[0].id : current.id;
   const appendDebugEvent = useCallback((message: string) => {
@@ -69,8 +71,15 @@ export default function GameScreen() {
   }, [single]);
   useEffect(() => {
     if (!single || loadState !== 'ready') return;
-    if (game.phase === 'game-over') void clearSingleGame();
-    else void saveSingleGame(game);
+    if (game.phase === 'game-over') {
+      void clearSingleGame();
+      if (!resultRecorded.current) {
+        resultRecorded.current = true;
+        const score = game.players[0]?.score ?? 0;
+        const winningScore = Math.min(...game.players.map(player => player.score));
+        void recordSinglePlayerResult(score, score === winningScore);
+      }
+    } else void saveSingleGame(game);
   }, [game, loadState, single]);
   useEffect(() => {
     if (!single || loadState !== 'ready' || tutorialOpen || current.id === viewerId || !['draw', 'claim', 'play'].includes(game.phase)) return;

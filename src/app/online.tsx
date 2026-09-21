@@ -8,8 +8,10 @@ import { RoundIntro } from '@/components/round-intro';
 import { palette as p } from '@/constants/palette';
 import { avatarFor, profileLevel, refreshPlayerProfile, usePlayerProfile } from '@/network/profile';
 import { MIN_GAME_PLAYERS } from '@/game/engine';
+import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
 
 export default function OnlineScreen() {
+  const { isTablet } = useResponsiveLayout();
   const { quick } = useLocalSearchParams<{ quick?: string }>();
   const state = useRoom();
   const profileState = usePlayerProfile();
@@ -77,7 +79,7 @@ export default function OnlineScreen() {
     <RoundIntro roundIndex={room.game.roundIndex} starterName={room.game.players[room.game.startingPlayerIndex]?.name ?? 'Oyuncu'} enabled={state.status === 'online'} />
   </View>;
   return <SafeAreaView style={s.page}>
-    <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+    <ScrollView contentContainerStyle={[s.content, isTablet && s.contentTablet]} keyboardShouldPersistTaps="handled">
       <Pressable accessibilityRole="button" disabled={state.busy} onPress={goBack}><Text style={s.back}>← Ana menü</Text></Pressable>
       <Pressable accessibilityRole="button" onPress={() => router.push('/profile')} style={s.profileLink}>
         <Text style={s.profileLinkText}>Profilim · Sv. {profileLevel(profileState.profile?.experience ?? 0)} →</Text>
@@ -137,6 +139,7 @@ export default function OnlineScreen() {
 const s = StyleSheet.create({
   gameRoot: { flex: 1, backgroundColor: '#09271e' },
   page: { flex: 1, backgroundColor: p.felt }, content: { padding: 26, gap: 16, width: '100%', maxWidth: 620, alignSelf: 'center' },
+  contentTablet: { maxWidth: 820, paddingHorizontal: 34, paddingTop: 30, paddingBottom: 44 },
   back: { color: p.cream, fontSize: 15, paddingVertical: 10 }, profileLink: { position: 'absolute', top: 26, right: 26, paddingVertical: 10 }, profileLinkText: { color: p.gold, fontSize: 13, fontWeight: '700' }, eyebrow: { color: p.gold, letterSpacing: 3, fontSize: 11, marginTop: 20, fontWeight: '800' },
   title: { color: p.cream, fontSize: 38, lineHeight: 43, fontWeight: '800' }, body: { color: p.muted, fontSize: 15, lineHeight: 23 },
   status: { color: '#bdd4c4', fontSize: 12 }, label: { color: p.gold, fontSize: 10, letterSpacing: 2, fontWeight: '800' },

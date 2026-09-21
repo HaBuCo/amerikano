@@ -22,25 +22,30 @@ export class AppErrorBoundary extends Component<Props, State> {
 
   private recover = () => {
     this.setState({ error: null });
-    router.replace('/');
+    try { router.replace('/'); } catch { /* Layout may still be mounting. */ }
   };
 
   render() {
     if (!this.state.error) return this.props.children;
     return <View style={s.page}>
-      <Text style={s.eyebrow}>OYUN GÜVENLE DURDURULDU</Text>
-      <Text style={s.title}>Beklenmeyen bir hata oluştu.</Text>
-      <Text style={s.body}>Hata kaydı inceleme için gönderildi. Çevrim içi elin sunucuda, tek oyunculu elin cihazında korunuyor.</Text>
-      <Pressable accessibilityRole="button" onPress={this.recover} style={s.button}><Text style={s.buttonText}>Ana menüye dön</Text></Pressable>
+      <View style={s.content}>
+        <Text style={s.eyebrow}>OYUN GÜVENLE DURDURULDU</Text>
+        <Text style={s.title}>Beklenmeyen bir hata oluştu.</Text>
+        <Text style={s.body}>Hata kaydı inceleme için gönderildi. Çevrim içi elin sunucuda, tek oyunculu elin cihazında korunuyor.</Text>
+        {__DEV__ && !!this.state.error.message && <Text style={s.debug}>{this.state.error.message}</Text>}
+        <Pressable accessibilityRole="button" onPress={this.recover} style={s.button}><Text style={s.buttonText}>Ana menüye dön</Text></Pressable>
+      </View>
     </View>;
   }
 }
 
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: p.felt, padding: 28, justifyContent: 'center', gap: 18 },
+  page: { flex: 1, backgroundColor: p.felt, padding: 28, justifyContent: 'center' },
+  content: { width: '100%', maxWidth: 640, alignSelf: 'center', gap: 18 },
   eyebrow: { color: p.gold, fontSize: 11, letterSpacing: 2.5, fontWeight: '900' },
   title: { color: p.cream, fontSize: 31, lineHeight: 38, fontWeight: '900' },
   body: { color: p.muted, fontSize: 16, lineHeight: 25 },
   button: { minHeight: 56, borderRadius: 14, backgroundColor: p.gold, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
   buttonText: { color: p.ink, fontSize: 16, fontWeight: '900' },
+  debug: { color: '#f0aaa4', fontSize: 13, lineHeight: 19 },
 });
