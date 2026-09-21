@@ -2,7 +2,7 @@
   "expo": {
     "name": "Amerikano",
     "slug": "amerikano",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "amerikano",
@@ -58,7 +58,7 @@
       [
         "@react-native-google-signin/google-signin",
         {
-          "iosUrlScheme": "com.googleusercontent.apps.placeholder"
+          "iosUrlScheme": "com.googleusercontent.apps.1074609726759-ed515t8nndsjg8vdn3kpjk6eus7nbgme"
         }
       ],
       "expo-asset",

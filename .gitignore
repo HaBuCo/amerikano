@@ -49,3 +49,5 @@ supabase/.temp/
 
 # Local iOS signing material (private key, CSR, cert)
 ios-cert/
+
+/store

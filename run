@@ -1,0 +1,6 @@
+npm install
+npm run android
+
+npx expo start
+
+npx expo start --tunnel
