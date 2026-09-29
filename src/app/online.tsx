@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { Href, router, useLocalSearchParams } from 'expo-router';
-import { Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { connectRoom, enterQuickRoom, enterRoom, forgetRoom, forfeitRoom, leaveWaitingRoom, sendAction, sendRoom, suspendRoom, useRoom } from '@/network/client';
 import { GameTable } from '@/components/game-table';
+import { WaitingTable } from '@/components/waiting-table';
 import { RoundIntro } from '@/components/round-intro';
 import { palette as p } from '@/constants/palette';
 import { avatarFor, profileLevel, refreshPlayerProfile, usePlayerProfile } from '@/network/profile';
 import { MIN_GAME_PLAYERS } from '@/game/engine';
 import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
+import { registerRoundOver, showMatchEndInterstitial } from '@/ads/interstitial';
+import { GameAction } from '@/game/types';
 
 export default function OnlineScreen() {
   const { isTablet } = useResponsiveLayout();
@@ -71,22 +75,22 @@ export default function OnlineScreen() {
       modeLabel={`ÇEVRİM İÇİ · ${room.code}`} canAdvance={room.hostId === room.you || hostIsBot} canRematch={room.hostId === room.you || hostIsBot}
       playerMeta={playerMeta} onRematch={() => sendRoom({ type: 'rematch' })}
       botControlled={me?.botControlled} onReclaim={() => sendRoom({ type: 'reclaim' })}
-      blocked={state.status !== 'online' || state.busy} onAction={sendAction}
+      blocked={state.status !== 'online' || state.busy} onAction={(action: GameAction) => { if (action.type === 'next' && room.game?.phase === 'round-over') registerRoundOver(); sendAction(action); }}
       connectionState={state.status === 'online' ? 'online' : state.status === 'connecting' ? 'reconnecting' : 'offline'}
       error={state.error || (state.status !== 'online' ? 'Yeniden bağlanılıyor… Elin korunuyor.' : '')}
       onForfeit={() => { void forfeitRoom().then((left) => { if (left) router.replace('/'); }); }}
-      onExit={() => { if (room.game?.phase === 'game-over') forgetRoom(); else suspendRoom(); router.replace('/'); }} />
+      onExit={() => { if (room.game?.phase === 'game-over') { showMatchEndInterstitial(); forgetRoom(); } else suspendRoom(); router.replace('/'); }} />
     <RoundIntro roundIndex={room.game.roundIndex} starterName={room.game.players[room.game.startingPlayerIndex]?.name ?? 'Oyuncu'} enabled={state.status === 'online'} />
   </View>;
   return <SafeAreaView style={s.page}>
-    <ScrollView contentContainerStyle={[s.content, isTablet && s.contentTablet]} keyboardShouldPersistTaps="handled">
+    <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={[s.content, isTablet && s.contentTablet]} keyboardShouldPersistTaps="handled">
       <Pressable accessibilityRole="button" disabled={state.busy} onPress={goBack}><Text style={s.back}>← Ana menü</Text></Pressable>
       <Pressable accessibilityRole="button" onPress={() => router.push('/profile')} style={s.profileLink}>
         <Text style={s.profileLinkText}>Profilim · Sv. {profileLevel(profileState.profile?.experience ?? 0)} →</Text>
       </Pressable>
       <Text style={s.eyebrow}>{room?.visibility === 'public' ? 'HIZLI MASA' : 'ARKADAŞ MASASI'}</Text>
-      <Text style={s.title}>{room ? 'Sandalyeler dolsun.' : quick === '1' ? 'Sana bir masa buluyoruz.' : 'Aynı masa.\nNerede olursan.'}</Text>
-      <Text style={s.body}>{room?.visibility === 'public' ? 'Sistem yeni oyuncuları bu masaya yerleştirir. En az iki kişi hazır olduğunda başlayabilirsiniz.' : room ? 'Kodunu veya arkadaş davetini paylaş. Herkes hazır olduğunda başlayın.' : 'Hemen bir masaya otur veya arkadaşlarına özel oda kur.'}</Text>
+      <Text style={s.title}>{room ? 'Masana oturdun.' : quick === '1' ? 'Sana bir masa buluyoruz.' : 'Aynı masa.\nNerede olursan.'}</Text>
+      <Text style={s.body}>{room?.visibility === 'public' ? 'Yerini tuttun. Sistem yeni oyuncuları bu masaya yerleştirirken sen bekle.' : room ? 'Kodunu veya arkadaş davetini paylaş. Herkes hazır olduğunda başlayın.' : 'Hemen bir masaya otur veya arkadaşlarına özel oda kur.'}</Text>
       <Text style={s.status}>{state.status === 'online' ? '● Sunucuya bağlı' : '○ Bağlantı bekleniyor'}</Text>
       {!!state.error && <View style={s.error}><Text style={s.body}>{state.error}</Text><Pressable onPress={forgetRoom}><Text style={s.link}>Oturumu sıfırla ve yeniden dene</Text></Pressable></View>}
       {!room ? <>
@@ -105,14 +109,8 @@ export default function OnlineScreen() {
         <Pressable accessibilityRole="button" style={s.inviteButton} onPress={() => router.push(`/friends?roomCode=${room.code}` as Href)}>
           <Text style={s.white}>Arkadaşlarını davet et</Text><Text style={s.inviteArrow}>→</Text>
         </Pressable>
-        {room.members.map(m => {
-          const avatar = avatarFor(m.avatarKey);
-          return <View key={m.id} style={s.member}>
-            <View style={s.memberIdentity}><View style={[s.memberAvatar, { backgroundColor: avatar.color }]}><Text style={s.memberAvatarText}>{avatar.symbol}</Text></View>
-              <View><Text style={s.white}>{m.name}{m.id === room.you ? ' (sen)' : ''}{m.id === room.hostId ? ' ♛' : ''}</Text><Text style={s.memberStats}>{m.isBot ? 'Oyun tarafından yönetilir' : `Sv. ${m.level} · ${m.gamesPlayed} maç · ${m.wins} galibiyet`}</Text></View></View>
-            <Text style={s.status}>{!m.connected ? 'Yeniden bağlanıyor' : m.ready ? '✓ Hazır' : 'Bekleniyor'}</Text>
-          </View>;
-        })}
+        <WaitingTable room={room} tableWidth={isTablet ? 780 : 560} searching={room.visibility === 'public'}
+          onInviteEmptySeat={room.visibility === 'private' ? () => router.push(`/friends?roomCode=${room.code}` as Href) : undefined} />
         {room.visibility === 'private' ? <>
           {room.hostId === room.you && <View style={s.botPanel}>
             <View style={s.botCopy}><Text style={s.white}>Yapay oyuncular</Text><Text style={s.roomHint}>{botCount ? `${botCount} yapay oyuncu masada` : 'Eksik koltukları yapay oyuncularla doldur'}</Text></View>
@@ -121,8 +119,9 @@ export default function OnlineScreen() {
               <Pressable accessibilityRole="button" accessibilityLabel="Yapay oyuncu ekle" disabled={state.busy || state.status !== 'online' || room.members.length >= 6} onPress={() => sendRoom({ type: 'add-bot' })} style={[s.botButton, (state.busy || state.status !== 'online' || room.members.length >= 6) && s.disabled]}><Text style={s.botAddText}>+ Oyuncu ekle</Text></Pressable>
             </View>
           </View>}
+          {quickSeconds !== null && <Text style={s.matchTitle}>Kartlar {quickSeconds} saniye içinde dağıtılıyor</Text>}
           <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online'} onPress={() => sendRoom({ type: 'ready', ready: !me?.ready })} style={s.secondary}><Text style={s.white}>{me?.ready ? 'Hazır değilim' : 'Hazırım ✓'}</Text></Pressable>
-          {room.hostId === room.you && <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online' || room.members.length < MIN_GAME_PLAYERS || room.members.some(m => !m.ready || !m.connected)} style={[s.primary, (room.members.length < MIN_GAME_PLAYERS || room.members.some(m => !m.ready || !m.connected)) && s.disabled]} onPress={() => sendRoom({ type: 'start' })}><Text style={s.primaryText}>Kartları dağıt</Text></Pressable>}
+          {room.hostId === room.you && <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online' || room.members.length < MIN_GAME_PLAYERS || room.members.some(m => !m.ready || !m.connected)} style={[s.primary, (room.members.length < MIN_GAME_PLAYERS || room.members.some(m => !m.ready || !m.connected)) && s.disabled]} onPress={() => sendRoom({ type: 'start' })}><Text style={s.primaryText}>{quickSeconds !== null ? 'Hemen dağıt' : 'Kartları dağıt'}</Text></Pressable>}
         </> : <View style={s.matchPanel}>
           <Text style={s.matchTitle}>{quickSeconds === null ? 'Rakip aranıyor…' : `Kartlar ${quickSeconds} saniye içinde dağıtılıyor`}</Text>
           <Text style={s.roomHint}>{quickSeconds === null ? 'İkinci oyuncu geldiğinde herkes otomatik hazır olur.' : 'Masadan ayrılma; oyun otomatik başlayacak.'}</Text>
@@ -133,7 +132,7 @@ export default function OnlineScreen() {
         <Text style={s.roomHint}>Ana menüye dönersen bu bekleme odasından ayrılırsın.</Text>
         <Pressable disabled={state.busy} onPress={() => void leaveWaitingRoom()}><Text style={s.link}>{room.visibility === 'public' ? 'Aramayı iptal et' : 'Odadan ayrıl'}</Text></Pressable>
       </>}
-    </ScrollView>
+    </KeyboardAwareScrollView>
   </SafeAreaView>;
 }
 const s = StyleSheet.create({
@@ -150,8 +149,6 @@ const s = StyleSheet.create({
   white: { color: p.cream, fontSize: 15, fontWeight: '700' }, disabled: { opacity: 0.4 }, divider: { height: 1, backgroundColor: p.line, marginVertical: 12 },
   codeInput: { letterSpacing: 7, textAlign: 'center' }, codePanel: { padding: 24, alignItems: 'center', borderRadius: 18, borderWidth: 1, borderColor: p.line, gap: 12 },
   code: { fontSize: 39, fontWeight: '800', letterSpacing: 6, color: p.cream }, link: { color: p.gold, fontSize: 14, paddingVertical: 8 },
-  member: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: p.line },
-  memberIdentity: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 }, memberAvatar: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' }, memberAvatarText: { color: '#fff', fontSize: 16, fontWeight: '900' }, memberStats: { color: p.muted, fontSize: 10, marginTop: 2 },
   error: { borderRadius: 12, backgroundColor: '#842c2c55', padding: 14 },
   roomHint: { color: p.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' },
   inviteButton: { minHeight: 52, paddingHorizontal: 17, borderRadius: 13, backgroundColor: '#ffffff0d', borderWidth: 1, borderColor: p.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, inviteArrow: { color: p.gold, fontSize: 22 },

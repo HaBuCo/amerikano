@@ -10,6 +10,7 @@ const corsHeaders = {
 };
 
 type Command =
+  | { type: 'single-result'; won: boolean }
   | { type: 'create'; name: string }
   | { type: 'join'; code: string; name: string }
   | { type: 'matchmake'; name: string }
@@ -173,7 +174,9 @@ Deno.serve(async (request) => {
         }
       }
       const connectedCount = memberViews.filter((member) => member.connected).length;
-      const startsAt = roomRecord.visibility === 'public' && roomRecord.status === 'waiting' && connectedCount >= MIN_GAME_PLAYERS
+      const allMembersReady = memberViews.length >= MIN_GAME_PLAYERS && memberViews.every((member) => member.ready && member.connected);
+      const startsAt = roomRecord.status === 'waiting' && connectedCount >= MIN_GAME_PLAYERS
+        && (roomRecord.visibility === 'public' || allMembersReady)
         ? Date.parse(roomRecord.updated_at) + 5_000
         : undefined;
       return {
@@ -202,7 +205,7 @@ Deno.serve(async (request) => {
       if (result.error) console.error('Could not record room result', result.error.message);
     };
 
-    const autoStartPublicRoom = async (
+    const autoStartWaitingRoom = async (
       targetRoomId: string,
       initialView: Awaited<ReturnType<typeof roomView>>,
     ) => {
@@ -216,8 +219,11 @@ Deno.serve(async (request) => {
         }).eq('id', targetRoomId).eq('revision', currentView.revision);
         currentView = await roomView(targetRoomId);
       }
+      if (currentView.status !== 'waiting') return false;
+      // Re-check readiness fresh: someone may have un-readied during the countdown.
+      if (currentView.visibility === 'private' && currentView.members.some((member) => !member.ready)) return false;
       const activeMembers = currentView.members.filter((member) => member.connected);
-      if (currentView.status !== 'waiting' || activeMembers.length < MIN_GAME_PLAYERS) return false;
+      if (activeMembers.length < MIN_GAME_PLAYERS) return false;
       const game = createRoomGame(activeMembers);
       const commit = await admin.rpc('commit_room_state', {
         target_room: targetRoomId,
@@ -229,6 +235,12 @@ Deno.serve(async (request) => {
       });
       return !commit.error && commit.data !== null;
     };
+
+    if (command.type === 'single-result') {
+      const result = await admin.rpc('record_single_player_xp', { p_won: !!command.won });
+      if (result.error) throw result.error;
+      return json({ experience: result.data as number });
+    }
 
     if (command.type === 'create') {
       await admin.from('rooms').delete().lt('expires_at', new Date().toISOString());
@@ -282,16 +294,23 @@ Deno.serve(async (request) => {
 
     if (command.type === 'fetch') {
       const currentView = await roomView(command.roomId);
-      if (currentView.visibility === 'public' && currentView.status === 'waiting' &&
+      if (currentView.status === 'waiting' &&
           currentView.startsAt && currentView.startsAt <= Date.now()) {
-        await autoStartPublicRoom(command.roomId, currentView);
+        await autoStartWaitingRoom(command.roomId, currentView);
         return json({ roomId: command.roomId, room: await roomView(command.roomId) });
       }
       const { data: stored } = await admin.from('room_states').select('state').eq('room_id', command.roomId).maybeSingle();
       const before = stored?.state as GameState | undefined;
       if (before) {
         await recordResult(command.roomId, before);
-        const after = advanceBots(expireTurn(before, Date.now(), secureRandom));
+        const disconnectedPlayerIds = currentView.members
+          .filter((member) => !member.isBot && !member.connected)
+          .map((member) => member.id);
+        const withBotTakeovers = disconnectedPlayerIds.reduce(
+          (state, playerId) => cedeSeatToBot(state, playerId),
+          before,
+        );
+        const after = advanceBots(expireTurn(withBotTakeovers, Date.now(), secureRandom));
         if (after !== before) {
           await admin.rpc('commit_room_state', {
             target_room: command.roomId,
@@ -313,7 +332,17 @@ Deno.serve(async (request) => {
         p_room_id: command.roomId, p_user_id: user.id, p_ready: command.ready,
       });
       if (result.error) throw new Error('Hazırlık durumu değiştirilemedi.');
-      return json({ roomId: command.roomId, room: await roomView(command.roomId) });
+      let updatedView = await roomView(command.roomId);
+      // Everyone just became ready: bump the room so `startsAt` anchors the countdown from now.
+      if (updatedView.visibility === 'private' && updatedView.status === 'waiting'
+        && updatedView.members.length >= MIN_GAME_PLAYERS && updatedView.members.every((member) => member.ready)) {
+        const touched = await admin.from('rooms').update({
+          revision: updatedView.revision + 1,
+          updated_at: new Date().toISOString(),
+        }).eq('id', command.roomId).eq('revision', updatedView.revision).select('id').maybeSingle();
+        if (touched.data) updatedView = await roomView(command.roomId);
+      }
+      return json({ roomId: command.roomId, room: updatedView });
     }
 
     if (command.type === 'add-bot' || command.type === 'remove-bot') {

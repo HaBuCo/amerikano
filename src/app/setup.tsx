@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { palette } from '@/constants/palette';
@@ -23,8 +24,8 @@ export default function SetupScreen() {
 
   return (
     <SafeAreaView edges={['bottom']} style={styles.safeArea}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={[styles.content, isTablet && styles.contentTablet]} keyboardShouldPersistTaps="handled">
+      <View style={styles.flex}>
+        <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={[styles.content, isTablet && styles.contentTablet]} keyboardShouldPersistTaps="handled">
           <Text style={styles.eyebrow}>OYUNCULAR</Text>
           <Text style={styles.title}>Masada kimler var?</Text>
           <Text style={styles.description}>Telefon her tur sıradaki oyuncuya geçecek. Elini göstermeden önce yalnız olduğundan emin ol.</Text>
@@ -66,14 +67,14 @@ export default function SetupScreen() {
               <Text style={styles.infoText}>İki deste, 2 joker ve yaygın puanlama sistemi kullanılır.</Text>
             </View>
           </View>
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         <View style={styles.bottomBar}>
           <Pressable onPress={start} style={({ pressed }) => [styles.startButton, isTablet && styles.startButtonTablet, pressed && styles.pressed]}>
             <Text style={styles.startText}>Masayı Kur</Text><Text style={styles.arrow}>→</Text>
           </Pressable>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }

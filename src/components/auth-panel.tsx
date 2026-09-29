@@ -233,7 +233,7 @@ const s = StyleSheet.create({
   link: { color: p.gold, fontSize: 13, paddingVertical: 5, textAlign: 'center', fontWeight: '700' },
   divider: { height: 1, backgroundColor: p.line, marginVertical: 2 },
   guestButton: { minHeight: 68, borderRadius: 15, borderWidth: 1, borderColor: '#d9a44166', backgroundColor: '#d9a44112', justifyContent: 'center', paddingHorizontal: 16 },
-  guestCopy: { flex: 1 },
+  guestCopy: { justifyContent: 'center' },
   guestTitle: { color: p.cream, fontSize: 15, fontWeight: '900' },
   guestCaption: { color: p.muted, fontSize: 11, marginTop: 4 },
   member: { padding: 14, borderRadius: 15, borderWidth: 1, borderColor: p.line, backgroundColor: '#ffffff08', flexDirection: 'row', alignItems: 'center', gap: 12 },

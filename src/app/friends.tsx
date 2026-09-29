@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { palette as p } from '@/constants/palette';
@@ -68,7 +69,7 @@ export default function FriendsScreen() {
 
   return <SafeAreaView style={s.page}>
     <Stack.Screen options={{ headerShown: false }} />
-    <ScrollView contentContainerStyle={[s.content, isTablet && s.contentTablet]} keyboardShouldPersistTaps="handled">
+    <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={[s.content, isTablet && s.contentTablet]} keyboardShouldPersistTaps="handled">
       <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>← Geri</Text></Pressable>
       <Text style={s.eyebrow}>ARKADAŞLAR</Text>
       <Text style={s.title}>{roomCode ? 'Masaya kimi çağıralım?' : 'Masan artık bir koddan fazlası.'}</Text>
@@ -127,7 +128,7 @@ export default function FriendsScreen() {
         actions={<SmallButton label="İptal et" disabled={social.busy} onPress={() => void removeFriend(player.userId, 'Arkadaşlık isteği iptal edildi.')} />} />)}</Section>}
       {social.loading && <Text style={s.empty}>Arkadaşların yükleniyor…</Text>}
       {roomState.room?.status === 'playing' && <Text style={s.note}>Devam eden oyun varken başka bir masaya geçemezsin.</Text>}
-    </ScrollView>
+    </KeyboardAwareScrollView>
   </SafeAreaView>;
 }
 

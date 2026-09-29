@@ -4,3 +4,7 @@ npm run android
 npx expo start
 
 npx expo start --tunnel
+
+npx expo start --android --localhost
+
+adb shell cmd alarm set-time ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())

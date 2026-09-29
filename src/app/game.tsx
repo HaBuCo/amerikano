@@ -18,6 +18,8 @@ import { parseSingleGameOptions, rulesFromSingleOptions } from '@/game/single-ga
 import type { SingleGameOptions } from '@/game/single-game-options';
 import { pickOpponentNames } from '@/game/opponent-names';
 import { recordSinglePlayerResult } from '@/game/single-stats';
+import { registerRoundOver, showMatchEndInterstitial } from '@/ads/interstitial';
+import { recordSinglePlayerXp } from '@/network/client';
 
 function createSingleGame(options: SingleGameOptions) {
   const names = ['Sen', ...pickOpponentNames(options.playerCount - 1, Math.random, ['Sen'])];
@@ -77,7 +79,9 @@ export default function GameScreen() {
         resultRecorded.current = true;
         const score = game.players[0]?.score ?? 0;
         const winningScore = Math.min(...game.players.map(player => player.score));
-        void recordSinglePlayerResult(score, score === winningScore);
+        const won = score === winningScore;
+        void recordSinglePlayerResult(score, won);
+        void recordSinglePlayerXp(won);
       }
     } else void saveSingleGame(game);
   }, [game, loadState, single]);
@@ -126,6 +130,7 @@ export default function GameScreen() {
     setLoadState('ready');
   }
   function act(action: GameAction) {
+    if (action.type === 'next' && game.phase === 'round-over') registerRoundOver();
     const description = describeDebugAction(game, viewerId, action);
     const next = applyAction(game, viewerId, action);
     if (next === game) {
@@ -160,9 +165,9 @@ export default function GameScreen() {
   }
 
   return <View style={s.gameRoot}>
-    <GameTable key={game.roundIndex + ':' + viewerId} game={projectGame(game, viewerId)} viewerId={viewerId} modeLabel={single ? 'TEK OYUNCULU' : 'AYNI CİHAZDA'} onAction={act} error={error} debugText={single ? debugText : undefined} onOpenTutorial={single ? () => setTutorialOpen(true) : undefined} canUndo={Boolean(undoGame)} onUndo={single && rulesForGame(game).undoEnabled ? () => { if (undoGame) { setGame(undoGame); setUndoGame(null); setError(''); appendDebugEvent('Son hamle geri alındı.'); } } : undefined} onExit={() => router.replace('/')} />
+    <GameTable key={game.roundIndex + ':' + viewerId} game={projectGame(game, viewerId)} viewerId={viewerId} modeLabel={single ? 'TEK OYUNCULU' : 'AYNI CİHAZDA'} onAction={act} error={error} debugText={single ? debugText : undefined} onOpenTutorial={single ? () => setTutorialOpen(true) : undefined} canUndo={Boolean(undoGame)} onUndo={single && rulesForGame(game).undoEnabled ? () => { if (undoGame) { setGame(undoGame); setUndoGame(null); setError(''); appendDebugEvent('Son hamle geri alındı.'); } } : undefined} onExit={() => { if (game.phase === 'game-over') showMatchEndInterstitial(); router.replace('/'); }} />
     <RoundIntro roundIndex={game.roundIndex} contractIndex={contractIndexForRound(game)} roundCount={roundCountForGame(game)} starterName={game.players[game.startingPlayerIndex]?.name ?? 'Oyuncu'} jokerRestricted={openingJokerRestricted(game)} mode={rulesForGame(game).roundIntro} enabled={single ? !tutorialOpen : visible} />
-    {single && <GameTutorial visible={tutorialOpen} onDone={finishTutorial} roundCount={roundCountForGame(game)} claimsEnabled={rulesForGame(game).claimsEnabled && game.players.length > 2} claimSeconds={rulesForGame(game).claimTimeoutMs / 1000} jokerRestriction={rulesForGame(game).jokerOpeningRestriction} playableDiscardPenalty={rulesForGame(game).playableDiscardPenalty} />}
+    {single && <GameTutorial visible={tutorialOpen} onDone={finishTutorial} roundCount={roundCountForGame(game)} claimsEnabled={rulesForGame(game).claimsEnabled && game.players.length > 2} claimSeconds={rulesForGame(game).claimTimeoutMs / 1000} jokerRestrictionRounds={rulesForGame(game).jokerOpeningRestrictionRounds} playableDiscardPenalty={rulesForGame(game).playableDiscardPenalty} />}
     <Modal visible={!single && !visible && !['round-over', 'game-over'].includes(game.phase)} animationType="none" onRequestClose={() => router.replace('/')}>
       <View style={s.curtain}><Text style={s.eyebrow}>TELEFONU VER</Text><Text style={s.name}>{current.name}</Text><Text style={s.copy}>Hazır olduğunda kartlarını göster.</Text><Pressable accessibilityRole="button" onPress={() => setVisible(true)} style={s.button}><Text style={s.buttonText}>Elimi göster</Text></Pressable></View>
     </Modal>

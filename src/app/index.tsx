@@ -1,14 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Href, router } from 'expo-router';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AdBanner } from '@/components/ad-banner';
 import { AuthPanel } from '@/components/auth-panel';
 import { PlayingCard } from '@/components/playing-card';
 import { palette as p } from '@/constants/palette';
 import { Card } from '@/game/types';
 import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
 import { useAuth } from '@/network/auth';
+import { connectRoom } from '@/network/client';
+import { refreshSocial, useSocial } from '@/network/social';
 
 const sampleCards: Card[] = [
   { id: 'hero-1', rank: 'Q', suit: 'hearts', isJoker: false },
@@ -27,6 +31,14 @@ export default function HomeScreen() {
   const auth = useAuth();
   const { isTablet, isWideTablet } = useResponsiveLayout();
   const [accountOpenFor, setAccountOpenFor] = useState<'anonymous' | 'signed-in' | null>(null);
+  const social = useSocial();
+
+  useEffect(() => {
+    if (auth.status !== 'anonymous' && auth.status !== 'signed-in') return;
+    void connectRoom().then(() => refreshSocial(true));
+    const timer = setInterval(() => { void refreshSocial(true); }, 30_000);
+    return () => clearInterval(timer);
+  }, [auth.status]);
 
   if (auth.status === 'loading') return <LoadingScreen />;
   if (auth.status === 'signed-out' || auth.recovery) return <EntryScreen />;
@@ -51,8 +63,8 @@ export default function HomeScreen() {
       <View style={[s.dashboard, isWideTablet && s.dashboardWide]}>
         <View style={s.dashboardColumn}>
           <Text style={s.sectionLabel}>NASIL OYNAMAK İSTERSİN?</Text>
-          <Pressable accessibilityRole="button" onPress={() => router.push('/single-setup' as Href)} style={({ pressed }) => [s.featureButton, pressed && s.pressed]}>
-            <View style={s.buttonCopy}><View style={s.titleLine}><Text style={s.featureTitle}>Tek oyunculu</Text><View style={s.offlineBadge}><Text style={s.offlineText}>ÇEVRİMDIŞI</Text></View></View><Text style={s.featureCaption}>Rakip sayısını ve oyun uzunluğunu seç</Text></View>
+          <Pressable accessibilityRole="button" onPress={() => router.push('/game?mode=single' as Href)} style={({ pressed }) => [s.featureButton, pressed && s.pressed]}>
+            <View style={s.buttonCopy}><View style={s.titleLine}><Text style={s.featureTitle}>Tek oyunculu</Text><View style={s.offlineBadge}><Text style={s.offlineText}>ÇEVRİMDIŞI</Text></View></View><Text style={s.featureCaption}>Kaldığın oyuna devam et veya yeni masa kur</Text></View>
           </Pressable>
 
           <View style={s.playGrid}>
@@ -71,7 +83,7 @@ export default function HomeScreen() {
 
         <View style={s.dashboardColumn}>
           <View style={s.utilityCard}>
-            <MenuLink label="Arkadaşlar" detail="Oyuncu ara ve ekle" onPress={() => router.push('/friends' as Href)} />
+            <MenuLink label="Arkadaşlar" detail={social.invites.length > 0 ? `${social.invites.length} masa daveti bekliyor` : 'Oyuncu ara ve ekle'} badge={social.invites.length} onPress={() => router.push('/friends' as Href)} />
             <View style={s.utilityLine} />
             <MenuLink label="İstatistiklerim" detail="Kariyerini ve rekorlarını gör" onPress={() => router.push('/stats' as Href)} />
             <View style={s.utilityLine} />
@@ -92,10 +104,12 @@ export default function HomeScreen() {
       <Text style={s.footer}>AMERİKANO · 12 EL · KLASİK KURALLAR</Text>
     </ScrollView>
 
+    <AdBanner />
+
     <Modal visible={accountOpenFor !== null && !(accountOpenFor === 'anonymous' && auth.status === 'signed-in')} transparent animationType="slide" onRequestClose={() => setAccountOpenFor(null)}>
       <View style={[s.modalRoot, isTablet && s.modalRootTablet]}>
         <Pressable accessibilityLabel="Hesap penceresini kapat" style={s.modalBackdrop} onPress={() => setAccountOpenFor(null)} />
-        <View style={[s.sheet, isTablet && s.sheetTablet]}><View style={s.sheetHandle} /><ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}><AuthPanel onClose={() => setAccountOpenFor(null)} /></ScrollView></View>
+        <View style={[s.sheet, isTablet && s.sheetTablet]}><View style={s.sheetHandle} /><KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}><AuthPanel onClose={() => setAccountOpenFor(null)} /></KeyboardAwareScrollView></View>
       </View>
     </Modal>
   </SafeAreaView>;
@@ -104,7 +118,7 @@ export default function HomeScreen() {
 function EntryScreen() {
   const { isTabletLandscape } = useResponsiveLayout();
   return <SafeAreaView style={s.page}>
-    <ScrollView contentContainerStyle={[s.entryContent, isTabletLandscape && s.entryContentWide]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+    <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={[s.entryContent, isTabletLandscape && s.entryContentWide]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <View style={s.entryBrand}><Text style={s.brand}>AMERİKANO</Text></View>
       <View style={[s.entryBody, isTabletLandscape && s.entryBodyWide]}>
         <View style={[s.entryHero, isTabletLandscape && s.entryHeroWide]}>
@@ -116,7 +130,7 @@ function EntryScreen() {
         <View style={[s.authCard, isTabletLandscape && s.authCardWide]}><AuthPanel entry /></View>
       </View>
       <Text style={s.privacyNote}>Devam ederek oyun verilerinin cihazında ve güvenli sunucularda saklanmasını kabul edersin.</Text>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   </SafeAreaView>;
 }
 
@@ -139,9 +153,15 @@ function CardFan({ compact = false }: { compact?: boolean }) {
   }]}><PlayingCard card={card} large /></View>)}</View>;
 }
 
-function MenuLink({ label, detail, onPress }: { label: string; detail: string; onPress: () => void }) {
+function MenuLink({ label, detail, badge, onPress }: { label: string; detail: string; badge?: number; onPress: () => void }) {
   return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [s.utilityRow, pressed && s.utilityPressed]}>
-    <View style={s.buttonCopy}><Text style={s.utilityTitle}>{label}</Text><Text style={s.utilityDetail}>{detail}</Text></View>
+    <View style={s.buttonCopy}>
+      <View style={s.titleLine}>
+        <Text style={s.utilityTitle}>{label}</Text>
+        {!!badge && <View style={s.inviteBadge}><Text style={s.inviteBadgeText}>{badge}</Text></View>}
+      </View>
+      <Text style={s.utilityDetail}>{detail}</Text>
+    </View>
   </Pressable>;
 }
 
@@ -176,6 +196,8 @@ const s = StyleSheet.create({
   featureCaption: { color: '#657069', fontSize: 11, marginTop: 5 },
   offlineBadge: { borderRadius: 999, backgroundColor: '#d9a4412c', paddingHorizontal: 7, paddingVertical: 4 },
   offlineText: { color: '#8a621e', fontSize: 7, letterSpacing: 0.7, fontWeight: '900' },
+  inviteBadge: { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: p.gold, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
+  inviteBadgeText: { color: p.ink, fontSize: 11, fontWeight: '900' },
   playGrid: { flexDirection: 'row', gap: 11 },
   dashboard: { gap: 15 },
   dashboardWide: { flexDirection: 'row', alignItems: 'flex-start', gap: 18 },

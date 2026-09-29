@@ -15,6 +15,7 @@ Security model:
 - a revision check prevents concurrent moves from overwriting each other;
 - turn expiry and match statistics are decided by the Edge Function, never by a client;
 - three consecutive 45-second action expiries hand that seat to a server-run bot until the player reclaims it;
+- a player whose presence heartbeat goes stale during a match is also handed to a server-run bot, and can reclaim the same seat after reconnecting;
 - the separate 8-second discard-claim window auto-passes and never counts toward bot takeover;
 - private Realtime broadcasts only tell room members that a new view is ready.
 - usernames are normalized, unique and searchable only through the authenticated app flow;

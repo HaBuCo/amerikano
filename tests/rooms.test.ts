@@ -125,7 +125,10 @@ test('three real clients: rooms, authority, privacy, deduplication, reconnect an
   const closed = once(claimant.peer.ws, 'close'); claimant.peer.ws.close(); await closed;
   const resumed = await connect();
   resumed.send({ type: 'resume', code, token: claimant.token });
-  const recovered = await resumed.room(r => !!r.game);
+  const recoveredBySession = await resumed.room(r => !!r.game);
+  assert.ok(recoveredBySession.members.find(member => member.id === recoveredBySession.you)?.botControlled);
+  resumed.send({ type: 'reclaim' });
+  const recovered = await resumed.room(r => !!r.game && !r.members.find(member => member.id === r.you)?.botControlled);
   assert.equal(recovered.you, claimant.room.you);
   assert.deepEqual(recovered.game!.players[claimIndex].hand, taken.game!.players[claimIndex].hand);
   // Persist a live claim, restart the server, and let its authoritative timer pass.
@@ -189,4 +192,56 @@ test('online room host can add and remove server-controlled bot seats', { timeou
   assert.ok(started.game!.players.some(player => player.id === activeBotId));
   assert.ok(started.game!.botControlledPlayerIds?.includes(activeBotId));
   assert.equal(started.game!.players.find(player => player.id === activeBotId)!.hand.length, 0);
+});
+
+test('a disconnected online player is handed to a bot and can reclaim the seat', { timeout: 20000 }, async t => {
+  const port = randomInt(39001, 49000);
+  const data = join(mkdtempSync(join(tmpdir(), 'amerikano-disconnect-test-')), 'rooms.sqlite');
+  const server = spawn(process.execPath, ['server/index.ts'], {
+    cwd: process.cwd(), env: { ...process.env, PORT: String(port), ROOM_DB: data }, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const peers: Peer[] = [];
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Server startup timeout')), 8000);
+    server.stdout!.on('data', chunk => { if (String(chunk).includes('Amerikano rooms:')) { clearTimeout(timeout); resolve(); } });
+    server.once('error', reject);
+    server.once('exit', code => { clearTimeout(timeout); if (code) reject(new Error('Server exited ' + code)); });
+  });
+  const connect = async () => {
+    const peer = new Peer(port);
+    peers.push(peer);
+    await once(peer.ws, 'open');
+    return peer;
+  };
+  t.after(async () => {
+    peers.forEach(peer => peer.ws.terminate());
+    if (server.exitCode === null) { const exited = once(server, 'exit'); server.kill(); await exited; }
+  });
+
+  const host = await connect();
+  host.send({ type: 'create', name: 'Ayşe' });
+  const hostSession = await host.wait(message => message.type === 'session');
+  assert.equal(hostSession.type, 'session');
+  const guest = await connect();
+  guest.send({ type: 'join', code: hostSession.code, name: 'Bora' });
+  const guestSession = await guest.wait(message => message.type === 'session');
+  assert.equal(guestSession.type, 'session');
+  guest.send({ type: 'ready', ready: true });
+  await host.room(room => room.members.length === 2 && room.members.every(member => member.ready));
+  host.send({ type: 'start' });
+  const started = await host.room(room => !!room.game);
+  const guestId = started.members.find(member => member.name === 'Bora')!.id;
+
+  const closed = once(guest.ws, 'close');
+  guest.ws.close();
+  await closed;
+  const takenOver = await host.room(room => room.members.some(member => member.id === guestId && !member.connected && member.botControlled));
+  assert.ok(takenOver.game?.botControlledPlayerIds?.includes(guestId));
+
+  const resumed = await connect();
+  resumed.send({ type: 'resume', code: hostSession.code, token: guestSession.token });
+  const recovered = await resumed.room(room => room.you === guestId && room.members.some(member => member.id === guestId && member.connected && member.botControlled));
+  resumed.send({ type: 'reclaim' });
+  const reclaimed = await resumed.room(room => room.revision > recovered.revision && room.members.some(member => member.id === guestId && !member.botControlled));
+  assert.ok(!reclaimed.game?.botControlledPlayerIds?.includes(guestId));
 });

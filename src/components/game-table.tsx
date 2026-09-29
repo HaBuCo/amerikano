@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
+import type { LayoutChangeEvent } from 'react-native';
 import { Animated, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { palette as p } from '@/constants/palette';
@@ -44,14 +45,30 @@ const DISCARD_DROP_PADDING = 46;
 const MELD_DROP_PADDING = 24;
 const HAND_DROP_PADDING = 64;
 
-function DropZoneView({ dropKey, onNode, ...props }: Omit<ComponentProps<typeof View>, 'ref'> & { dropKey: string; onNode: DropZoneNodeHandler }) {
-  const measuredRef = useCallback((node: Measurable | null) => onNode(dropKey, node), [dropKey, onNode]);
-  return <View {...props} ref={measuredRef} />;
+function DropZoneView({ dropKey, onNode, onLayout, ...props }: Omit<ComponentProps<typeof View>, 'ref'> & { dropKey: string; onNode: DropZoneNodeHandler }) {
+  const nodeRef = useRef<Measurable | null>(null);
+  const measuredRef = useCallback((node: Measurable | null) => {
+    nodeRef.current = node;
+    onNode(dropKey, node);
+  }, [dropKey, onNode]);
+  const handleLayout = useCallback((event: LayoutChangeEvent) => {
+    onLayout?.(event);
+    if (nodeRef.current) onNode(dropKey, nodeRef.current);
+  }, [dropKey, onLayout, onNode]);
+  return <View {...props} ref={measuredRef} onLayout={handleLayout} />;
 }
 
-function DropZonePressable({ dropKey, onNode, ...props }: Omit<ComponentProps<typeof Pressable>, 'ref'> & { dropKey: string; onNode: DropZoneNodeHandler }) {
-  const measuredRef = useCallback((node: Measurable | null) => onNode(dropKey, node), [dropKey, onNode]);
-  return <Pressable {...props} ref={measuredRef} />;
+function DropZonePressable({ dropKey, onNode, onLayout, ...props }: Omit<ComponentProps<typeof Pressable>, 'ref'> & { dropKey: string; onNode: DropZoneNodeHandler }) {
+  const nodeRef = useRef<Measurable | null>(null);
+  const measuredRef = useCallback((node: Measurable | null) => {
+    nodeRef.current = node;
+    onNode(dropKey, node);
+  }, [dropKey, onNode]);
+  const handleLayout = useCallback((event: LayoutChangeEvent) => {
+    onLayout?.(event);
+    if (nodeRef.current) onNode(dropKey, nodeRef.current);
+  }, [dropKey, onLayout, onNode]);
+  return <Pressable {...props} ref={measuredRef} onLayout={handleLayout} />;
 }
 
 function DragSurface({ active, children, onDragStart, onDrop, style }: {
@@ -140,12 +157,14 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   const [jokerChoice, setJokerChoice] = useState<JokerChoice | null>(null);
   const [activeDrag, setActiveDrag] = useState<'hand' | 'stock' | 'discard' | 'staged' | 'arranging' | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const [advanceSeconds, setAdvanceSeconds] = useState<number | null>(null);
   const dropNodes = useRef<Record<string, Measurable | null>>({});
   const dropRects = useRef<Record<string, DropRect>>({});
   const { enabled: soundEnabled, toggle: toggleSound, play: playSound } = useGameSounds();
   const { settings, updateSettings, feedback } = useGameSettings();
   const previousPhase = useRef(game.phase);
   const previousError = useRef(error);
+  const previousMyTurn = useRef(false);
   const window = useWindowDimensions();
   const width = Math.max(1, Number.isFinite(window.width) ? window.width : 1);
   const height = Math.max(1, Number.isFinite(window.height) ? window.height : 1);
@@ -228,6 +247,14 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   }, [error, feedback]);
 
   useEffect(() => {
+    if (myTurn && !previousMyTurn.current) {
+      playSound('tap');
+      feedback('warning');
+    }
+    previousMyTurn.current = myTurn;
+  }, [myTurn, playSound, feedback]);
+
+  useEffect(() => {
     let active = true;
     if (loadedOrderKey.current !== orderKey) {
       loadedOrderKey.current = orderKey;
@@ -301,15 +328,15 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     return hit ? Number(hit[0].slice(prefix.length)) : -1;
   }
 
-  function targetMeldIndex(point: DropPoint, card?: Card) {
+  function targetMeldId(point: DropPoint, card?: Card) {
     const targets = Object.entries(dropRects.current)
       .filter(([key]) => key.startsWith('meld:'))
       .map(([key, rect]) => {
-        const index = Number(key.slice('meld:'.length));
-        return { value: index, rect, preferred: acceptsCard(index, card) };
+        const meldId = key.slice('meld:'.length);
+        return { value: meldId, rect, preferred: acceptsCard(meldId, card) };
       })
       .filter(target => target.preferred || containsDropPoint(target.rect, point));
-    return closestDropTarget(targets, point, MELD_DROP_PADDING) ?? -1;
+    return closestDropTarget(targets, point, MELD_DROP_PADDING);
   }
 
   function inferType(cardIds: string[]): MeldType | null {
@@ -497,8 +524,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     submitOpening({ type: 'finish', groups: ready, discardId });
   }
 
-  function dropOnMeld(cardId: string, meldIndex: number) {
-    const meld = game.melds[meldIndex];
+  function dropOnMeld(cardId: string, meldId: string) {
+    const meld = game.melds.find(item => item.id === meldId);
     const card = me.hand.find(item => item.id === cardId);
     if (!meld || !card || !me.hasOpened) {
       setNotice('Kart işlemek için önce kendi görevini açmalısın.');
@@ -516,8 +543,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     else setNotice('Bu kart bıraktığın gruba işlenemiyor.');
   }
 
-  function acceptsCard(meldIndex: number, card = activeCard) {
-    const meld = game.melds[meldIndex];
+  function acceptsCard(meldId: string, card = activeCard) {
+    const meld = game.melds.find(item => item.id === meldId);
     if (!meld || !card || !me.hasOpened || openedThisTurn) return false;
     const replacesJoker = meld.cards.some((joker) => joker.isJoker && (meld.type === 'set'
       ? card.rank === meld.cards.find(item => !item.isJoker)?.rank && card.suit === meld.jokerAssignments?.[joker.id]
@@ -531,8 +558,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     if (isTapDrop(point)) return addTappedCard(cardId);
     const slot = targetIndex('slot:', point);
     if (slot >= 0) return addCardToSlot(cardId, slot);
-    const meld = targetMeldIndex(point, me.hand.find(card => card.id === cardId));
-    if (meld >= 0) return dropOnMeld(cardId, meld);
+    const meldId = targetMeldId(point, me.hand.find(card => card.id === cardId));
+    if (meldId) return dropOnMeld(cardId, meldId);
     if (isInside('discard', point, DISCARD_DROP_PADDING)) {
       if (contract.final && !me.hasOpened) return finishFinal(cardId, removeStaged(cardId));
       if (pending.some(group => group.cardIds.length)) {
@@ -623,6 +650,29 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     feedback(action.type === 'open' || action.type === 'finish' ? 'success' : 'impact');
     onAction(action);
   }
+  const actRef = useRef(act);
+  actRef.current = act;
+
+  const ROUND_ADVANCE_DELAY_MS = 6_000;
+  useEffect(() => {
+    if (game.phase !== 'round-over') {
+      setAdvanceSeconds(null);
+      return;
+    }
+    const deadline = Date.now() + ROUND_ADVANCE_DELAY_MS;
+    setAdvanceSeconds(Math.ceil(ROUND_ADVANCE_DELAY_MS / 1000));
+    const tick = setInterval(() => {
+      setAdvanceSeconds(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
+    }, 250);
+    const timeout = setTimeout(() => {
+      if (canAdvance && !blocked) {
+        setPending([]);
+        actRef.current({ type: 'next' });
+      }
+    }, ROUND_ADVANCE_DELAY_MS);
+    return () => { clearInterval(tick); clearTimeout(timeout); };
+  }, [game.phase, game.roundIndex, canAdvance, blocked]);
+
   return <SafeAreaView style={[s.page, tabletLandscape && s.pageTabletLandscape]}>
     <View style={s.header}>
       <Pressable accessibilityRole="button" accessibilityLabel="Masadan çık" onPress={() => setExitOpen(true)} style={s.headerMenuButton}><Text style={s.headerMenuText}>Çık</Text></Pressable>
@@ -642,6 +692,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
           const isViewer = pl.id === viewerId;
           const isCurrent = current.id === pl.id;
           const isOffline = playerMeta?.[pl.id]?.connected === false;
+          const isBotControlled = playerMeta?.[pl.id]?.botControlled === true;
           return <View
             key={pl.id}
             accessibilityLabel={`${pl.name}, ${game.handCounts[pl.id]} kart, ${pl.score} puan${isCurrent ? ', sıra bu oyuncuda' : ''}`}
@@ -649,7 +700,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
           >
             <View style={[s.avatar, playerMeta?.[pl.id] && { backgroundColor: playerMeta[pl.id].avatarColor }]}><Text style={s.avatarText}>{playerMeta?.[pl.id]?.avatarSymbol ?? pl.name.charAt(0)}</Text></View>
             <View style={s.playerInfo}>
-              <Text numberOfLines={1} style={s.playerName}>{pl.name}{isViewer ? ' · SEN' : isOffline ? ' · çevrim dışı' : ''}</Text>
+              <Text numberOfLines={1} style={s.playerName}>{pl.name}{isViewer ? ' · SEN' : isBotControlled ? ' · bot yönetiyor' : isOffline ? ' · çevrim dışı' : ''}</Text>
               <Text numberOfLines={1} style={s.playerStats}>{game.handCounts[pl.id]} kart · {pl.score}p{pl.hasOpened ? ' · Açtı' : ''}{playerMeta?.[pl.id]?.missedTurns ? ` · ${playerMeta[pl.id].missedTurns}/3` : ''}</Text>
             </View>
             {isCurrent && <View style={s.turnDot} />}
@@ -681,15 +732,15 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
         <Pressable accessibilityRole="button" onPress={() => act({ type: 'claim', take: false })} style={s.secondary}><Text style={s.actionText}>Pas geç</Text></Pressable>
       </View>}
       {visibleMelds.length > 0 ? <View style={s.melds}>
-        {visibleMelds.map(({ meld: m, index }) => {
+        {visibleMelds.map(({ meld: m }) => {
           const meldRank = m.cards.find(card => !card.isJoker)?.rank;
-          return <DropZoneView key={m.id} dropKey={`meld:${index}`} onNode={registerDropZone} style={[s.meld, activeDrag === 'hand' && acceptsCard(index) && s.dropTargetActive, activeDrag === 'hand' && !acceptsCard(index) && s.meldInactive]}>
+          return <DropZoneView key={m.id} dropKey={`meld:${m.id}`} onNode={registerDropZone} style={[s.meld, activeDrag === 'hand' && acceptsCard(m.id) && s.dropTargetActive, activeDrag === 'hand' && !acceptsCard(m.id) && s.meldInactive]}>
             <Text style={s.small}>{game.players.find(pl => pl.id === m.ownerId)?.name} · {m.type === 'set' ? 'Küt' : 'Seri'}</Text>
             <View style={s.meldCards}>{m.cards.map((c, i) => <View key={c.id} style={[s.meldCard, { marginLeft: i ? -16 : 0 }]}>
               <PlayingCard card={c} compact tablet={tabletLandscape} />
               {c.isJoker && meldRank && m.jokerAssignments?.[c.id] && <Text style={s.jokerBadge}>{suitSymbol[m.jokerAssignments[c.id]]}{meldRank}</Text>}
             </View>)}</View>
-            {settings.dragHints && activeDrag === 'hand' && acceptsCard(index) && <Text style={s.meldDropHint}>Buraya işlenebilir</Text>}
+            {settings.dragHints && activeDrag === 'hand' && acceptsCard(m.id) && <Text style={s.meldDropHint}>Buraya işlenebilir</Text>}
           </DropZoneView>;
         })}
       </View> : null}
@@ -730,8 +781,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     </DropZoneView>
     <Modal visible={over || scoresOpen} transparent animationType="fade" onRequestClose={() => setScoresOpen(false)}>
       <View style={s.backdrop}><View style={s.sheet}>
-        <Text style={s.resultTitle}>{game.phase === 'game-over' ? winners.map(w => w.name).join(' & ') + ' kazandı!' : game.phase === 'round-over' ? game.players.find(pl => pl.id === game.roundWinnerId)?.name + ' bitirdi!' : 'Puan tablosu'}</Text>
-        <Text style={s.resultCaption}>{game.phase === 'round-over' && nextContract ? `Sıradaki el: ${nextContract.title}` : game.phase === 'game-over' ? `${roundCount} el tamamlandı. En düşük toplam puan kazandı.` : 'En düşük toplam puan kazanır.'}</Text>
+        <Text style={s.resultTitle}>{game.phase === 'game-over' ? winners.map(w => w.name).join(' & ') + ' kazandı!' : game.phase === 'round-over' ? game.roundResult?.reason === 'stalemate' ? 'El çıkmaz bitti' : game.players.find(pl => pl.id === game.roundWinnerId)?.name + ' bitirdi!' : 'Puan tablosu'}</Text>
+        <Text style={s.resultCaption}>{game.phase === 'round-over' && game.roundResult?.reason === 'stalemate' ? `Deste ikinci kez tükendi; elde kalan kartlar ceza yazıldı.${nextContract ? ` Sıradaki el: ${nextContract.title}` : ''}` : game.phase === 'round-over' && nextContract ? `Sıradaki el: ${nextContract.title}` : game.phase === 'game-over' ? `${roundCount} el tamamlandı. En düşük toplam puan kazandı.` : 'En düşük toplam puan kazanır.'}</Text>
         <ScrollView style={s.resultList} contentContainerStyle={s.resultListContent} showsVerticalScrollIndicator={false}>
           {sortedPlayers.map((pl, i) => {
             const detail = over ? game.roundResult?.entries.find((entry) => entry.playerId === pl.id) : undefined;
@@ -751,8 +802,13 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
             ? <Pressable disabled={blocked} style={[s.resultButton, blocked && s.disabled]} onPress={onRematch}><Text style={s.actionText}>Tekrar oyna</Text></Pressable>
             : <Text style={s.resultCaption}>Oda sahibinin yeniden başlatması bekleniyor.</Text>)}
           <Pressable style={s.resultButtonSecondary} onPress={onExit}><Text style={s.resultButtonSecondaryText}>Ana menü</Text></Pressable></>
-          : canAdvance ? <Pressable disabled={blocked} style={s.resultButton} onPress={() => { setPending([]); act({ type: 'next' }); }}><Text style={s.actionText}>{game.roundIndex === 11 ? 'Sonucu gör' : 'Sonraki el'}</Text></Pressable>
-          : <Text style={s.resultCaption}>Oda sahibinin sonraki eli başlatması bekleniyor.</Text>
+          : <>
+            {botControlled && onReclaim && <Pressable disabled={blocked} style={[s.resultButton, blocked && s.disabled]} onPress={onReclaim}><Text style={s.actionText}>Koltuğu geri al</Text></Pressable>}
+            {advanceSeconds !== null && <Text style={s.resultCaption}>{advanceSeconds} saniye içinde otomatik devam edilecek.</Text>}
+            {canAdvance
+              ? <Pressable disabled={blocked} style={s.resultButton} onPress={() => { setPending([]); act({ type: 'next' }); }}><Text style={s.actionText}>{game.roundIndex === 11 ? 'Sonucu gör' : 'Sonraki el'}</Text></Pressable>
+              : <Text style={s.resultCaption}>Sıradaki ele otomatik geçilecek.</Text>}
+          </>
           : <Pressable style={s.resultButton} onPress={() => setScoresOpen(false)}><Text style={s.actionText}>Masaya dön</Text></Pressable>}
       </View></View>
     </Modal>
@@ -805,7 +861,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
         <Text style={s.helpLine}><Text style={s.helpStrong}>2. Aç / işle:</Text> Görev tepsilerini doldur. Elini açtıktan sonra 3 veya daha fazla kartı yeni küt ya da seri tepsisinde hazırlayıp tek seferde masaya açabilirsin.</Text>
         <Text style={s.helpLine}><Text style={s.helpStrong}>3. Kart at:</Text> Bir kartı açık kart alanına sürükleyerek sıranı bitir.</Text>
         <Text style={s.helpLine}><Text style={s.helpStrong}>Küt:</Text> Aynı sayı, farklı semboller. <Text style={s.helpStrong}>Seri:</Text> Aynı sembolde ardışık kartlar; As yalnızca Q-K-A sonunda kullanılır.</Text>
-        <Text style={s.helpLine}><Text style={s.helpStrong}>Joker:</Text> İlk 5 elin ilk açılışında kullanılamaz. Kütte jokerin temsil ettiği sembol açılırken seçilir; joker yalnızca ilan edilen tam kartla değiştirilebilir.</Text>
+        <Text style={s.helpLine}><Text style={s.helpStrong}>Joker:</Text> {gameRules.jokerOpeningRestrictionRounds ? `İlk ${gameRules.jokerOpeningRestrictionRounds} elin ilk açılışında kullanılamaz.` : 'Açılış görevlerinde kullanılabilir.'} Kütte jokerin temsil ettiği sembol açılırken seçilir; joker yalnızca ilan edilen tam kartla değiştirilebilir.</Text>
         <Text style={s.helpLine}><Text style={s.helpStrong}>Açık kart teklifi:</Text> {gameRules.claimsEnabled ? `3+ kişilik masada desteden kart seçildiğinde diğer oyuncular açık kartı 1 ceza kartıyla alabilir. Karar süresi ${gameRules.claimTimeoutMs / 1000} saniyedir; iki kişilik oyunda teklif açılmaz.` : 'Bu oyunda kapalı.'}</Text>
         <Text style={s.helpLine}><Text style={s.helpStrong}>İşlek kart:</Text> Yerdeki bir küt veya seriye işlenebilen kartı atmak +25 ceza verir. Bu kural, henüz elini açmamış oyuncuya da uygulanır.</Text>
         <Text style={s.helpLine}><Text style={s.helpStrong}>Puan:</Text> Elde kalan sayılar değeri kadar, J-Q-K 10, As 11, Joker 25 ceza verir. En düşük toplam kazanır.</Text>

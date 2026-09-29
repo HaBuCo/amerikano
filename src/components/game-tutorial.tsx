@@ -100,11 +100,11 @@ function TutorialVisual({ type, roundCount, claimSeconds }: { type: Visual; roun
   return <View style={s.finishVisual}><Text style={s.finishNumber}>{roundCount}</Text><View><Text style={s.finishLabel}>EL TAMAMLANINCA</Text><Text style={s.finishTitle}>En düşük puan kazanır</Text></View></View>;
 }
 
-export function GameTutorial({ visible, onDone, roundCount = 12, claimsEnabled = true, claimSeconds = 8, jokerRestriction = true, playableDiscardPenalty = true }: { visible: boolean; onDone: () => void; roundCount?: number; claimsEnabled?: boolean; claimSeconds?: number; jokerRestriction?: boolean; playableDiscardPenalty?: boolean }) {
+export function GameTutorial({ visible, onDone, roundCount = 12, claimsEnabled = true, claimSeconds = 8, jokerRestrictionRounds = 5, playableDiscardPenalty = true }: { visible: boolean; onDone: () => void; roundCount?: number; claimsEnabled?: boolean; claimSeconds?: number; jokerRestrictionRounds?: 0 | 4 | 5; playableDiscardPenalty?: boolean }) {
   const [step, setStep] = useState(0);
   const adaptedSteps = steps.map(item => {
     if (item.visual === 'goal') return { ...item, body: `Bu oyun ${roundCount} el sürer. Her elde farklı bir açılış görevi tamamlanır; oyun sonunda en düşük toplam ceza puanı kazanır.` };
-    if (item.visual === 'contract') return { ...item, points: [item.points[0], jokerRestriction ? 'İlk klasik görevlerde açılış yaparken Joker kullanılamaz.' : 'Bu oyunda açılış görevlerinde Joker kullanabilirsin.'] };
+    if (item.visual === 'contract') return { ...item, points: [item.points[0], jokerRestrictionRounds ? `İlk ${jokerRestrictionRounds} klasik görevde açılış yaparken Joker kullanılamaz.` : 'Bu oyunda açılış görevlerinde Joker kullanabilirsin.'] };
     if (item.visual === 'claim') return claimsEnabled
       ? { ...item, points: [item.points[0], `İstemiyorsan “Pas geç”; ${claimSeconds} saniye dolarsa oyun otomatik pas verir.`] }
       : { ...item, body: 'Bu oyunda açık kart teklifi kapalı. Kapalı desteden çekildiğinde yerdeki kart diğer oyunculara sorulmaz.', points: ['Teklif, oyun kurulurken Gelişmiş ayarlardan açılabilir.', 'İki kişilik oyunda teklif her zaman kapalıdır.'] };

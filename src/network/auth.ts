@@ -208,11 +208,12 @@ export function signInWithApple() {
       return;
     }
     const AppleAuthentication = await import('expo-apple-authentication');
-    const nonce = Crypto.randomUUID();
+    const rawNonce = Crypto.randomUUID();
+    const hashedNonce = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, rawNonce);
     let credential;
     try {
       credential = await AppleAuthentication.signInAsync({
-        nonce,
+        nonce: hashedNonce,
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
@@ -225,7 +226,7 @@ export function signInWithApple() {
     if (!credential.identityToken) throw new Error('Apple kimlik doğrulaması tamamlanamadı.');
     const { data: sessionData, error: sessionError } = await supabase!.auth.getSession();
     if (sessionError) throw sessionError;
-    const credentials = { provider: 'apple' as const, token: credential.identityToken, nonce };
+    const credentials = { provider: 'apple' as const, token: credential.identityToken, nonce: rawNonce };
     const { error } = sessionData.session?.user.is_anonymous
       ? await supabase!.auth.linkIdentity(credentials)
       : await supabase!.auth.signInWithIdToken(credentials);

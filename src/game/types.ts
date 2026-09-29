@@ -45,7 +45,8 @@ export type Player = {
 };
 
 export type RoundResult = {
-  winnerId: string;
+  winnerId: string | null;
+  reason?: 'stalemate';
   entries: {
     playerId: string;
     penalty: number;
@@ -72,6 +73,9 @@ export type GameRules = {
   claimsEnabled: boolean;
   claimTimeoutMs: number;
   playableDiscardPenalty: boolean;
+  /** Number of classic opening contracts that cannot contain a Joker. */
+  jokerOpeningRestrictionRounds: 0 | 4 | 5;
+  /** Legacy compatibility flag; normalized from jokerOpeningRestrictionRounds. */
   jokerOpeningRestriction: boolean;
   botDifficulty: BotDifficulty;
   botSpeed: BotSpeed;
@@ -85,6 +89,8 @@ export type GameState = {
   currentPlayerIndex: number;
   startingPlayerIndex: number;
   stock: Card[];
+  /** Number of times the discard pile has been recycled in this round. */
+  stockRecycleCount?: number;
   discard: Card[];
   lastDiscarderId?: string;
   melds: Meld[];

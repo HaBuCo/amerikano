@@ -18,6 +18,7 @@
       }
     },
     "android": {
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#123D2B",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -26,6 +27,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.hegionsoft.amerikano",
+      "versionCode": 3,
       "permissions": [
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
@@ -71,7 +73,21 @@
       ],
       "expo-asset",
       "expo-image",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511",
+          "delayAppMeasurementInit": true
+        }
+      ],
+      [
+        "expo-tracking-transparency",
+        {
+          "userTrackingPermission": "Sana daha ilgili reklamlar gösterebilmemiz için bu tanımlayıcı kullanılacak."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

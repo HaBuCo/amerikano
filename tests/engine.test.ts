@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { actingPlayerId, applyAction, armTurnTimer, cedeSeatToBot, createDeck, createGame, isValidMeld, openMelds, handPoints, expireClaim, expireTurn, explainInvalidAction, MISSED_TURNS_BEFORE_BOT, nextRound, reclaimBotSeat, replaceJoker, resetMissedTurns, TURN_TIMEOUT_MS } from '../src/game/engine.ts';
 import { botAction, candidates } from '../src/game/bot.ts';
 import { ROUND_CONTRACTS } from '../src/game/contracts.ts';
+import { openingJokerRestricted } from '../src/game/game-rules.ts';
 import { projectGame } from '../src/game/view.ts';
 import type { Card, GameState, Rank, Suit } from '../src/game/types.ts';
 
@@ -58,6 +59,16 @@ test('a permanent departure hands the seat to a bot and can still be reclaimed b
   const reclaimed = reclaimBotSeat(ceded, playerId, 2_000);
   assert.ok(!reclaimed.botControlledPlayerIds?.includes(playerId));
 });
+
+test('a disconnected seat can be handed to a bot between rounds', () => {
+  const state = { ...fixedGame(['a', 'b']), phase: 'round-over' as const, turnDeadline: undefined };
+  const playerId = state.players[0].id;
+  const ceded = cedeSeatToBot(state, playerId, 1_000);
+  assert.ok(ceded.botControlledPlayerIds?.includes(playerId));
+  assert.equal(ceded.phase, 'round-over');
+  const reclaimed = reclaimBotSeat(ceded, playerId, 2_000);
+  assert.ok(!reclaimed.botControlledPlayerIds?.includes(playerId));
+});
 test('opening locks, joker restriction, mandatory last discard and score', () => {
   let s = stateWithHand([c('7'), c('7', 'clubs'), c('7', 'spades'), c('A')]);
   const a = { type: 'open' as const, groups: [{ type: 'set' as const, cardIds: s.players[0].hand.slice(0, 3).map(c => c.id) }] };
@@ -85,6 +96,30 @@ test('layoffs work only after opening and leave a discard', () => {
   const next = applyAction(s, 'player-1', action);
   assert.equal(next.players[0].hand.length, 1);
   assert.equal(next.melds[0].cards.length, 4);
+});
+
+test('two duplicate cards can be laid off to two matching sets in the same turn', () => {
+  const firstJack = c('J', 'spades', 'first-jack');
+  const secondJack = c('J', 'spades', 'second-jack');
+  const state = stateWithHand([firstJack, secondJack, c('A')]);
+  state.players[0].hasOpened = true;
+  state.players[0].openedTurn = 0;
+  state.turnCount = 3;
+  const jackSet = (id: string) => ({
+    id,
+    type: 'set' as const,
+    ownerId: 'player-2',
+    cards: [c('J', 'hearts', `${id}-hearts`), c('J', 'diamonds', `${id}-diamonds`), c('J', 'clubs', `${id}-clubs`)],
+  });
+  state.melds = [jackSet('first-set'), jackSet('second-set')];
+
+  const afterFirst = applyAction(state, 'player-1', { type: 'layoff', meldId: 'first-set', cardId: firstJack.id });
+  const afterSecond = applyAction(afterFirst, 'player-1', { type: 'layoff', meldId: 'second-set', cardId: secondJack.id });
+
+  assert.notEqual(afterFirst, state);
+  assert.notEqual(afterSecond, afterFirst);
+  assert.deepEqual(afterSecond.melds.map(meld => meld.cards.length), [4, 4]);
+  assert.deepEqual(afterSecond.players[0].hand.map(card => card.id), ['Ahearts']);
 });
 test('discarding a playable table card adds 25 points even before opening', () => {
   const s = stateWithHand([c('7', 'diamonds'), c('A')]);
@@ -117,9 +152,17 @@ test('single-player rule options disable claims, playable-card penalties and ope
   assert.equal(discarded.lastPenalty, undefined);
 
   const jokerAllowed = stateWithHand([c('7'), c('7', 'clubs'), j, c('A')]);
-  jokerAllowed.rules = { ...jokerAllowed.rules!, jokerOpeningRestriction: false };
-  const opened = applyAction(jokerAllowed, 'player-1', { type: 'open', groups: [{ type: 'set', cardIds: ['7hearts', '7clubs', 'j'], jokerAssignments: { j: 'diamonds' } }] });
+  jokerAllowed.rules = { ...jokerAllowed.rules!, jokerOpeningRestrictionRounds: 0, jokerOpeningRestriction: false };
+  const jokerOpen = { type: 'open' as const, groups: [{ type: 'set' as const, cardIds: ['7hearts', '7clubs', 'j'], jokerAssignments: { j: 'diamonds' as const } }] };
+  const opened = applyAction(jokerAllowed, 'player-1', jokerOpen);
   assert.notEqual(opened, jokerAllowed);
+
+  const fourRoundRestriction = stateWithHand([c('7'), c('7', 'clubs'), j, c('A')]);
+  fourRoundRestriction.rules = { ...fourRoundRestriction.rules!, jokerOpeningRestrictionRounds: 4 };
+  fourRoundRestriction.roundIndex = 3;
+  assert.equal(openingJokerRestricted(fourRoundRestriction), true);
+  fourRoundRestriction.roundIndex = 4;
+  assert.equal(openingJokerRestricted(fourRoundRestriction), false);
 });
 
 test('a configured contract sequence controls short-game completion', () => {
@@ -326,6 +369,32 @@ test('no penalty offer without enough stock; exhausted stock is recycled without
   assert.equal(result.phase, 'claim');
   assert.equal(result.stock.length, 4);
   assert.deepEqual(result.discard, [top]);
+  assert.equal(result.stockRecycleCount, 1);
+});
+
+test('round ends as a stalemate when the recycled stock is exhausted again', () => {
+  const state = { ...fixedGame(['a', 'b', 'c']), phase: 'draw' as const, stockRecycleCount: 1 };
+  const lastStockCard = state.stock[0];
+  state.stock = [lastStockCard];
+  const afterDraw = applyAction(state, 'player-1', { type: 'draw', source: 'stock' });
+  assert.equal(afterDraw.phase, 'play');
+  assert.equal(afterDraw.stock.length, 0);
+
+  const discardedId = afterDraw.players[0].hand[0].id;
+  const expectedHands = afterDraw.players.map((player, index) =>
+    index === 0 ? player.hand.filter((card) => card.id !== discardedId) : player.hand,
+  );
+  const ended = applyAction(afterDraw, 'player-1', { type: 'discard', cardId: discardedId });
+  assert.equal(ended.phase, 'round-over');
+  assert.equal(ended.roundWinnerId, null);
+  assert.equal(ended.roundResult?.winnerId, null);
+  assert.equal(ended.roundResult?.reason, 'stalemate');
+  for (const [index, player] of ended.players.entries()) {
+    assert.equal(
+      ended.roundResult?.entries.find((entry) => entry.playerId === player.id)?.penalty,
+      handPoints(expectedHands[index]),
+    );
+  }
 });
 
 test('final is atomic and face-down discard is hidden; no extra unopened penalty', () => {

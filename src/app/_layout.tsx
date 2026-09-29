@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 
 import { palette } from '@/constants/palette';
@@ -7,6 +9,10 @@ import { GameSoundsProvider } from '@/audio/game-sounds';
 import { GameSettingsProvider } from '@/settings/game-settings';
 import { AppErrorBoundary } from '@/components/app-error-boundary';
 import { installGlobalErrorHandler } from '@/monitoring/error-reporting';
+import { initializeAds } from '@/ads/mobile-ads';
+import { preloadInterstitial } from '@/ads/interstitial';
+import { hasRemovedAds, initializePurchases } from '@/purchases/purchases';
+import { preloadCardArt } from '@/constants/preload-card-art';
 
 installGlobalErrorHandler();
 
@@ -31,8 +37,17 @@ function safeWindowMetrics() {
 }
 
 export default function RootLayout() {
+  useEffect(() => {
+    preloadCardArt();
+    void initializePurchases().then(() => {
+      if (hasRemovedAds()) return;
+      void initializeAds().then(() => preloadInterstitial());
+    });
+  }, []);
+
   return (
     <SafeAreaProvider initialMetrics={safeWindowMetrics()}>
+    <KeyboardProvider>
     <AppErrorBoundary><GameSettingsProvider><GameSoundsProvider>
       <StatusBar style="light" />
       <Stack
@@ -55,6 +70,7 @@ export default function RootLayout() {
         <Stack.Screen name="login" options={{ headerShown: false }} />
       </Stack>
     </GameSoundsProvider></GameSettingsProvider></AppErrorBoundary>
+    </KeyboardProvider>
     </SafeAreaProvider>
   );
 }

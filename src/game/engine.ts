@@ -234,6 +234,7 @@ export function dealRound(
     currentPlayerIndex: startingPlayerIndex,
     startingPlayerIndex,
     stock: deck,
+    stockRecycleCount: 0,
     discard: [deck.pop()!],
     melds: [],
     phase: 'play',
@@ -245,7 +246,7 @@ export function dealRound(
 }
 
 export const CLAIM_TIMEOUT_MS = 8000;
-export const RULESET_ID = 'amerikano-12-v4';
+export const RULESET_ID = 'amerikano-12-v5';
 export const nextSeat = (index: number, count: number) => (index + count - 1) % count;
 export function actingPlayerId(state: Pick<GameState, 'claim' | 'phase' | 'players' | 'currentPlayerIndex'>): string {
   return state.phase === 'claim' ? state.claim!.playerIds[0] : state.players[state.currentPlayerIndex].id;
@@ -255,10 +256,13 @@ export function drawCard(state: GameState, source: 'stock' | 'discard', random =
   if (state.phase !== 'draw') return state;
   const stock = [...state.stock];
   const discard = [...state.discard];
-  if (stock.length < 2 && discard.length > 1) {
+  let stockRecycleCount = state.stockRecycleCount ?? 0;
+  if (stock.length === 0 && stockRecycleCount >= 1) return finishStalemateRound(state);
+  if (stock.length < 2 && discard.length > 1 && stockRecycleCount === 0) {
     const top = discard.pop()!;
     stock.push(...shuffle(discard, random));
     discard.splice(0, discard.length, top);
+    stockRecycleCount += 1;
   }
   // Resolve requests in counterclockwise turn order before drawing the active player's card.
   if (source === 'stock' && rulesForGame(state).claimsEnabled && state.players.length > 2 && discard.length && stock.length >= 2) {
@@ -269,7 +273,7 @@ export function drawCard(state: GameState, source: 'stock' | 'discard', random =
       state.players[(state.currentPlayerIndex + state.players.length - i - 1) % state.players.length].id)
       .filter(playerId => playerId !== lastDiscarderId);
     if (playerIds.length) {
-      return { ...state, stock, discard, phase: 'claim', claim: { playerIds, deadline: now + rulesForGame(state).claimTimeoutMs } };
+      return { ...state, stock, stockRecycleCount, discard, phase: 'claim', claim: { playerIds, deadline: now + rulesForGame(state).claimTimeoutMs } };
     }
   }
   const card = source === 'stock' ? stock.pop() : discard.pop();
@@ -279,7 +283,7 @@ export function drawCard(state: GameState, source: 'stock' | 'discard', random =
       ? { ...player, hand: sortHand([...player.hand, card]) }
       : player,
   );
-  return { ...state, stock, discard, players, phase: 'play' };
+  return { ...state, stock, stockRecycleCount, discard, players, phase: 'play' };
 }
 
 export function resolveClaim(state: GameState, actorId: string, take: boolean, now = Date.now()): GameState {
@@ -359,9 +363,9 @@ export function reclaimBotSeat(state: GameState, playerId: string, now = Date.no
   return actingPlayerId(reclaimed) === playerId ? armTurnTimer(reclaimed, now) : reclaimed;
 }
 
-/** Permanently hands a human seat to the server bot without removing the player from the match. */
+/** Hands a human seat to the server bot without removing the player from the match. */
 export function cedeSeatToBot(state: GameState, playerId: string, now = Date.now()): GameState {
-  if (!state.players.some((player) => player.id === playerId) || state.phase === 'round-over' || state.phase === 'game-over') return state;
+  if (!state.players.some((player) => player.id === playerId) || state.phase === 'game-over') return state;
   if (state.botControlledPlayerIds?.includes(playerId)) return state;
   const next = { ...state, botControlledPlayerIds: [...(state.botControlledPlayerIds ?? []), playerId] };
   return actingPlayerId(next) === playerId ? armTurnTimer(next, now) : next;
@@ -388,7 +392,7 @@ export function discardCard(state: GameState, cardId: string): GameState {
   if (players[state.currentPlayerIndex].hand.length === 0) {
     return finishRound({ ...state, players, roundPenalties, lastPenalty, lastDiscarderId: current.id, discard: [...state.discard, discarded], discardFaceDown: true });
   }
-  return {
+  const next: GameState = {
     ...state,
     players,
     roundPenalties,
@@ -399,6 +403,9 @@ export function discardCard(state: GameState, cardId: string): GameState {
     phase: 'draw',
     turnCount: state.turnCount + 1,
   };
+  return next.stock.length === 0 && (next.stockRecycleCount ?? 0) >= 1
+    ? finishStalemateRound(next)
+    : next;
 }
 
 export function openMelds(state: GameState, melds: Meld[], finalDiscardId?: string): GameState {
@@ -660,6 +667,34 @@ function finishRound(state: GameState): GameState {
     phase: 'round-over',
     roundWinnerId: winner.id,
     roundResult: { winnerId: winner.id, entries },
+  };
+}
+
+function finishStalemateRound(state: GameState): GameState {
+  const entries = state.players.map((player) => {
+    const penalty = handPoints(player.hand);
+    const playableDiscardPenalty = state.roundPenalties?.[player.id] ?? 0;
+    return {
+      playerId: player.id,
+      penalty,
+      playableDiscardPenalty,
+      totalBefore: player.score - playableDiscardPenalty,
+      totalAfter: player.score + penalty,
+      cards: [...player.hand],
+    };
+  });
+  const players = state.players.map((player) => ({
+    ...player,
+    score: entries.find((entry) => entry.playerId === player.id)!.totalAfter,
+  }));
+  return {
+    ...state,
+    players,
+    phase: 'round-over',
+    roundWinnerId: null,
+    roundResult: { winnerId: null, reason: 'stalemate', entries },
+    claim: undefined,
+    turnDeadline: undefined,
   };
 }
 

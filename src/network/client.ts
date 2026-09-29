@@ -7,7 +7,7 @@ import { isSupabaseConfigured, supabase } from './supabase';
 import { ClientMessage, RoomView } from './types';
 
 type State = { status: 'offline' | 'connecting' | 'online'; room: RoomView | null; error: string; busy: boolean };
-type FunctionResult = { roomId?: string; room?: RoomView; left?: boolean; error?: string };
+type FunctionResult = { roomId?: string; room?: RoomView; left?: boolean; experience?: number; error?: string };
 
 let snapshot: State = { status: 'offline', room: null, error: '', busy: false };
 let roomId: string | null = null;
@@ -162,7 +162,7 @@ export async function sendRoom(message: ClientMessage) {
     update({ error: 'Bağlantı kurulmasını bekle.' });
     return false;
   }
-  if (!roomId && message.type !== 'create' && message.type !== 'join') {
+  if (!roomId && message.type !== 'create' && message.type !== 'join' && message.type !== 'matchmake') {
     update({ error: 'Önce bir odaya katıl.' });
     return false;
   }
@@ -227,6 +227,14 @@ export function sendAction(action: GameAction) {
     type: 'action', requestId: `${Date.now()}-${++sequence}`,
     revision: snapshot.room.revision, action,
   });
+}
+
+/** Tek oyunculu (bot'a karşı) bir maç bittiğinde çağrılır; sunucu tarafında sabit bir XP kazancı işler. Ağ yoksa veya oturum yoksa sessizce yok sayılır. */
+export async function recordSinglePlayerXp(won: boolean) {
+  if (!isSupabaseConfigured || !supabase) return;
+  try {
+    await invoke({ type: 'single-result', won });
+  } catch { /* Tek oyunculu deneyimi ağdan bağımsız çalışmaya devam eder. */ }
 }
 
 export function clearRoomError() { update({ error: '' }); }

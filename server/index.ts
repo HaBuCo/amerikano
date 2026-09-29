@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { actingPlayerId, applyAction, armTurnTimer, createGame, expireTurn, MIN_GAME_PLAYERS, reclaimBotSeat, resetMissedTurns, RULESET_ID } from '../src/game/engine.ts';
+import { actingPlayerId, applyAction, armTurnTimer, cedeSeatToBot, createGame, expireTurn, MIN_GAME_PLAYERS, reclaimBotSeat, resetMissedTurns, RULESET_ID } from '../src/game/engine.ts';
 import { botAction } from '../src/game/bot.ts';
 import { projectGame } from '../src/game/view.ts';
 import type { GameState } from '../src/game/types.ts';
@@ -206,7 +206,10 @@ wss.on('connection', (ws, req) => {
     sockets.delete(ws);
     if (session) {
       const room = rooms.get(session.code);
-      if (room) { promote(room); room.revision++; save(room); publish(room); }
+      if (room) {
+        if (room.game) room.game = advanceBots(cedeSeatToBot(room.game, session.id));
+        promote(room); room.revision++; save(room); publish(room);
+      }
     }
   });
 });

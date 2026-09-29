@@ -42,6 +42,9 @@ Bu, uygulamamızın seçilmiş kural setidir; evrensel bir standart iddiası de�
 - Ceza kartını ve asıl oyuncunun kartını karşılayacak iki kapalı kart yoksa
   önce eski atıklar (en üst açık kart hariç) karıştırılır. Yine yetersizse ceza teklifi
   açılmaz; mevcut tek kapalı kart normal çekilir.
+- Atıklar bir kez karıştırılıp yeni kapalı deste yapıldıktan sonra bu deste de tükenirse
+  el çıkmaz olarak sona erer. Kazanan olmaz; herkesin elinde kalan kartlar normal ceza
+  puanı olarak yazılır ve sonraki ele geçilir.
 - Küt: aynı değer, farklı semboller; 3–4 kart. Aynı sembolün iki kopyası aynı kütte olmaz.
 - Seri: aynı sembolden ardışık 3–13 kart. As yalnızca yüksek: Q-K-A geçerli,
   A-2-3 ve K-A-2 geçersiz. Joker eksik kartın yerini tutar.
@@ -65,5 +68,5 @@ Bu, uygulamamızın seçilmiş kural setidir; evrensel bir standart iddiası de�
   eşitlik varsa ortak kazanan gösterilir.
 
 Tek oyunculu, aynı cihaz ve çevrim içi odalar aynı kural motorunu kullanır.
-Kural sürümü: amerikano-12-v4. Eski sürüm odaları diskte korunur ancak bu sürümde
+Kural sürümü: amerikano-12-v5. Eski sürüm odaları diskte korunur ancak bu sürümde
 devam ettirilmez; yeni oda açılmalıdır.

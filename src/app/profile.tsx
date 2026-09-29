@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Href, router, Stack } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { palette as p } from '@/constants/palette';
 import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
@@ -14,7 +15,7 @@ export default function ProfileScreen() {
   const profile = state.profile;
   return <SafeAreaView style={s.page}>
     <Stack.Screen options={{ headerShown: false }} />
-    <ScrollView contentContainerStyle={[s.content, isTablet && s.contentTablet]} keyboardShouldPersistTaps="handled">
+    <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={[s.content, isTablet && s.contentTablet]} keyboardShouldPersistTaps="handled">
       <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>← Geri</Text></Pressable>
       <Text style={s.eyebrow}>OYUNCU PROFİLİ</Text>
       <Text style={s.title}>Masadaki sen.</Text>
@@ -22,7 +23,7 @@ export default function ProfileScreen() {
 
       {profile ? <ProfileForm key={`${profile.userId}:${profile.displayName}:${profile.avatarKey}`} profile={profile} loading={state.loading} saving={state.saving} error={state.error} tablet={isTablet} />
         : <Text style={state.error ? s.error : s.body}>{state.error || 'Profil hazırlanıyor…'}</Text>}
-    </ScrollView>
+    </KeyboardAwareScrollView>
   </SafeAreaView>;
 }
 

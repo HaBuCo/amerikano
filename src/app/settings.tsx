@@ -1,16 +1,19 @@
-import { useState } from 'react';
-import { router, Stack } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Href, router, Stack } from 'expo-router';
 import * as Linking from 'expo-linking';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useGameSounds } from '@/audio/game-sounds';
 import { AuthPanel } from '@/components/auth-panel';
+import { isAdsPrivacyOptionsRequired, manageAdsPrivacyChoices } from '@/ads/mobile-ads';
 import { DELETE_ACCOUNT_URL, PRIVACY_POLICY_URL, TERMS_LABEL, TERMS_URL } from '@/constants/legal';
 import { palette as p } from '@/constants/palette';
 import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
 import { useAuth } from '@/network/auth';
 import { useGameSettings } from '@/settings/game-settings';
+import { fetchRemoveAdsOffer, hasRemovedAds, purchaseRemoveAds, restorePurchases, subscribeRemoveAds } from '@/purchases/purchases';
 
 function SettingRow({ label, detail, value, onPress }: { label: string; detail: string; value: boolean; onPress: () => void }) {
   return <Pressable accessibilityRole="switch" accessibilityState={{ checked: value }} onPress={onPress} style={s.row}>
@@ -26,12 +29,65 @@ function LinkRow({ label, detail, url }: { label: string; detail: string; url: s
   </Pressable>;
 }
 
+function RemoveAdsCard() {
+  const [removedAds, setRemovedAds] = useState(hasRemovedAds());
+  const [offer, setOffer] = useState<{ priceString: string; title: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => subscribeRemoveAds(() => setRemovedAds(hasRemovedAds())), []);
+  useEffect(() => {
+    if (removedAds) return;
+    let active = true;
+    void fetchRemoveAdsOffer().then((result) => { if (active) setOffer(result); });
+    return () => { active = false; };
+  }, [removedAds]);
+
+  if (Platform.OS === 'web') return null;
+
+  async function buy() {
+    setBusy(true); setError('');
+    const result = await purchaseRemoveAds();
+    setBusy(false);
+    if (!result.ok && !result.cancelled) setError(result.error ?? 'Satın alma tamamlanamadı.');
+  }
+  async function restore() {
+    setBusy(true); setError('');
+    const result = await restorePurchases();
+    setBusy(false);
+    if (!result.ok) setError(result.error ?? 'Geri yükleme başarısız oldu.');
+    else if (!hasRemovedAds()) setError('Bu hesaba bağlı bir satın alma bulunamadı.');
+  }
+
+  return <View style={s.adsCard}>
+    {removedAds ? <>
+      <Text style={s.adsTitle}>Reklamlar kaldırıldı ✓</Text>
+      <Text style={s.adsDetail}>Desteğin için teşekkürler — artık banner ve el/maç arası reklam görmeyeceksin.</Text>
+    </> : <>
+      <Text style={s.adsTitle}>Reklamları kaldır</Text>
+      <Text style={s.adsDetail}>Tek seferlik satın alma ile ana menüdeki banner&apos;ı ve el/maç arası geçiş reklamlarını tamamen kapat.</Text>
+      {!!error && <Text style={s.adsError}>{error}</Text>}
+      <Pressable accessibilityRole="button" disabled={busy || !offer} onPress={() => void buy()} style={[s.primary, (busy || !offer) && s.disabled]}>
+        <Text style={s.primaryText}>{busy ? 'İşleniyor…' : offer ? `Satın al · ${offer.priceString}` : 'Yükleniyor…'}</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" disabled={busy} onPress={() => void restore()}><Text style={s.restoreLink}>Satın almaları geri yükle</Text></Pressable>
+    </>}
+  </View>;
+}
+
 export default function SettingsScreen() {
   const { isTablet } = useResponsiveLayout();
   const auth = useAuth();
   const { enabled: soundEnabled, toggle: toggleSound } = useGameSounds();
   const { settings, updateSettings, feedback } = useGameSettings();
   const [accountOpen, setAccountOpen] = useState(false);
+  const [adsPrivacyRequired, setAdsPrivacyRequired] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void isAdsPrivacyOptionsRequired().then((required) => { if (active) setAdsPrivacyRequired(required); });
+    return () => { active = false; };
+  }, []);
 
   return <SafeAreaView style={s.page}>
     <Stack.Screen options={{ headerShown: false }} />
@@ -40,6 +96,8 @@ export default function SettingsScreen() {
       <Text style={s.eyebrow}>AYARLAR</Text>
       <Text style={s.title}>Oyun sana uysun.</Text>
       <Text style={s.body}>Ses, titreşim, oyun yardımları, hesap ve yasal belgeler tek yerde.</Text>
+
+      <RemoveAdsCard />
 
       <View style={[s.settingsGrid, isTablet && s.settingsGridTablet]}>
         <View style={s.settingsColumn}>
@@ -55,6 +113,12 @@ export default function SettingsScreen() {
 
         <View style={s.settingsColumn}>
           <Text style={s.sectionTitle}>HESAP</Text>
+          <View style={s.card}>
+            <Pressable accessibilityRole="button" onPress={() => router.push('/profile' as Href)} style={s.row}>
+              <View style={s.rowCopy}><Text style={s.rowTitle}>Profilim</Text><Text style={s.rowDetail}>Görünen ad, kullanıcı adı ve avatarını düzenle</Text></View>
+              <Text style={s.openText}>Aç</Text>
+            </Pressable>
+          </View>
           <View style={s.accountCard}>
             <Text style={s.accountTitle}>{auth.status === 'signed-in' ? 'Kayıtlı hesap' : 'Misafir hesabı'}</Text>
             <Text style={s.accountDetail}>{auth.status === 'signed-in'
@@ -68,6 +132,10 @@ export default function SettingsScreen() {
             <LinkRow label="Gizlilik politikası" detail="Toplanan veriler ve kullanım amaçları" url={PRIVACY_POLICY_URL} />
             <LinkRow label={TERMS_LABEL} detail={TERMS_LABEL === 'Apple Standart EULA' ? 'iOS lisans koşulları' : 'Android uygulama koşulları'} url={TERMS_URL} />
             <LinkRow label="Hesap ve veri silme" detail="Uygulama dışından silme talebi gönder" url={DELETE_ACCOUNT_URL} />
+            {adsPrivacyRequired && <Pressable accessibilityRole="button" onPress={() => void manageAdsPrivacyChoices()} style={s.row}>
+              <View style={s.rowCopy}><Text style={s.rowTitle}>Reklam tercihlerini yönet</Text><Text style={s.rowDetail}>Kişiselleştirilmiş reklam rızanı gözden geçir</Text></View>
+              <Text style={s.openText}>Aç</Text>
+            </Pressable>}
           </View>
         </View>
       </View>
@@ -77,7 +145,7 @@ export default function SettingsScreen() {
     <Modal visible={accountOpen} transparent animationType="slide" onRequestClose={() => setAccountOpen(false)}>
       <View style={[s.modalRoot, isTablet && s.modalRootTablet]}>
         <Pressable accessibilityLabel="Hesap penceresini kapat" style={s.modalBackdrop} onPress={() => setAccountOpen(false)} />
-        <View style={[s.sheet, isTablet && s.sheetTablet]}><View style={s.sheetHandle} /><ScrollView keyboardShouldPersistTaps="handled"><AuthPanel onClose={() => setAccountOpen(false)} /></ScrollView></View>
+        <View style={[s.sheet, isTablet && s.sheetTablet]}><View style={s.sheetHandle} /><KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled"><AuthPanel onClose={() => setAccountOpen(false)} /></KeyboardAwareScrollView></View>
       </View>
     </Modal>
   </SafeAreaView>;
@@ -109,7 +177,13 @@ const s = StyleSheet.create({
   accountDetail: { color: p.muted, fontSize: 12, lineHeight: 18, marginTop: 5 },
   primary: { minHeight: 49, borderRadius: 12, backgroundColor: p.gold, alignItems: 'center', justifyContent: 'center', marginTop: 14 },
   primaryText: { color: p.ink, fontSize: 14, fontWeight: '900' },
+  disabled: { opacity: 0.5 },
   footer: { color: '#708f7d', fontSize: 8, fontWeight: '800', letterSpacing: 1.4, textAlign: 'center', marginTop: 25 },
+  adsCard: { borderRadius: 18, borderWidth: 1, borderColor: '#d9a44142', backgroundColor: '#d9a4410d', padding: 17, marginBottom: 15 },
+  adsTitle: { color: p.cream, fontSize: 16, fontWeight: '900' },
+  adsDetail: { color: p.muted, fontSize: 12, lineHeight: 18, marginTop: 5 },
+  adsError: { color: '#e8877e', fontSize: 11, marginTop: 8 },
+  restoreLink: { color: p.gold, fontSize: 11, fontWeight: '800', textAlign: 'center', paddingVertical: 10 },
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
   modalRootTablet: { justifyContent: 'center', padding: 32 },
   modalBackdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: '#03110bc7' },
