@@ -27,9 +27,10 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.hegionsoft.amerikano",
-      "versionCode": 4,
+      "versionCode": 6,
       "permissions": [
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "com.google.android.gms.permission.AD_ID"
       ]
     },
     "web": {
@@ -79,7 +80,8 @@
         {
           "androidAppId": "ca-app-pub-3342087532137076~4723476464",
           "iosAppId": "ca-app-pub-3342087532137076~6754829156",
-          "delayAppMeasurementInit": true
+          "delayAppMeasurementInit": true,
+          "skAdNetworkItems": ["cstr6suwn9.skadnetwork"]
         }
       ],
       [
