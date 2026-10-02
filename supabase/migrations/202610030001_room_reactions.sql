@@ -1,5 +1,7 @@
 -- Players send quick reactions straight over the private room channel. The
 -- client only accepts a fixed list of reaction ids, so no free text is relayed.
+drop policy if exists "members can send room broadcasts" on realtime.messages;
+
 create policy "members can send room broadcasts"
 on realtime.messages for insert
 to authenticated

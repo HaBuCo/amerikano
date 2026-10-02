@@ -2,7 +2,7 @@
   "expo": {
     "name": "Amerikano",
     "slug": "amerikano",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "amerikano",
@@ -27,7 +27,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.hegionsoft.amerikano",
-      "versionCode": 3,
+      "versionCode": 4,
       "permissions": [
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
