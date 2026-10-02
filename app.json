@@ -100,5 +100,10 @@
       }
     },
     "owner": "habuco"
+  },
+  "react-native-google-mobile-ads": {
+    "android_app_id": "ca-app-pub-3342087532137076~4723476464",
+    "ios_app_id": "ca-app-pub-3342087532137076~6754829156",
+    "delay_app_measurement_init": true
   }
 }
