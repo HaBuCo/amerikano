@@ -45,7 +45,7 @@ export default function FriendsScreen() {
       return;
     }
     if (roomState.room) await leaveWaitingRoom();
-    const joined = await enterRoom(profile.displayName, targetCode);
+    const joined = await enterRoom(profile.username, targetCode);
     if (joined) router.replace('/online');
   };
 
@@ -59,7 +59,7 @@ export default function FriendsScreen() {
   const confirmRemove = (player: FriendPlayer) => {
     Alert.alert(
       'Arkadaş kaldırılsın mı?',
-      `${player.displayName} arkadaş listenden kaldırılacak.`,
+      `${player.username || player.displayName} arkadaş listenden kaldırılacak.`,
       [
         { text: 'Vazgeç', style: 'cancel' },
         { text: 'Kaldır', style: 'destructive', onPress: () => { void removeFriend(player.userId); } },
@@ -143,7 +143,7 @@ function PlayerRow({ player, detail, actions }: { player: FriendPlayer; detail: 
   return <View style={[s.playerRow, isTablet && s.playerRowTablet]}>
     <View style={s.playerMain}>
       <View style={[s.avatar, { backgroundColor: avatar.color }]}><Text style={s.avatarText}>{avatar.symbol}</Text></View>
-      <View style={s.playerCopy}><Text numberOfLines={1} style={s.playerName}>{player.displayName}</Text><Text style={[s.playerDetail, player.online && s.online]}>{detail}</Text></View>
+      <View style={s.playerCopy}><Text numberOfLines={1} style={s.playerName}>{player.username || player.displayName}</Text><Text style={[s.playerDetail, player.online && s.online]}>{detail}</Text></View>
     </View>
     {!!actions && <View style={s.rowActions}>{actions}</View>}
   </View>;

@@ -81,19 +81,23 @@ export function isValidMeld(cards: Card[], type: MeldType): boolean {
   return type === 'set' ? isValidSet(cards) : isValidRun(cards);
 }
 
-export function isPlayableDiscard(state: Pick<GameState, 'melds'>, card: Card): boolean {
-  return state.melds.some(meld => {
-    if (isValidMeld([...meld.cards, card], meld.type)) return true;
-    if (card.isJoker) return false;
-    return meld.cards.some(joker => {
-      if (!joker.isJoker) return false;
-      if (meld.type === 'set') {
-        const rank = meld.cards.find(item => !item.isJoker)?.rank;
-        if (card.rank !== rank || card.suit !== meld.jokerAssignments?.[joker.id]) return false;
-      }
-      return isValidMeld(meld.cards.map(item => item.id === joker.id ? card : item), meld.type);
-    });
+// A card fits a meld if it extends it or can take a joker's place. Shared by
+// the discard penalty and the table highlight so the two cannot drift apart.
+export function cardFitsMeld(meld: Pick<Meld, 'type' | 'cards' | 'jokerAssignments'>, card: Card): boolean {
+  if (isValidMeld([...meld.cards, card], meld.type)) return true;
+  if (card.isJoker) return false;
+  return meld.cards.some(joker => {
+    if (!joker.isJoker) return false;
+    if (meld.type === 'set') {
+      const rank = meld.cards.find(item => !item.isJoker)?.rank;
+      if (card.rank !== rank || card.suit !== meld.jokerAssignments?.[joker.id]) return false;
+    }
+    return isValidMeld(meld.cards.map(item => item.id === joker.id ? card : item), meld.type);
   });
+}
+
+export function isPlayableDiscard(state: Pick<GameState, 'melds'>, card: Card): boolean {
+  return state.melds.some(meld => cardFitsMeld(meld, card));
 }
 
 export function assignSetJokers(
@@ -235,7 +239,7 @@ export function dealRound(
     startingPlayerIndex,
     stock: deck,
     stockRecycleCount: 0,
-    discard: [deck.pop()!],
+    discard: [],
     melds: [],
     phase: 'play',
     roundWinnerId: null,
@@ -377,7 +381,7 @@ export function discardCard(state: GameState, cardId: string): GameState {
   if (current.hand.length === 1 && !current.hasOpened) return state;
   if (!current.hand.some((card) => card.id === cardId)) return state;
   const discarded = current.hand.find((card) => card.id === cardId)!;
-  const playableDiscardPenalty = rulesForGame(state).playableDiscardPenalty && isPlayableDiscard(state, discarded) ? 25 : 0;
+  const playableDiscardPenalty = current.hand.length > 1 && rulesForGame(state).playableDiscardPenalty && isPlayableDiscard(state, discarded) ? 25 : 0;
   const players = state.players.map((player, index) =>
     index === state.currentPlayerIndex
       ? { ...player, hand: player.hand.filter((card) => card.id !== cardId), score: player.score + playableDiscardPenalty }
@@ -643,6 +647,11 @@ export function explainInvalidAction(state: GameState, actorId: string, action: 
   return 'Bu hamle şu anda yapılamıyor.';
 }
 
+function recordRound(state: GameState, entries: { playerId: string; totalBefore: number; totalAfter: number }[]): Record<string, number>[] {
+  const points = Object.fromEntries(entries.map((entry) => [entry.playerId, entry.totalAfter - entry.totalBefore]));
+  return [...(state.scoreHistory ?? []).slice(0, state.roundIndex), points];
+}
+
 function finishRound(state: GameState): GameState {
   const winner = state.players[state.currentPlayerIndex];
   const entries = state.players.map((player) => {
@@ -667,6 +676,7 @@ function finishRound(state: GameState): GameState {
     phase: 'round-over',
     roundWinnerId: winner.id,
     roundResult: { winnerId: winner.id, entries },
+    scoreHistory: recordRound(state, entries),
   };
 }
 
@@ -693,6 +703,7 @@ function finishStalemateRound(state: GameState): GameState {
     phase: 'round-over',
     roundWinnerId: null,
     roundResult: { winnerId: null, reason: 'stalemate', entries },
+    scoreHistory: recordRound(state, entries),
     claim: undefined,
     turnDeadline: undefined,
   };
@@ -713,5 +724,6 @@ export function nextRound(state: GameState, random = Math.random): GameState {
     ...next,
     missedTurns: { ...state.missedTurns },
     botControlledPlayerIds: [...(state.botControlledPlayerIds ?? [])],
+    scoreHistory: state.scoreHistory,
   };
 }

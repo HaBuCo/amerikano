@@ -19,23 +19,22 @@ export default function ProfileScreen() {
       <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>← Geri</Text></Pressable>
       <Text style={s.eyebrow}>OYUNCU PROFİLİ</Text>
       <Text style={s.title}>Masadaki sen.</Text>
-      <Text style={s.body}>Adın ve avatarın bütün çevrim içi masalarda görünür.</Text>
+      <Text style={s.body}>Kullanıcı adın ve avatarın bütün çevrim içi masalarda görünür.</Text>
 
-      {profile ? <ProfileForm key={`${profile.userId}:${profile.displayName}:${profile.avatarKey}`} profile={profile} loading={state.loading} saving={state.saving} error={state.error} tablet={isTablet} />
+      {profile ? <ProfileForm key={`${profile.userId}:${profile.username}:${profile.avatarKey}`} profile={profile} loading={state.loading} saving={state.saving} error={state.error} tablet={isTablet} />
         : <Text style={state.error ? s.error : s.body}>{state.error || 'Profil hazırlanıyor…'}</Text>}
     </KeyboardAwareScrollView>
   </SafeAreaView>;
 }
 
 function ProfileForm({ profile, loading, saving, error, tablet = false }: { profile: PlayerProfile; loading: boolean; saving: boolean; error: string; tablet?: boolean }) {
-  const [name, setName] = useState(profile.displayName);
   const [username, setUsername] = useState(profile.username || '');
   const [avatar, setAvatar] = useState<AvatarKey>(profile.avatarKey);
   const [saved, setSaved] = useState('');
   const save = async () => {
     setSaved('');
     try {
-      await savePlayerProfile(name, username, avatar);
+      await savePlayerProfile(username, avatar);
       setSaved('Profilin kaydedildi.');
     } catch { /* Store exposes a user-facing error. */ }
   };
@@ -64,15 +63,12 @@ function ProfileForm({ profile, loading, saving, error, tablet = false }: { prof
           </Pressable>)}</View>
         </View>
         <View style={s.editorColumn}>
-          <Text style={s.label}>OYUNCU ADI</Text>
-          <TextInput accessibilityLabel="Oyuncu adı" maxLength={18} value={name} onChangeText={(value) => { setName(value); setSaved(''); }}
-            placeholder="Adını yaz" placeholderTextColor={p.muted} style={s.input} />
           <Text style={s.label}>KULLANICI ADI</Text>
           <TextInput accessibilityLabel="Kullanıcı adı" autoCapitalize="none" autoCorrect={false} maxLength={20} value={username}
             onChangeText={(value) => { setUsername(normalizeUsername(value)); setSaved(''); }} placeholder="kullaniciadi" placeholderTextColor={p.muted} style={s.input} />
-          <Text style={s.usernameHint}>Arkadaşların seni @{username || 'kullaniciadi'} yazarak bulabilir.</Text>
-          <Pressable accessibilityRole="button" disabled={!name.trim() || !!usernameError(username) || saving || loading}
-            style={[s.primary, (!name.trim() || !!usernameError(username) || saving || loading) && s.disabled]} onPress={() => void save()}>
+          <Text style={s.usernameHint}>Masada bu adla görünürsün. Arkadaşların seni @{username || 'kullaniciadi'} yazarak bulabilir.</Text>
+          <Pressable accessibilityRole="button" disabled={!!usernameError(username) || saving || loading}
+            style={[s.primary, (!!usernameError(username) || saving || loading) && s.disabled]} onPress={() => void save()}>
             <Text style={s.primaryText}>{saving ? 'Kaydediliyor…' : 'Profili kaydet'}</Text>
           </Pressable>
         </View>

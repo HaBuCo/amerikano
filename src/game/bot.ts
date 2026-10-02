@@ -180,7 +180,15 @@ export function botAction(state: GameState): GameAction | null {
   if (state.phase === 'draw') {
     const top = state.discard.at(-1);
     const drawThreshold = difficulty === 'easy' ? 20 : difficulty === 'hard' ? 8 : 12;
-    const source = top && (top.isJoker || usefulness(top, p.hand) >= drawThreshold) ? 'discard' : 'stock';
+    let source: 'discard' | 'stock' = top && (top.isJoker || usefulness(top, p.hand) >= drawThreshold) ? 'discard' : 'stock';
+    if (source === 'discard' && top && state.stock.length > 0) {
+      const afterDraw: GameState = {
+        ...state, phase: 'play', discard: state.discard.slice(0, -1),
+        players: state.players.map(player => player.id === p.id ? { ...player, hand: [...player.hand, top] } : player),
+      };
+      const nextAction = botAction(afterDraw);
+      if (nextAction?.type === 'discard' && nextAction.cardId === top.id) source = 'stock';
+    }
     return { type: 'draw', source: state.stock.length === 0 && state.discard.length <= 1 ? 'discard' : source };
   }
   if (state.phase !== 'play') return null;

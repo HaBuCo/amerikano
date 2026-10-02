@@ -40,3 +40,12 @@ export function parseAuthLink(url: string): AuthLinkPayload | null {
   return Object.values(payload).some(Boolean) ? payload : null;
 }
 
+
+/** True when linking a guest to a provider failed because that account already exists. */
+export function isExistingAccountError(error: unknown): boolean {
+  if (!error) return false;
+  if (typeof error === 'string') return /already (been )?registered|already linked|already exists|identity_already_exists|email_exists/i.test(error);
+  const { code, message } = error as { code?: unknown; message?: unknown };
+  return code === 'identity_already_exists' || code === 'email_exists'
+    || (typeof message === 'string' && isExistingAccountError(message));
+}

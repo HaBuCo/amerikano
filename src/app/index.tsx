@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AdBanner } from '@/components/ad-banner';
 import { AuthPanel } from '@/components/auth-panel';
+import { RemoveAdsCard } from '@/components/remove-ads-card';
 import { PlayingCard } from '@/components/playing-card';
 import { palette as p } from '@/constants/palette';
 import { Card } from '@/game/types';
@@ -62,6 +63,7 @@ export default function HomeScreen() {
 
       <View style={[s.dashboard, isWideTablet && s.dashboardWide]}>
         <View style={s.dashboardColumn}>
+          <RemoveAdsCard compact />
           <Text style={s.sectionLabel}>NASIL OYNAMAK İSTERSİN?</Text>
           <Pressable accessibilityRole="button" onPress={() => router.push('/game?mode=single' as Href)} style={({ pressed }) => [s.featureButton, pressed && s.pressed]}>
             <View style={s.buttonCopy}><View style={s.titleLine}><Text style={s.featureTitle}>Tek oyunculu</Text><View style={s.offlineBadge}><Text style={s.offlineText}>ÇEVRİMDIŞI</Text></View></View><Text style={s.featureCaption}>Kaldığın oyuna devam et veya yeni masa kur</Text></View>

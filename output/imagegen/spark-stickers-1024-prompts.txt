@@ -1,0 +1,15 @@
+Mode: built-in image_gen edits of spark-sticker-sheet.png with transparent_background=true, one call per sticker.
+Exports normalized to 1024x1024 RGBA PNG with centered alpha bounds and 840px longest content dimension.
+
+Edit target: the attached original sticker sheet. Extract ONLY the TARGET sticker. Precisely preserve that sticker's original illustration, colors, face, proportions, orientation, cel shading, associated decorative marks, and thick clean WHITE die-cut border. Remove every other sticker and remove the entire gray sheet background. The white border is part of the sticker and must remain opaque white. Export a single square 1024x1024 PNG with genuine alpha transparency outside the sticker, including transparent holes between its parts; no solid background, no checkerboard baked into pixels. Center the complete sticker cluster horizontally and vertically with a generous transparent margin, occupying about 82 percent of the canvas in its longer dimension. Keep the complete outline uncut and crisp, with only a subtle soft shadow directly outside the border. No new content, no redesign, no text. TARGET: 
+
+Targets (one per edit):
+01-flame: top-left happy coral-orange flame with its small flame licks
+02-lightning: top-center lightning bolt with its surrounding sparkles
+03-rainbow: top-right rainbow and its two smiling little clouds
+04-heart: middle-left smiling coral-pink heart with all its sparkles
+05-microphone: middle-center smiling teal microphone with the surrounding small radiating marks
+06-pencil: middle-right smiling pencil with its small star and accent mark
+07-trophy: bottom-left smiling trophy with its coral ribbon bow and small radiating marks
+08-key: bottom-center golden key with its sparkles and small radiating marks
+09-speech-bubble: bottom-right cream and teal speech bubble with the pink heart inside

@@ -1,0 +1,19 @@
+Generated using the built-in image_gen tool.
+
+Use case: stylized-concept
+Asset type: one polished square sticker sheet for the app Spark.
+Create exactly NINE distinct cute die-cut stickers in a balanced 3-by-3 grid, one per cell, with generous consistent light-gray gaps and wide outer margins. Every sticker fully visible and clearly separated, no overlap.
+Style: cohesive vibrant flat vector illustration, soft cel shading using solid color shapes, bold clean silhouettes, thick uniform white die-cut border following each sticker silhouette, subtle small drop shadow. Kawaii but not childish; restrained charming expressions and refined simple shapes. Consistent warm coral/orange, cream, pink, and teal palette across all nine.
+Background: plain solid uniform light gray, no texture, no gradient.
+Subjects in reading order:
+Top left: a small coral-orange flame with a happy face.
+Top center: a lightning bolt with sparkles.
+Top right: a rainbow with two little clouds.
+Middle left: a heart with sparkles.
+Middle center: a smiling microphone.
+Middle right: a pencil with a small star.
+Bottom left: a trophy with a ribbon.
+Bottom center: a key with a sparkle.
+Bottom right: a speech bubble with a heart inside.
+Each accompanying star/sparkle belongs clearly to its sticker cluster and shares its die-cut silhouette where practical. Comparable visual weight and scale across stickers.
+No text anywhere, no letters or numerals, no captions, no logos, no copyrighted characters, no watermark. Spark is context only and must NOT appear as lettering. Crisp high-quality vector-like edges.

@@ -1,0 +1,1 @@
+delete from public.rooms where id in ('5da9a456-2946-46cb-8eff-aee9206dc570','2bde9990-b8d3-435a-916e-b7e8f2e3511d','9b81df17-fdae-41df-91c3-12975894b94e');

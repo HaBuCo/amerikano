@@ -28,7 +28,7 @@ function SeatTile({ seat, isYou, isHost, tileWidth }: { seat: Seat; isYou: boole
   const statusLabel = !seat.connected ? 'Yeniden bağlanıyor' : seat.ready ? '✓ Hazır' : 'Bekleniyor';
   return <View style={[s.seat, s.seatFilled, { width: tileWidth }, isYou && s.seatYou]}>
     <View style={[s.seatAvatar, { backgroundColor: avatar.color }]}><Text style={s.seatAvatarText}>{avatar.symbol}</Text></View>
-    <Text numberOfLines={1} style={s.seatName}>{seat.name}{isHost ? ' ♛' : ''}</Text>
+    <Text numberOfLines={1} style={s.seatName}>{seat.name}{seat.isBot ? ' · BOT' : isHost ? ' ♛' : ''}</Text>
     <Text numberOfLines={1} style={[s.seatStatus, seat.ready && seat.connected && s.seatStatusReady]}>{isYou ? 'SEN' : statusLabel}</Text>
   </View>;
 }
@@ -45,7 +45,7 @@ function EmptySeatTile({ searching, tileWidth, onPress }: { searching: boolean; 
 export function WaitingTable({ room, tableWidth, searching, onInviteEmptySeat }: {
   room: RoomView; tableWidth: number; searching: boolean; onInviteEmptySeat?: () => void;
 }) {
-  const capacity = Math.min(MAX_SEATS, Math.max(MIN_SEATS, room.members.length));
+  const capacity = room.visibility === 'public' ? MIN_SEATS : Math.min(MAX_SEATS, Math.max(MIN_SEATS, room.members.length));
   const emptySeatCount = Math.max(0, capacity - room.members.length);
   const columns = tableWidth >= 560 ? capacity : capacity <= 4 ? 2 : 3;
   const tileWidth = Math.max(96, (tableWidth - 24 - (columns - 1) * 8) / columns);

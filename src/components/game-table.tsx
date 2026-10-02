@@ -9,8 +9,9 @@ import { PrivateGameView } from '@/game/view';
 import { SUITS } from '@/game/types';
 import type { Card, GameAction, MeldType, Rank, Suit } from '@/game/types';
 import { ROUND_CONTRACTS } from '@/game/contracts';
-import { contractForRound, roundCountForGame, rulesForGame } from '@/game/game-rules';
-import { isValidMeld } from '@/game/engine';
+import { contractForRound, openingJokerRestricted, roundCountForGame, rulesForGame } from '@/game/game-rules';
+import { meldFeedback } from '@/game/meld-feedback';
+import { cardFitsMeld, isValidMeld } from '@/game/engine';
 import { GameSound, useGameSounds } from '@/audio/game-sounds';
 import { arrangeHand, loadHandOrder, moveCardToIndex, reconcileHandOrder, saveHandOrder } from '@/game/hand-order';
 import { autoArrangeHand, suggestContractGroups, suggestFinalGroups } from '@/game/auto-arrange';
@@ -20,6 +21,9 @@ import { isMeldHidden } from '@/game/meld-visibility';
 import { closestDropTarget, containsDropPoint, isTapDrop } from '@/game/drop-geometry';
 import type { DropPoint, DropRect } from '@/game/drop-geometry';
 import { scoreSummary } from '@/game/score-summary';
+import { snapshotActor, tableSound } from '@/game/table-sounds';
+import type { TableSnapshot } from '@/game/table-sounds';
+import { REACTIONS, REACTION_VISIBLE_MS, reactionById } from '@/game/reactions';
 import { DELETE_ACCOUNT_URL, PRIVACY_POLICY_URL, TERMS_LABEL, TERMS_URL } from '@/constants/legal';
 
 type Props = {
@@ -29,6 +33,7 @@ type Props = {
   playerMeta?: Record<string, { avatarColor: string; avatarSymbol: string; level: number; connected: boolean; missedTurns: number; botControlled: boolean }>;
   botControlled?: boolean; onReclaim?: () => void;
   onOpenTutorial?: () => void;
+  onReact?: (reactionId: string) => void; reactions?: Record<string, { id: string; at: number }>;
   canUndo?: boolean; onUndo?: () => void;
   connectionState?: 'online' | 'reconnecting' | 'offline';
   onAction: (a: GameAction) => void; onRematch?: () => void; onForfeit?: () => void; onExit: () => void;
@@ -118,9 +123,12 @@ function DraggableHandCard({ card, index, step, cardsPerRow, cardWidth, cardHeig
   </DragSurface>;
 }
 
-function TurnCountdown({ deadline, warningEnabled, onUrgent }: { deadline?: number; warningEnabled: boolean; onUrgent: () => void }) {
+const ROUND_ADVANCE_DELAY_MS = 6_000;
+
+function TurnCountdown({ deadline, warningEnabled, tickEnabled, onUrgent, onTick }: { deadline?: number; warningEnabled: boolean; tickEnabled: boolean; onUrgent: () => void; onTick: () => void }) {
   const [seconds, setSeconds] = useState(() => deadline ? Math.max(0, Math.ceil((deadline - Date.now()) / 1000)) : 0);
   const warnedDeadline = useRef<number | undefined>(undefined);
+  const tickedKey = useRef('');
   useEffect(() => {
     if (!deadline) return;
     const update = () => setSeconds(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
@@ -134,8 +142,31 @@ function TurnCountdown({ deadline, warningEnabled, onUrgent }: { deadline?: numb
       onUrgent();
     }
   }, [deadline, onUrgent, seconds, warningEnabled]);
+  useEffect(() => {
+    const key = `${deadline}:${seconds}`;
+    if (deadline && warningEnabled && tickEnabled && seconds > 0 && seconds <= 10 && tickedKey.current !== key) {
+      tickedKey.current = key;
+      onTick();
+    }
+  }, [deadline, onTick, seconds, tickEnabled, warningEnabled]);
   if (!deadline) return null;
   return <View accessibilityLabel={`Sıra süresi ${seconds} saniye`} style={[s.timer, warningEnabled && seconds <= 10 && s.timerUrgent]}><Text style={s.timerText}>{seconds}</Text></View>;
+}
+
+function ReactionBubble({ reaction }: { reaction: { id: string; at: number } }) {
+  const [hiddenAt, setHiddenAt] = useState<number | null>(() => Date.now() - reaction.at >= REACTION_VISIBLE_MS ? reaction.at : null);
+  useEffect(() => {
+    const remaining = REACTION_VISIBLE_MS - (Date.now() - reaction.at);
+    if (remaining <= 0) return;
+    const timer = setTimeout(() => setHiddenAt(reaction.at), remaining);
+    return () => clearTimeout(timer);
+  }, [reaction.at]);
+  const visible = hiddenAt !== reaction.at;
+  const item = reactionById(reaction.id);
+  if (!visible || !item) return null;
+  return <View pointerEvents="none" accessibilityLiveRegion="polite" style={s.reactionBubble}>
+    <Text numberOfLines={1} style={item.kind === 'emoji' ? s.reactionEmoji : s.reactionPhrase}>{item.text}</Text>
+  </View>;
 }
 
 function SettingRow({ label, value, onPress }: { label: string; value: boolean; onPress: () => void }) {
@@ -144,12 +175,13 @@ function SettingRow({ label, value, onPress }: { label: string; value: boolean; 
   </Pressable>;
 }
 
-export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = true, canRematch = false, error, debugText, playerMeta, botControlled = false, connectionState, onReclaim, onOpenTutorial, canUndo = false, onUndo, onAction, onRematch, onForfeit, onExit }: Props) {
+export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = true, canRematch = false, error, debugText, playerMeta, botControlled = false, connectionState, onReclaim, onOpenTutorial, onReact, reactions, canUndo = false, onUndo, onAction, onRematch, onForfeit, onExit }: Props) {
   const [pendingState, setPendingState] = useState<{ key: string; groups: Pending[] }>({ key: '', groups: [] });
   const [notice, setNotice] = useState('');
   const [exitOpen, setExitOpen] = useState(false);
   const [scoresOpen, setScoresOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [reactionsOpen, setReactionsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
   const [arranging, setArranging] = useState(false);
@@ -157,7 +189,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   const [jokerChoice, setJokerChoice] = useState<JokerChoice | null>(null);
   const [activeDrag, setActiveDrag] = useState<'hand' | 'stock' | 'discard' | 'staged' | 'arranging' | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
-  const [advanceSeconds, setAdvanceSeconds] = useState<number | null>(null);
+  const [rejectedMeld, setRejectedMeld] = useState<{ key: string; id: string } | null>(null);
+  const [advance, setAdvance] = useState<{ roundIndex: number; seconds: number } | null>(null);
   const dropNodes = useRef<Record<string, Measurable | null>>({});
   const dropRects = useRef<Record<string, DropRect>>({});
   const { enabled: soundEnabled, toggle: toggleSound, play: playSound } = useGameSounds();
@@ -202,6 +235,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   const over = game.phase === 'round-over' || game.phase === 'game-over';
   const winners = game.players.filter(player => player.score === Math.min(...game.players.map(pl => pl.score)));
   const sortedPlayers = [...game.players].sort((a, b) => a.score - b.score);
+  const scoreHistory = game.scoreHistory ?? [];
   const visibleMelds = game.melds
     .map((meld, index) => ({ meld, index }))
     .filter(({ meld }) => !isMeldHidden(
@@ -235,24 +269,49 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
 
   useEffect(() => {
     if (previousPhase.current !== game.phase && (game.phase === 'round-over' || game.phase === 'game-over')) {
-      playSound('win');
-      feedback('success');
+      const won = game.phase === 'game-over'
+        ? winners.some(player => player.id === viewerId)
+        : game.roundWinnerId === viewerId;
+      playSound(won ? 'win' : 'lose');
+      feedback(won ? 'success' : 'impact');
     }
     previousPhase.current = game.phase;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only the phase change should trigger the jingle.
   }, [feedback, game.phase, playSound]);
 
   useEffect(() => {
-    if (error && error !== previousError.current) feedback('error');
+    if (error && error !== previousError.current) {
+      playSound('error');
+      feedback('error');
+    }
     previousError.current = error;
-  }, [error, feedback]);
+  }, [error, feedback, playSound]);
+
+  // Sounds for moves other people (or the bot seat) made. Our own actions already
+  // play theirs from act(), so skip changes whose previous actor was us.
+  const previousTable = useRef<TableSnapshot | null>(null);
+  useEffect(() => {
+    const snapshot: TableSnapshot = {
+      roundIndex: game.roundIndex, stockCount: game.stockCount, melds: game.melds, lastPenalty: game.lastPenalty,
+      phase: game.phase, players: game.players, currentPlayerIndex: game.currentPlayerIndex, claim: game.claim,
+    };
+    const before = previousTable.current;
+    previousTable.current = snapshot;
+    if (!before) return;
+    const sound = tableSound(before, snapshot);
+    if (!sound) return;
+    const ownMove = snapshotActor(before) === viewerId && !botControlled && sound !== 'penalty' && sound !== 'deal';
+    if (!ownMove) playSound(sound);
+  }, [game.roundIndex, game.stockCount, game.melds, game.lastPenalty, game.phase, game.players, game.currentPlayerIndex, game.claim, viewerId, botControlled, playSound]);
 
   useEffect(() => {
-    if (myTurn && !previousMyTurn.current) {
-      playSound('tap');
-      feedback('warning');
+    const needsMe = myTurn || claiming;
+    if (needsMe && !previousMyTurn.current) {
+      playSound('turn');
+      feedback('turn');
     }
-    previousMyTurn.current = myTurn;
-  }, [myTurn, playSound, feedback]);
+    previousMyTurn.current = needsMe;
+  }, [myTurn, claiming, playSound, feedback]);
 
   useEffect(() => {
     let active = true;
@@ -311,6 +370,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   }, []);
 
   function beginDrag(kind: typeof activeDrag, cardId?: string) {
+    setRejectedMeld(null);
     measureDropZones(kind === 'stock' || kind === 'discard' ? new Set(['hand']) : undefined);
     setActiveDrag(kind);
     setActiveCardId(cardId ?? null);
@@ -446,7 +506,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       setNotice('Görev tepsilerinden biri geçerli değil. Kartları eline geri sürükleyip düzelt.');
       return;
     }
-    if (game.roundIndex < 5 && ready.some(group => group.cardIds.some(id => me.hand.find(card => card.id === id)?.isJoker))) {
+    if (openingJokerRestricted(game) && ready.some(group => group.cardIds.some(id => me.hand.find(card => card.id === id)?.isJoker))) {
       setNotice('Bu elde açılış tepsilerinde joker kullanılamaz.');
       return;
     }
@@ -482,12 +542,49 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       setNotice('Bütün tepsiler dolu. Bir kartı tepsiden çıkarıp tekrar dene.');
       return;
     }
+    // Tapping lets the game route the card: keep the selected tray when the card
+    // still fits it, otherwise move to a tray it can belong to (filled ones first).
+    const card = me.hand.find(item => item.id === cardId);
+    const jokersAllowed = me.hasOpened || !openingJokerRestricted(game);
+    const fits = (index: number) => {
+      const slot = dropSlots[index];
+      const limit = slotLimit(slot);
+      if (!card || (limit && groups[index].cardIds.length >= limit)) return false;
+      const trayCards = groups[index].cardIds.map(id => me.hand.find(item => item.id === id)).filter((item): item is Card => Boolean(item));
+      return meldFeedback([...trayCards, card], slot.type, slot.length, jokersAllowed) !== 'invalid';
+    };
+    if (!fits(slotIndex)) {
+      const candidates = groups.map((_, index) => index).filter(index => index !== slotIndex && fits(index));
+      const better = candidates.find(index => groups[index].cardIds.length) ?? candidates[0];
+      if (better !== undefined) slotIndex = better;
+    }
+    // A lone card parked in another tray joins this one once it holds two or
+    // more cards it fits with (J tapped first lands in a set, then Q and K start a run).
+    let source: Pending[] = groups;
+    if (card) {
+      const tray = dropSlots[slotIndex];
+      const limit = slotLimit(tray);
+      let trayCards = [...groups[slotIndex].cardIds.map(id => me.hand.find(item => item.id === id)).filter((item): item is Card => Boolean(item)), card];
+      if (trayCards.length >= 2) {
+        const moved = new Set<string>();
+        groups.forEach((group, index) => {
+          const loose = group.cardIds.length === 1 && index !== slotIndex ? me.hand.find(item => item.id === group.cardIds[0]) : undefined;
+          if (!loose || (limit && trayCards.length >= limit)) return;
+          if (meldFeedback([...trayCards, loose], tray.type, tray.length, jokersAllowed) === 'invalid') return;
+          trayCards = [...trayCards, loose];
+          moved.add(loose.id);
+        });
+        if (moved.size) source = groups.map((group, index) => index === slotIndex
+          ? { ...group, cardIds: [...group.cardIds, ...moved] }
+          : { ...group, cardIds: group.cardIds.filter(id => !moved.has(id)) });
+      }
+    }
     setActiveSlotIndex(slotIndex);
-    addCardToSlot(cardId, slotIndex);
+    addCardToSlot(cardId, slotIndex, source);
   }
 
   function findAndOpenContract() {
-    const groups = suggestContractGroups(me.hand, contract, game.roundIndex >= 5);
+    const groups = suggestContractGroups(me.hand, contract, !openingJokerRestricted(game));
     if (!groups) {
       setNotice('Elinde bu görevi tamamlayan hazır bir grup bulunamadı. Kartlara dokunarak tepsileri elle doldurabilirsin.');
       return;
@@ -525,6 +622,9 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   }
 
   function dropOnMeld(cardId: string, meldId: string) {
+    if (!acceptsCard(meldId, me.hand.find(item => item.id === cardId))) {
+      setRejectedMeld({ key: pendingKey, id: meldId });
+    }
     const meld = game.melds.find(item => item.id === meldId);
     const card = me.hand.find(item => item.id === cardId);
     if (!meld || !card || !me.hasOpened) {
@@ -544,18 +644,24 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   }
 
   function acceptsCard(meldId: string, card = activeCard) {
+    return me.hasOpened && !openedThisTurn && fitsMeld(meldId, card);
+  }
+
+  // Whether the card belongs on this meld, regardless of whether we may lay it
+  // off right now. Drives the highlight so playable (penalised) discards show
+  // up before opening and on the opening turn too.
+  function fitsMeld(meldId: string, card = activeCard) {
     const meld = game.melds.find(item => item.id === meldId);
-    if (!meld || !card || !me.hasOpened || openedThisTurn) return false;
-    const replacesJoker = meld.cards.some((joker) => joker.isJoker && (meld.type === 'set'
-      ? card.rank === meld.cards.find(item => !item.isJoker)?.rank && card.suit === meld.jokerAssignments?.[joker.id]
-      : isValidMeld(meld.cards.map((item) => item.id === joker.id ? card : item), meld.type)));
-    return replacesJoker || isValidMeld([...meld.cards, card], meld.type);
+    if (!meld || !card) return false;
+    return me.hand.length > 1 && cardFitsMeld(meld, card);
   }
 
   function dropHandCard(cardId: string, point: DropPoint) {
     endDrag();
     if (!Number.isFinite(point.x) || !playing) return;
     if (isTapDrop(point)) return addTappedCard(cardId);
+    // Peek zone: lets the player drag a card over the table to check it without committing.
+    if (isInside('cancel', point)) return;
     const slot = targetIndex('slot:', point);
     if (slot >= 0) return addCardToSlot(cardId, slot);
     const meldId = targetMeldId(point, me.hand.find(card => card.id === cardId));
@@ -622,7 +728,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     const next = autoArrangeHand(me.hand, {
       contract,
       prioritizeContract: !me.hasOpened,
-      allowJokersInGroups: me.hasOpened || game.roundIndex >= 5,
+      allowJokersInGroups: me.hasOpened || !openingJokerRestricted(game),
     });
     setPending([]);
     setArranging(false);
@@ -650,34 +756,35 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     feedback(action.type === 'open' || action.type === 'finish' ? 'success' : 'impact');
     onAction(action);
   }
-  const actRef = useRef(act);
-  actRef.current = act;
-
-  const ROUND_ADVANCE_DELAY_MS = 6_000;
+  // The auto-advance timer must call the latest handlers without restarting on every render.
+  const advanceRef = useRef(() => {});
   useEffect(() => {
-    if (game.phase !== 'round-over') {
-      setAdvanceSeconds(null);
-      return;
-    }
+    advanceRef.current = () => {
+      if (!canAdvance || blocked) return;
+      setPending([]);
+      act({ type: 'next' });
+    };
+  });
+
+  useEffect(() => {
+    if (game.phase !== 'round-over') return;
+    const roundIndex = game.roundIndex;
     const deadline = Date.now() + ROUND_ADVANCE_DELAY_MS;
-    setAdvanceSeconds(Math.ceil(ROUND_ADVANCE_DELAY_MS / 1000));
     const tick = setInterval(() => {
-      setAdvanceSeconds(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
+      setAdvance({ roundIndex, seconds: Math.max(0, Math.ceil((deadline - Date.now()) / 1000)) });
     }, 250);
-    const timeout = setTimeout(() => {
-      if (canAdvance && !blocked) {
-        setPending([]);
-        actRef.current({ type: 'next' });
-      }
-    }, ROUND_ADVANCE_DELAY_MS);
+    const timeout = setTimeout(() => advanceRef.current(), ROUND_ADVANCE_DELAY_MS);
     return () => { clearInterval(tick); clearTimeout(timeout); };
-  }, [game.phase, game.roundIndex, canAdvance, blocked]);
+  }, [game.phase, game.roundIndex]);
+  const advanceSeconds = game.phase !== 'round-over' ? null
+    : advance?.roundIndex === game.roundIndex ? advance.seconds : Math.ceil(ROUND_ADVANCE_DELAY_MS / 1000);
 
   return <SafeAreaView style={[s.page, tabletLandscape && s.pageTabletLandscape]}>
     <View style={s.header}>
       <Pressable accessibilityRole="button" accessibilityLabel="Masadan çık" onPress={() => setExitOpen(true)} style={s.headerMenuButton}><Text style={s.headerMenuText}>Çık</Text></Pressable>
       <View style={s.center}><Text style={s.eyebrow}>{modeLabel}</Text><Text style={s.round}>EL {game.roundIndex + 1} / {roundCount} · {contract.shortTitle}</Text></View>
       <View style={s.headerActions}>
+        {onReact && <Pressable accessibilityRole="button" accessibilityLabel="Tepki gönder" style={s.headerMenuButton} onPress={() => { feedback(); setReactionsOpen(true); }}><Text style={s.headerMenuText}>Tepki</Text></Pressable>}
         <Pressable accessibilityRole="button" accessibilityLabel="Hızlı kural yardımı" style={s.headerMenuButton} onPress={() => { feedback(); setHelpOpen(true); }}><Text style={s.headerMenuText}>Kural</Text></Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="Oyun ayarları" style={s.headerMenuButton} onPress={() => { feedback(); setSettingsOpen(true); }}><Text style={s.headerMenuText}>Ayar</Text></Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="Puan tablosu" style={s.headerMenuButton} onPress={() => { playSound('tap'); setScoresOpen(true); }}><Text style={s.headerMenuText}>Puan</Text></Pressable>
@@ -704,6 +811,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
               <Text numberOfLines={1} style={s.playerStats}>{game.handCounts[pl.id]} kart · {pl.score}p{pl.hasOpened ? ' · Açtı' : ''}{playerMeta?.[pl.id]?.missedTurns ? ` · ${playerMeta[pl.id].missedTurns}/3` : ''}</Text>
             </View>
             {isCurrent && <View style={s.turnDot} />}
+            {settings.showReactions && reactions?.[pl.id] && <ReactionBubble reaction={reactions[pl.id]} />}
           </View>;
         })}
       </View>
@@ -725,7 +833,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
           </DropZoneView>
         </View>
       </View>
-      <View style={s.turnRow}><Text style={s.turn}>{blocked ? 'Bekleniyor…' : game.phase === 'claim' ? claiming ? 'Karar sende' : `${claimPlayer?.name} düşünüyor…` : myTurn ? drawing ? 'Sıra sende · Çek' : 'Sıra sende · Oyna' : `${current.name} oynuyor…`}</Text><TurnCountdown deadline={game.turnDeadline} warningEnabled={settings.criticalTimer} onUrgent={() => { playSound('tap'); feedback('warning'); }} /></View>
+      <View style={s.turnRow}><Text style={s.turn}>{blocked ? 'Bekleniyor…' : game.phase === 'claim' ? claiming ? 'Karar sende' : `${claimPlayer?.name} düşünüyor…` : myTurn ? drawing ? 'Sıra sende · Çek' : 'Sıra sende · Oyna' : `${current.name} oynuyor…`}</Text><TurnCountdown deadline={game.turnDeadline} warningEnabled={settings.criticalTimer} tickEnabled={myTurn || claiming} onUrgent={() => { if (myTurn || claiming) feedback('warning'); }} onTick={() => playSound('tick')} /></View>
       {game.lastPenalty?.reason === 'playable-discard' && <View style={s.playablePenaltyBanner}><Text style={s.playablePenaltyText}>{penalizedPlayer?.name ?? 'Oyuncu'} işlek kart attı · +{game.lastPenalty.points} ceza</Text></View>}
       {botControlled && <View style={s.botNotice}><Text style={s.botNoticeText}>Üç süre kaçırdığın için oyun koltuğunu otomatik yönetiyor.</Text><Pressable accessibilityRole="button" disabled={blocked} onPress={onReclaim} style={[s.reclaimButton, blocked && s.disabled]}><Text style={s.reclaimText}>Koltuğu geri al</Text></Pressable></View>}
       {claiming && <View style={s.actions}>
@@ -734,13 +842,16 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       {visibleMelds.length > 0 ? <View style={s.melds}>
         {visibleMelds.map(({ meld: m }) => {
           const meldRank = m.cards.find(card => !card.isJoker)?.rank;
-          return <DropZoneView key={m.id} dropKey={`meld:${m.id}`} onNode={registerDropZone} style={[s.meld, activeDrag === 'hand' && acceptsCard(m.id) && s.dropTargetActive, activeDrag === 'hand' && !acceptsCard(m.id) && s.meldInactive]}>
+          const draggingHere = activeDrag === 'hand';
+          const accepted = draggingHere && fitsMeld(m.id);
+          const rejected = (draggingHere && !accepted) || (rejectedMeld?.key === pendingKey && rejectedMeld.id === m.id);
+          return <DropZoneView key={m.id} dropKey={`meld:${m.id}`} onNode={registerDropZone} style={[s.meld, accepted && s.dropSlotValid, rejected && s.dropSlotInvalid]}>
             <Text style={s.small}>{game.players.find(pl => pl.id === m.ownerId)?.name} · {m.type === 'set' ? 'Küt' : 'Seri'}</Text>
             <View style={s.meldCards}>{m.cards.map((c, i) => <View key={c.id} style={[s.meldCard, { marginLeft: i ? -16 : 0 }]}>
               <PlayingCard card={c} compact tablet={tabletLandscape} />
               {c.isJoker && meldRank && m.jokerAssignments?.[c.id] && <Text style={s.jokerBadge}>{suitSymbol[m.jokerAssignments[c.id]]}{meldRank}</Text>}
             </View>)}</View>
-            {settings.dragHints && activeDrag === 'hand' && acceptsCard(m.id) && <Text style={s.meldDropHint}>Buraya işlenebilir</Text>}
+            {settings.dragHints && activeDrag === 'hand' && fitsMeld(m.id) && <Text style={s.meldDropHint}>{acceptsCard(m.id) ? 'Buraya işlenebilir' : gameRules.playableDiscardPenalty ? 'İşlek kart · atarsan +25' : 'Bu gruba uyuyor'}</Text>}
           </DropZoneView>;
         })}
       </View> : null}
@@ -756,15 +867,20 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
         {dropSlots.map((slot, index) => {
           const group = groupsWithSlots()[index];
           const groupCards = group.cardIds.map(id => me.hand.find(card => card.id === id)).filter((card): card is Card => Boolean(card));
-          const valid = groupCards.length >= 3 && Boolean(group.type ? isValidMeld(groupCards, group.type) : inferType(group.cardIds));
-          const limit = slotLimit(slot);
-          return <DropZonePressable key={index} dropKey={`slot:${index}`} onNode={registerDropZone} accessibilityRole="button" accessibilityState={{ selected: activeSlotIndex === index }} onPress={() => { setActiveSlotIndex(index); feedback('selection'); }} style={[s.dropSlot, tabletLandscape && s.dropSlotTablet, activeSlotIndex === index && s.dropSlotSelected, activeDrag === 'hand' && (!limit || group.cardIds.length < limit) && s.dropTargetActive, valid && s.dropSlotValid]}>
+          const incoming = (activeDrag === 'hand' || activeDrag === 'staged') && activeCard && !group.cardIds.includes(activeCard.id) ? activeCard : null;
+          const previewCards = incoming ? [...groupCards, incoming] : groupCards;
+          const status = meldFeedback(previewCards, slot.type, slot.length, me.hasOpened || !openingJokerRestricted(game));
+          return <DropZonePressable key={index} dropKey={`slot:${index}`} onNode={registerDropZone} accessibilityRole="button" accessibilityState={{ selected: activeSlotIndex === index }} onPress={() => { setActiveSlotIndex(index); feedback('selection'); }} style={[s.dropSlot, tabletLandscape && s.dropSlotTablet, activeSlotIndex === index && s.dropSlotSelected, status === 'valid' && s.dropSlotValid, status === 'invalid' && s.dropSlotInvalid]}>
             <Text style={s.dropSlotLabel}>{activeSlotIndex === index ? 'SEÇİLİ · ' : ''}{slot.label} · {group.cardIds.length}{slot.length ? `/${slot.length}` : ''}</Text>
             <View style={[s.slotCards, tabletLandscape && s.slotCardsTablet]}>{groupCards.map((card, cardIndex) => <DragSurface key={card.id} active={playing} onDragStart={() => beginDrag('staged', card.id)} onDrop={(point) => dropStagedCard(card.id, point)} style={{ marginLeft: cardIndex ? -10 : 0 }}><PlayingCard card={card} compact tablet={tabletLandscape} /></DragSurface>)}</View>
+            {status === 'invalid' && <Text style={s.invalidDropHint}>Geçersiz grup</Text>}
           </DropZonePressable>;
         })}
       </ScrollView>
     </View>}
+    {activeDrag === 'hand' && playing && <DropZoneView dropKey="cancel" onNode={registerDropZone} pointerEvents="none" style={s.cancelZone}>
+      <Text style={s.cancelZoneText}>Sadece bakıyorum · buraya bırak, kart yerinde kalsın</Text>
+    </DropZoneView>}
     <DropZoneView dropKey="hand" onNode={registerDropZone} style={[s.hand, tabletLandscape && s.handTablet, (activeDrag === 'stock' || activeDrag === 'discard' || activeDrag === 'staged') && s.handDropActive]}>
       <View style={s.handHeading}>
         <Text numberOfLines={1} style={s.handName}>{me.name} <Text style={s.small}>· {me.hand.length} kart{myMissedTurns ? ` · ${myMissedTurns}/3 süre kaçtı` : ''}</Text></Text>
@@ -781,9 +897,23 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     </DropZoneView>
     <Modal visible={over || scoresOpen} transparent animationType="fade" onRequestClose={() => setScoresOpen(false)}>
       <View style={s.backdrop}><View style={s.sheet}>
-        <Text style={s.resultTitle}>{game.phase === 'game-over' ? winners.map(w => w.name).join(' & ') + ' kazandı!' : game.phase === 'round-over' ? game.roundResult?.reason === 'stalemate' ? 'El çıkmaz bitti' : game.players.find(pl => pl.id === game.roundWinnerId)?.name + ' bitirdi!' : 'Puan tablosu'}</Text>
+        <Text style={s.resultTitle}>{game.phase === 'game-over' ? winners.length === 1 && winners[0].id === viewerId ? 'Sen kazandın!' : winners.map(w => w.id === viewerId ? 'Sen' : w.name).join(' & ') + (winners.some(w => w.id === viewerId) ? ' kazandınız!' : ' kazandı!') : game.phase === 'round-over' ? game.roundResult?.reason === 'stalemate' ? 'El çıkmaz bitti' : game.roundWinnerId === viewerId ? 'Sen bitirdin!' : game.players.find(pl => pl.id === game.roundWinnerId)?.name + ' bitirdi!' : 'Puan tablosu'}</Text>
         <Text style={s.resultCaption}>{game.phase === 'round-over' && game.roundResult?.reason === 'stalemate' ? `Deste ikinci kez tükendi; elde kalan kartlar ceza yazıldı.${nextContract ? ` Sıradaki el: ${nextContract.title}` : ''}` : game.phase === 'round-over' && nextContract ? `Sıradaki el: ${nextContract.title}` : game.phase === 'game-over' ? `${roundCount} el tamamlandı. En düşük toplam puan kazandı.` : 'En düşük toplam puan kazanır.'}</Text>
         <ScrollView style={s.resultList} contentContainerStyle={s.resultListContent} showsVerticalScrollIndicator={false}>
+          {scoreHistory.length > 0 && <View accessibilityLabel="El el puan geçmişi" style={s.historyTable}>
+            <View style={s.historyRow}>
+              <Text style={[s.historyRound, s.historyHead]}>El</Text>
+              {game.players.map(pl => <Text key={pl.id} numberOfLines={1} style={[s.historyCell, s.historyHead]}>{pl.name}</Text>)}
+            </View>
+            {scoreHistory.map((row, index) => <View key={index} style={[s.historyRow, index % 2 === 1 && s.historyRowAlt]}>
+              <Text style={s.historyRound}>{index + 1}.</Text>
+              {game.players.map(pl => <Text key={pl.id} style={[s.historyCell, (row[pl.id] ?? 0) === 0 && s.historyZero]}>{row[pl.id] ?? 0}</Text>)}
+            </View>)}
+            <View style={[s.historyRow, s.historyTotalRow]}>
+              <Text style={[s.historyRound, s.historyTotal]}>Σ</Text>
+              {game.players.map(pl => <Text key={pl.id} style={[s.historyCell, s.historyTotal, pl.score === Math.min(...game.players.map(o => o.score)) && s.historyLeader]}>{pl.score}</Text>)}
+            </View>
+          </View>}
           {sortedPlayers.map((pl, i) => {
             const detail = over ? game.roundResult?.entries.find((entry) => entry.playerId === pl.id) : undefined;
             const score = scoreSummary(detail, pl.score);
@@ -835,6 +965,12 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       </ScrollView>
       <Pressable style={s.resultButton} onPress={() => setDebugOpen(false)}><Text style={s.actionText}>Masaya dön</Text></Pressable>
     </View></View></Modal>
+    {onReact && <Modal visible={reactionsOpen} transparent animationType="fade" onRequestClose={() => setReactionsOpen(false)}><Pressable style={s.backdrop} onPress={() => setReactionsOpen(false)}><Pressable style={s.sheet}>
+      <Text style={s.resultTitle}>Tepki gönder</Text>
+      <View style={s.reactionGrid}>{REACTIONS.filter(item => item.kind === 'emoji').map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.id} onPress={() => { onReact(item.id); setReactionsOpen(false); }} style={s.reactionEmojiButton}><Text style={s.reactionEmojiLarge}>{item.text}</Text></Pressable>)}</View>
+      <View style={s.reactionGrid}>{REACTIONS.filter(item => item.kind === 'phrase').map(item => <Pressable key={item.id} accessibilityRole="button" onPress={() => { onReact(item.id); setReactionsOpen(false); }} style={s.reactionPhraseButton}><Text style={s.reactionPhraseText}>{item.text}</Text></Pressable>)}</View>
+      <Text style={s.resultCaption}>Tepkiler masadaki herkese birkaç saniye görünür.</Text>
+    </Pressable></Pressable></Modal>}
     <Modal visible={settingsOpen} transparent animationType="fade" onRequestClose={() => setSettingsOpen(false)}><View style={s.backdrop}><View style={s.sheet}>
       <Text style={s.resultTitle}>Oyun ayarları</Text>
       <SettingRow label="Ses efektleri" value={soundEnabled} onPress={() => { toggleSound(); feedback(); }} />
@@ -842,6 +978,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       <SettingRow label="Son 10 saniye uyarısı" value={settings.criticalTimer} onPress={() => { feedback(); updateSettings({ criticalTimer: !settings.criticalTimer }); }} />
       <SettingRow label="Eldeki kartları küçült" value={settings.compactCards} onPress={() => { feedback(); updateSettings({ compactCards: !settings.compactCards }); }} />
       <SettingRow label="Sürükleme ipuçları" value={settings.dragHints} onPress={() => { feedback(); updateSettings({ dragHints: !settings.dragHints }); }} />
+      <SettingRow label="Tepkileri göster" value={settings.showReactions} onPress={() => { feedback(); updateSettings({ showReactions: !settings.showReactions }); }} />
       <Text style={s.settingsSectionTitle}>YASAL VE GİZLİLİK</Text>
       <View style={s.settingsLinks}>
         <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)} style={s.settingsLink}><Text style={s.settingsLinkText}>Gizlilik politikası</Text><Text style={s.settingsLinkAction}>Aç</Text></Pressable>
@@ -899,6 +1036,13 @@ const s = StyleSheet.create({
   emptyTablet: { width: TABLET_SMALL_CARD_WIDTH, height: TABLET_SMALL_CARD_HEIGHT, borderRadius: 6 },
   tableMark: { alignItems: 'center', opacity: 0.25 }, tableA: { color: '#e1d2ad', fontFamily: 'serif', fontSize: 20 }, tableBrand: { color: '#e1d2ad', fontSize: 5, letterSpacing: 1.2 },
   turnRow: { minHeight: 26, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }, turn: { color: '#e8d0a1', fontSize: 12, textAlign: 'center', fontWeight: '600' },
+  reactionBubble: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, backgroundColor: '#0d3327f5', borderWidth: 1, borderColor: p.gold },
+  reactionEmoji: { fontSize: 22 }, reactionPhrase: { color: p.gold, fontSize: 11, fontWeight: '900', textAlign: 'center' },
+  reactionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
+  reactionEmojiButton: { width: 54, height: 54, borderRadius: 14, borderWidth: 1, borderColor: '#d8cbb0', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fffaf0' }, reactionEmojiLarge: { fontSize: 28 },
+  reactionPhraseButton: { minHeight: 44, paddingHorizontal: 14, borderRadius: 22, borderWidth: 1, borderColor: '#997431', backgroundColor: '#fffaf0', alignItems: 'center', justifyContent: 'center' }, reactionPhraseText: { color: '#142c22', fontSize: 13, fontWeight: '800' },
+  cancelZone: { position: 'absolute', top: 0, left: 0, right: 0, height: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0d3327f2', borderBottomWidth: 2, borderColor: p.gold },
+  cancelZoneText: { color: p.gold, fontSize: 12, fontWeight: '900' },
   playablePenaltyBanner: { marginHorizontal: 12, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: '#a6404838', borderWidth: 1, borderColor: '#d87878' }, playablePenaltyText: { color: '#ffd7d7', textAlign: 'center', fontSize: 11, fontWeight: '900' },
   timer: { minWidth: 28, height: 23, paddingHorizontal: 5, borderRadius: 12, backgroundColor: '#d9a44130', alignItems: 'center', justifyContent: 'center' }, timerUrgent: { backgroundColor: '#a64048' }, timerText: { color: p.cream, fontSize: 11, fontWeight: '900' },
   botNotice: { marginHorizontal: 12, padding: 9, borderRadius: 10, backgroundColor: '#d9a44122', borderWidth: 1, borderColor: '#d9a44166', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
@@ -909,11 +1053,12 @@ const s = StyleSheet.create({
   dropSlotTablet: { minWidth: 112, minHeight: 88 },
   dropSlotSelected: { borderStyle: 'solid', borderColor: p.gold, backgroundColor: '#d9a44118' },
   dropSlotValid: { borderColor: '#79c99a', backgroundColor: '#3b9b6922' }, dropSlotLabel: { color: p.gold, fontSize: 9, fontWeight: '800' },
+  dropSlotInvalid: { borderColor: '#ee7777', backgroundColor: '#c4444433' },
+  invalidDropHint: { color: '#ffb4b4', fontSize: 9, fontWeight: '800', marginTop: 4 },
   slotCards: { minHeight: 53, flexDirection: 'row', alignItems: 'center', paddingTop: 3 },
   slotCardsTablet: { minHeight: 66 },
   melds: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, meld: { padding: 8, borderWidth: 1, borderColor: p.line, borderRadius: 10, gap: 4 }, meldCards: { flexDirection: 'row' }, meldCard: { position: 'relative' },
   jokerBadge: { position: 'absolute', left: 3, right: 3, bottom: 3, borderRadius: 4, paddingVertical: 2, backgroundColor: '#071d17e8', color: p.gold, fontSize: 9, fontWeight: '900', textAlign: 'center', overflow: 'hidden' },
-  meldInactive: { opacity: 0.45 },
   meldDropHint: { color: p.gold, fontSize: 9, fontWeight: '700' },
   hand: { paddingTop: 10, paddingBottom: 8, borderTopWidth: 1, borderColor: '#dab77b50', backgroundColor: '#071d17', overflow: 'visible' }, handDropActive: { borderTopWidth: 3, borderTopColor: p.gold, backgroundColor: '#0d3327' },
   handTablet: { paddingTop: 12, paddingBottom: 10 },
@@ -933,6 +1078,11 @@ const s = StyleSheet.create({
   resultList: { flexGrow: 0 }, resultListContent: { gap: 8 }, scoreBlock: { borderBottomWidth: 1, borderColor: '#d5cdbb', paddingBottom: 8 },
   score: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 }, scoreName: { color: '#253a2e', fontSize: 15 },
   scoreTotal: { alignItems: 'flex-end' }, scoreTotalLabel: { color: '#7b7568', fontSize: 8, letterSpacing: 0.8, fontWeight: '800' }, scoreValue: { fontWeight: '900', color: '#80602b', fontSize: 20 },
+  historyTable: { borderWidth: 1, borderColor: '#d5cdbb', borderRadius: 12, overflow: 'hidden', marginBottom: 4 },
+  historyRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 8 }, historyRowAlt: { backgroundColor: '#ece4d1' },
+  historyRound: { width: 30, color: '#7b7568', fontSize: 12, fontWeight: '700' }, historyCell: { flex: 1, textAlign: 'center', color: '#253a2e', fontSize: 14, fontVariant: ['tabular-nums'] },
+  historyHead: { color: '#7b7568', fontSize: 11, fontWeight: '800' }, historyZero: { color: '#2f7a55', fontWeight: '800' },
+  historyTotalRow: { borderTopWidth: 1, borderColor: '#d5cdbb', backgroundColor: '#e6dcc4' }, historyTotal: { fontWeight: '900', color: '#80602b', fontSize: 15 }, historyLeader: { color: '#142c22' },
   penalty: { color: '#59675f', fontSize: 11, marginBottom: 5 }, remainingCards: { gap: 3, paddingRight: 8 },
   resultButton: { padding: 16, backgroundColor: '#143e2c', borderRadius: 12, alignItems: 'center' },
   resultButtonSecondary: { padding: 13, borderWidth: 1, borderColor: '#9d9584', borderRadius: 12, alignItems: 'center' }, resultButtonSecondaryText: { color: '#253a2e', fontSize: 13, fontWeight: '700' },

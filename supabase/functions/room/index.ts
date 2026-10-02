@@ -1,5 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { actingPlayerId, applyAction, armTurnTimer, cedeSeatToBot, createGame, expireTurn, explainInvalidAction, MIN_GAME_PLAYERS, reclaimBotSeat, resetMissedTurns, RULESET_ID } from '../../../src/game/engine.ts';
+import { actingPlayerId, applyAction, armTurnTimer, cedeSeatToBot, expireTurn, explainInvalidAction, MIN_GAME_PLAYERS, reclaimBotSeat, resetMissedTurns, RULESET_ID } from '../../../src/game/engine.ts';
+import { createSeatedRoomGame } from '../../../src/game/room-game.ts';
+import { QUICK_ROOM_MINIMUM, QUICK_ROOM_BOT_WAIT_MS, quickRoomStartsAt } from '../../../src/game/quick-room.ts';
 import { botAction } from '../../../src/game/bot.ts';
 import { projectGame } from '../../../src/game/view.ts';
 import type { GameAction, GameState } from '../../../src/game/types.ts';
@@ -18,6 +20,7 @@ type Command =
   | { type: 'ready'; roomId: string; ready: boolean }
   | { type: 'add-bot'; roomId: string }
   | { type: 'remove-bot'; roomId: string }
+  | { type: 'fill-bots'; roomId: string }
   | { type: 'start'; roomId: string }
   | { type: 'rematch'; roomId: string }
   | { type: 'reclaim'; roomId: string }
@@ -33,8 +36,8 @@ function json(body: unknown, status = 200) {
 }
 
 function playerName(value: unknown) {
-  if (typeof value !== 'string' || !value.trim() || value.trim().length > 18) {
-    throw new Error('1–18 karakterlik bir ad yaz.');
+  if (typeof value !== 'string' || !value.trim() || value.trim().length > 20) {
+    throw new Error('1–20 karakterlik bir ad yaz.');
   }
   return value.trim();
 }
@@ -65,9 +68,7 @@ function advanceBots(state: GameState) {
 }
 
 function createRoomGame(members: { id: string; name: string; isBot: boolean }[]) {
-  let game = createGame(members.map((member) => member.name), secureRandom);
-  game.players = game.players.map((player, index) => ({ ...player, id: members[index].id }));
-  game = { ...game, botControlledPlayerIds: members.filter((member) => member.isBot).map((member) => member.id) };
+  const game = createSeatedRoomGame(members, secureRandom);
   return advanceBots(armTurnTimer(game));
 }
 
@@ -94,10 +95,23 @@ Deno.serve(async (request) => {
     if (!command || typeof command.type !== 'string') throw new Error('Geçersiz istek.');
     await admin.from('profiles').update({ last_active_at: new Date().toISOString() }).eq('user_id', user.id);
 
+    const accountName = async () => {
+      const { data, error } = await admin.from('profiles').select('username').eq('user_id', user.id).single();
+      if (error || !data?.username) throw new Error('Kullanıcı adın alınamadı. Profilini kontrol edip tekrar dene.');
+      return playerName(data.username);
+    };
+
     const roomView = async (roomId: string) => {
+      const { data: membership, error: membershipError } = await admin.from('room_members').select('room_id')
+        .eq('room_id', roomId).eq('user_id', user.id).maybeSingle();
+      if (membershipError) throw membershipError;
+      if (!membership) throw new Error('Bu odada değilsin.');
+      await admin.rpc('touch_online_room_member', { p_room_id: roomId, p_user_id: user.id });
+      const timerResult = await admin.rpc('refresh_quick_room_timer', { p_room_id: roomId });
+      if (timerResult.error) throw timerResult.error;
       const now = new Date().toISOString();
       const { data: activeRoom, error: activeRoomError } = await admin.from('rooms')
-        .select('id, code, host_id, revision, status, visibility, updated_at')
+        .select('id, code, host_id, revision, status, visibility, updated_at, quick_three_since, quick_four_since')
         .eq('id', roomId)
         .gt('expires_at', now)
         .maybeSingle();
@@ -107,17 +121,13 @@ Deno.serve(async (request) => {
         throw new Error('Oda bulunamadı veya süresi doldu.');
       }
 
-      await admin.rpc('touch_online_room_member', { p_room_id: roomId, p_user_id: user.id });
-      const { data: membership } = await admin.from('room_members').select('room_id')
-        .eq('room_id', roomId).eq('user_id', user.id).maybeSingle();
-      if (!membership) throw new Error('Bu odada değilsin.');
       if (activeRoom.visibility === 'public' && activeRoom.status === 'waiting') {
         await admin.from('room_members').update({ ready: true }).eq('room_id', roomId).eq('ready', false);
       }
 
       const [roomResult, membersResult, stateResult, botsResult] = await Promise.all([
         Promise.resolve({ data: activeRoom, error: null }),
-        admin.from('room_members').select('user_id, display_name, ready, seat, last_seen_at').eq('room_id', roomId).order('seat'),
+        admin.from('room_members').select('user_id, display_name, ready, seat, last_seen_at, joined_at').eq('room_id', roomId).order('seat'),
         admin.from('room_states').select('state').eq('room_id', roomId).maybeSingle(),
         admin.from('room_bots').select('id, display_name, created_at').eq('room_id', roomId).order('created_at'),
       ]);
@@ -126,7 +136,7 @@ Deno.serve(async (request) => {
       const state = stateResult.data?.state as GameState | undefined;
       const memberIds = membersResult.data.map((member) => member.user_id);
       const profilesResult = memberIds.length
-        ? await admin.from('profiles').select('user_id, avatar_key, experience, games_played, wins').in('user_id', memberIds)
+        ? await admin.from('profiles').select('user_id, username, avatar_key, experience, games_played, wins').in('user_id', memberIds)
         : { data: [], error: null };
       const profiles = new Map((profilesResult.data ?? []).map((profile) => [profile.user_id, profile]));
       const humanMemberViews = membersResult.data.map((member) => ({
@@ -140,7 +150,7 @@ Deno.serve(async (request) => {
           };
         })(),
         id: member.user_id,
-        name: member.display_name,
+        name: profiles.get(member.user_id)?.username || member.display_name,
         ready: member.ready || roomRecord.visibility === 'public',
         connected: Date.now() - Date.parse(member.last_seen_at) < 45_000,
         missedTurns: state?.missedTurns?.[member.user_id] ?? 0,
@@ -169,16 +179,16 @@ Deno.serve(async (request) => {
             revision: roomRecord.revision + 1,
             updated_at: new Date().toISOString(),
           }).eq('id', roomId).eq('revision', roomRecord.revision)
-            .select('id, code, host_id, revision, status, visibility, updated_at').maybeSingle();
+            .select('id, code, host_id, revision, status, visibility, updated_at, quick_three_since, quick_four_since').maybeSingle();
           if (transferred.data) roomRecord = transferred.data;
         }
       }
       const connectedCount = memberViews.filter((member) => member.connected).length;
-      const allMembersReady = memberViews.length >= MIN_GAME_PLAYERS && memberViews.every((member) => member.ready && member.connected);
-      const startsAt = roomRecord.status === 'waiting' && connectedCount >= MIN_GAME_PLAYERS
-        && (roomRecord.visibility === 'public' || allMembersReady)
-        ? Date.parse(roomRecord.updated_at) + 5_000
-        : undefined;
+      const publicWaiting = roomRecord.status === 'waiting' && roomRecord.visibility === 'public';
+      const startsAt = publicWaiting ? quickRoomStartsAt(connectedCount, roomRecord.quick_three_since, roomRecord.quick_four_since) : undefined;
+      const joinedAt = membersResult.data.find(member => member.user_id === user.id)?.joined_at;
+      const botFillAvailableAt = publicWaiting && connectedCount < QUICK_ROOM_MINIMUM && joinedAt
+        ? Date.parse(joinedAt) + QUICK_ROOM_BOT_WAIT_MS : undefined;
       return {
         code: roomRecord.code,
         hostId: roomRecord.host_id,
@@ -187,8 +197,12 @@ Deno.serve(async (request) => {
         you: user.id,
         revision: roomRecord.revision,
         startsAt,
+        botFillAvailableAt,
+        serverNow: Date.now(),
         members: memberViews,
-        game: state ? projectGame(state, user.id) : null,
+        game: state ? projectGame({ ...state, players: state.players.map((player) => ({
+          ...player, name: profiles.get(player.id)?.username || player.name,
+        })) }, user.id) : null,
       };
     };
 
@@ -220,10 +234,9 @@ Deno.serve(async (request) => {
         currentView = await roomView(targetRoomId);
       }
       if (currentView.status !== 'waiting') return false;
-      // Re-check readiness fresh: someone may have un-readied during the countdown.
-      if (currentView.visibility === 'private' && currentView.members.some((member) => !member.ready)) return false;
+      if (currentView.visibility !== 'public' || !currentView.startsAt || currentView.startsAt > Date.now()) return false;
       const activeMembers = currentView.members.filter((member) => member.connected);
-      if (activeMembers.length < MIN_GAME_PLAYERS) return false;
+      if (activeMembers.length < QUICK_ROOM_MINIMUM) return false;
       const game = createRoomGame(activeMembers);
       const commit = await admin.rpc('commit_room_state', {
         target_room: targetRoomId,
@@ -244,7 +257,7 @@ Deno.serve(async (request) => {
 
     if (command.type === 'create') {
       await admin.from('rooms').delete().lt('expires_at', new Date().toISOString());
-      const name = playerName(command.name);
+      const name = await accountName();
       let roomId: string | null = null;
       for (let attempt = 0; attempt < 8 && !roomId; attempt += 1) {
         const result = await admin.rpc('create_online_room', {
@@ -262,7 +275,7 @@ Deno.serve(async (request) => {
       const result = await admin.rpc('join_online_room', {
         p_code: String(command.code || '').toUpperCase(),
         p_user_id: user.id,
-        p_name: playerName(command.name),
+        p_name: await accountName(),
       });
       if (result.error) {
         const message = result.error.message.includes('room not found') ? 'Oda bulunamadı veya süresi doldu.'
@@ -279,7 +292,7 @@ Deno.serve(async (request) => {
       let targetRoomId: string | null = null;
       for (let attempt = 0; attempt < 8 && !targetRoomId; attempt += 1) {
         const result = await admin.rpc('matchmake_online_room', {
-          p_code: roomCode(), p_user_id: user.id, p_name: playerName(command.name), p_ruleset: RULESET_ID,
+          p_code: roomCode(), p_user_id: user.id, p_name: await accountName(), p_ruleset: RULESET_ID,
         });
         if (!result.error) targetRoomId = result.data as string;
         else if (result.error.code !== '23505') throw result.error;
@@ -332,17 +345,17 @@ Deno.serve(async (request) => {
         p_room_id: command.roomId, p_user_id: user.id, p_ready: command.ready,
       });
       if (result.error) throw new Error('Hazırlık durumu değiştirilemedi.');
-      let updatedView = await roomView(command.roomId);
-      // Everyone just became ready: bump the room so `startsAt` anchors the countdown from now.
-      if (updatedView.visibility === 'private' && updatedView.status === 'waiting'
-        && updatedView.members.length >= MIN_GAME_PLAYERS && updatedView.members.every((member) => member.ready)) {
-        const touched = await admin.from('rooms').update({
-          revision: updatedView.revision + 1,
-          updated_at: new Date().toISOString(),
-        }).eq('id', command.roomId).eq('revision', updatedView.revision).select('id').maybeSingle();
-        if (touched.data) updatedView = await roomView(command.roomId);
-      }
+      const updatedView = await roomView(command.roomId);
       return json({ roomId: command.roomId, room: updatedView });
+    }
+
+    if (command.type === 'fill-bots') {
+      await roomView(command.roomId);
+      const result = await admin.rpc('fill_quick_room_with_bots', { p_room_id: command.roomId, p_user_id: user.id });
+      if (result.error) throw new Error(result.error.message.includes('wait 30 seconds')
+        ? 'Botlarla tamamlamak için 30 saniye beklemelisin.'
+        : result.error.message.includes('enough players') ? 'Yeterli oyuncu bulundu; masa hazırlanıyor.' : 'Masa değişti; botlarla tamamlamayı yeniden dene.');
+      return json({ roomId: command.roomId, room: await roomView(command.roomId) });
     }
 
     if (command.type === 'add-bot' || command.type === 'remove-bot') {
@@ -409,6 +422,7 @@ Deno.serve(async (request) => {
     }
 
     if (command.type === 'start') {
+      if (currentView.visibility === 'public') throw new Error('Hızlı masa yeterli oyuncu bulunduğunda otomatik başlayacak.');
       if (currentView.hostId !== user.id) throw new Error('Oyunu yalnızca oda sahibi başlatabilir.');
       if (currentView.game || roomState) throw new Error('Oyun zaten başladı.');
       if (currentView.members.length < MIN_GAME_PLAYERS || currentView.members.some((member) => !member.ready || !member.connected)) {

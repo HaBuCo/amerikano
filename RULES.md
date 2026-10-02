@@ -25,8 +25,13 @@ Bu, uygulamamızın seçilmiş kural setidir; evrensel bir standart iddiası de�
 
 - 2 standart deste ve 2 joker, toplam 106 benzersiz fiziksel kart.
 - Çevrim içi arkadaş odaları 2–6, aynı cihaz modu 3–6 oyuncuyu destekler; klasik oyun 3–5 kişi için idealdir.
+- Hızlı masada hedef 4, en az 3 oyuncudur. Üç kişi 20 saniye dördüncüyü bekler;
+  dört kişi bulununca kalan süre en fazla 5 saniyeye iner. 1–2 kişiyle otomatik
+  başlanmaz. 30 saniye bekleyen oyuncu isterse botlarla masayı 4 kişiye tamamlar.
+  Arkadaş odasında herkes hazır olduktan sonra oyunu oda sahibi başlatır.
 - Her oyuncuya 13, başlangıç oyuncusuna 14 kart verilir. Başlangıç oyuncusu kart çekmez.
-- Kapalı destenin yanında bir açık kart bulunur. Dijital dağıtım karıştırmayı otomatik yapar.
+- Dağıtımda ortaya açık kart konmaz. İlk açık kart, başlangıç oyuncusunun attığı
+  karttır. Dijital dağıtım karıştırmayı otomatik yapar.
 - Koltuk dizisi saat yönünde kabul edilir; sıra ters yönde ilerler.
   Yeni maçın ilk başlangıç oyuncusu rastgele seçilir. Başlangıç oyuncusunun solundaki koltuk
   dağıtıcıdır. Her el dağıtıcı ve başlangıç koltuğu aynı yönde birer yer ilerler; önceki elin
@@ -60,7 +65,8 @@ Bu, uygulamamızın seçilmiş kural setidir; evrensel bir standart iddiası de�
 - İlk sıra döngüsünü bekleme şartı yoktur.
 - Masadaki herhangi bir küt veya seriye işlenebilen kartı atmak 25 ceza puanıdır.
   Oyuncunun kendi görevini açmış olması gerekmez. İlan edilen tam kartıyla alınabilecek
-  bir jokerin karşılık kartını atmak da işlek kart sayılır.
+  bir jokerin karşılık kartını atmak da işlek kart sayılır. Eli bitiren kapalı
+  bitiş kartına işlek cezası uygulanmaz; daha önce alınan işlek cezaları korunur.
 - Bitmek için bir kart kapalı atılır. Finalde kısmi açılış yapılamaz:
   tüm gruplar ve bitiş kartı sunucuda tek atomik hamle olarak doğrulanır.
 - Ceza puanları: joker 25, As 11, J/Q/K 10, sayılar kendi değeri.

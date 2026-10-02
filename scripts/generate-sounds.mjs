@@ -71,4 +71,30 @@ writeSound('win', 1.05, (t) => {
   }, 0);
 });
 
-console.log('Generated 7 original game sounds in assets/sounds.');
+writeSound('turn', 0.9, (t) => {
+  const notes = [[0, 659], [0.16, 880], [0.4, 659], [0.56, 880]];
+  return notes.reduce((sum, [start, frequency]) => {
+    const local = t - start;
+    return local < 0 ? sum : sum + (tone(frequency, local) + tone(frequency * 2, local) * 0.3) * Math.min(1, local * 200) * decay(local, 6);
+  }, 0);
+});
+
+const notesSound = (notes, speed, harmonic = 2, harmonicGain = 0.25) => (t) => notes.reduce((sum, [start, frequency]) => {
+  const local = t - start;
+  return local < 0 ? sum : sum + (tone(frequency, local) + tone(frequency * harmonic, local) * harmonicGain) * Math.min(1, local * 300) * decay(local, speed);
+}, 0);
+
+writeSound('error', 0.3, notesSound([[0, 220], [0.1, 165]], 11, 3, 0.45));
+
+writeSound('tick', 0.06, (t) => (tone(1180, t) + tone(2360, t) * 0.3 + noise() * 0.08) * decay(t, 80));
+
+writeSound('penalty', 0.7, notesSound([[0, 330], [0.14, 277], [0.28, 233]], 6, 3, 0.4));
+
+writeSound('lose', 1.15, notesSound([[0, 392], [0.18, 349], [0.36, 311], [0.56, 262]], 4.2, 1.5, 0.2));
+
+writeSound('deal', 0.55, (t) => [0, 0.1, 0.2, 0.3, 0.4].reduce((sum, start) => {
+  const local = t - start;
+  return local < 0 ? sum : sum + (noise() * 0.7 + tone(1500 - local * 5000, local) * 0.15) * decay(local, 45);
+}, 0));
+
+console.log('Generated 13 original game sounds in assets/sounds.');

@@ -98,6 +98,8 @@ export type GameState = {
   roundWinnerId: string | null;
   roundResult?: RoundResult;
   roundPenalties?: Record<string, number>;
+  /** Points each player took in every finished round, indexed by roundIndex. */
+  scoreHistory?: Record<string, number>[];
   lastPenalty?: GamePenalty;
   turnCount: number;
   turnDeadline?: number;

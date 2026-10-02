@@ -3,6 +3,8 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import { GameAction } from '../game/types';
+import { localRoomDeadline } from '../game/quick-room';
+import { cooldownPassed, reactionById } from '../game/reactions';
 import { isSupabaseConfigured, supabase } from './supabase';
 import { ClientMessage, RoomView } from './types';
 
@@ -18,6 +20,19 @@ let deadlineTimer: ReturnType<typeof setTimeout> | null = null;
 let sequence = 0;
 const listeners = new Set<() => void>();
 const storageKey = 'amerikano-supabase-room-v1';
+
+export type RoomReactions = Record<string, { id: string; at: number }>;
+let reactionSnapshot: RoomReactions = {};
+const reactionListeners = new Set<() => void>();
+const subscribeReactions = (listener: () => void) => {
+  reactionListeners.add(listener);
+  return () => { reactionListeners.delete(listener); };
+};
+export const useReactions = () => useSyncExternalStore(subscribeReactions, () => reactionSnapshot, () => reactionSnapshot);
+function setReactions(next: RoomReactions) {
+  reactionSnapshot = next;
+  reactionListeners.forEach((listener) => listener());
+}
 
 function update(patch: Partial<State>) {
   snapshot = { ...snapshot, ...patch };
@@ -45,6 +60,13 @@ async function invoke(body: Record<string, unknown>): Promise<FunctionResult> {
   const { data, error } = await supabase.functions.invoke<FunctionResult>('room', { body });
   if (error) throw new Error(await functionError(error));
   if (data?.error) throw new Error(data.error);
+  if (data?.room) {
+    const receivedAt = Date.now();
+    data.room = { ...data.room,
+      startsAt: localRoomDeadline(data.room.startsAt, data.room.serverNow, receivedAt),
+      botFillAvailableAt: localRoomDeadline(data.room.botFillAvailableAt, data.room.serverNow, receivedAt),
+    };
+  }
   return data ?? {};
 }
 
@@ -79,9 +101,31 @@ function scheduleDeadlineRefresh(room: RoomView) {
   if (deadlineTimer) clearTimeout(deadlineTimer);
   deadlineTimer = null;
   const turnDeadline = room.game?.phase === 'round-over' || room.game?.phase === 'game-over' ? undefined : room.game?.turnDeadline;
-  const deadline = [turnDeadline, room.startsAt].filter((value): value is number => typeof value === 'number').sort((a, b) => a - b)[0];
+  const botChoiceDeadline = room.botFillAvailableAt && room.botFillAvailableAt > Date.now() ? room.botFillAvailableAt : undefined;
+  const deadline = [turnDeadline, room.startsAt, botChoiceDeadline].filter((value): value is number => typeof value === 'number').sort((a, b) => a - b)[0];
   if (!deadline) return;
   deadlineTimer = setTimeout(() => { void refreshRoom(); }, Math.max(100, deadline - Date.now() + 150));
+}
+
+function receiveReaction(payload: unknown) {
+  const { id, from } = (payload ?? {}) as { id?: unknown; from?: unknown };
+  const room = snapshot.room;
+  if (!room || typeof from !== 'string' || from === room.you || !reactionById(id)) return;
+  if (!room.members.some(member => member.id === from)) return;
+  const now = Date.now();
+  if (!cooldownPassed(reactionSnapshot[from]?.at, now)) return;
+  setReactions({ ...reactionSnapshot, [from]: { id: id as string, at: now } });
+}
+
+/** Shows our own reaction at once and tells the rest of the table. */
+export function sendReaction(id: string) {
+  const room = snapshot.room;
+  if (!room || !roomChannel || snapshot.status !== 'online' || !reactionById(id)) return false;
+  const now = Date.now();
+  if (!cooldownPassed(reactionSnapshot[room.you]?.at, now)) return false;
+  setReactions({ ...reactionSnapshot, [room.you]: { id, at: now } });
+  void roomChannel.send({ type: 'broadcast', event: 'reaction', payload: { id, from: room.you } });
+  return true;
 }
 
 function listenToRoom(nextRoomId: string) {
@@ -92,6 +136,7 @@ function listenToRoom(nextRoomId: string) {
   roomChannel = supabase
     .channel(`room:${nextRoomId}`, { config: { private: true } })
     .on('broadcast', { event: 'room_changed' }, () => { void refreshRoom(); })
+    .on('broadcast', { event: 'reaction' }, ({ payload }) => receiveReaction(payload))
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         update({ status: 'online', error: '' });
@@ -108,6 +153,7 @@ async function accept(result: FunctionResult) {
     if (supabase && roomChannel) await supabase.removeChannel(roomChannel);
     roomChannel = null;
     clearRoomTimers();
+    setReactions({});
     roomId = null;
     await persistRoom();
     update({ room: null, busy: false, error: '' });
@@ -243,6 +289,7 @@ export function forgetRoom() {
   if (supabase && roomChannel) void supabase.removeChannel(roomChannel);
   roomChannel = null;
   clearRoomTimers();
+  setReactions({});
   roomId = null;
   void persistRoom();
   update({ room: null, status: isSupabaseConfigured ? 'online' : 'offline', error: '', busy: false });

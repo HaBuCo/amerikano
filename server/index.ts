@@ -4,7 +4,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { actingPlayerId, applyAction, armTurnTimer, cedeSeatToBot, createGame, expireTurn, MIN_GAME_PLAYERS, reclaimBotSeat, resetMissedTurns, RULESET_ID } from '../src/game/engine.ts';
+import { actingPlayerId, applyAction, armTurnTimer, cedeSeatToBot, expireTurn, MIN_GAME_PLAYERS, reclaimBotSeat, resetMissedTurns, RULESET_ID } from '../src/game/engine.ts';
+import { createSeatedRoomGame } from '../src/game/room-game.ts';
 import { botAction } from '../src/game/bot.ts';
 import { projectGame } from '../src/game/view.ts';
 import type { GameState } from '../src/game/types.ts';
@@ -48,9 +49,7 @@ function advanceBots(state: GameState) {
   return current;
 }
 function createRoomGame(members: Member[]) {
-  let game = createGame(members.map(member => member.name), secureRandom);
-  game.players = game.players.map((player, index) => ({ ...player, id: members[index].id }));
-  game = { ...game, botControlledPlayerIds: members.filter(member => member.bot).map(member => member.id) };
+  const game = createSeatedRoomGame(members.map(member => ({ ...member, isBot: Boolean(member.bot) })), secureRandom);
   return advanceBots(armTurnTimer(game));
 }
 function publish(room: Room) {
@@ -76,7 +75,7 @@ function expireRoomTurn(room: Room) {
   if (next !== room.game) { room.game = next; room.revision++; save(room); publish(room); }
 }
 function nameOf(value: unknown) {
-  if (typeof value !== 'string' || !value.trim() || value.trim().length > 18) throw new Error('1–18 karakterlik bir ad yaz.');
+  if (typeof value !== 'string' || !value.trim() || value.trim().length > 20) throw new Error('1–20 karakterlik bir ad yaz.');
   return value.trim();
 }
 function roomCode() {

@@ -6,14 +6,14 @@ import { TestIds } from 'react-native-google-mobile-ads';
 // Google'ın test reklamlarını gösterir; mağazaya göndermeden önce mutlaka
 // gerçek ID'lerle değiştir.
 const PRODUCTION_BANNER_AD_UNIT_ID = Platform.select<string>({
-  ios: '',
-  android: '',
+  ios: 'ca-app-pub-3342087532137076/2061829117',
+  android: 'ca-app-pub-3342087532137076/2285190399',
   default: '',
 });
 
 const PRODUCTION_INTERSTITIAL_AD_UNIT_ID = Platform.select<string>({
-  ios: '',
-  android: '',
+  ios: 'ca-app-pub-3342087532137076/9325152173',
+  android: 'ca-app-pub-3342087532137076/5469667641',
   default: '',
 });
 

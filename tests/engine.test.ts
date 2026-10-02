@@ -20,11 +20,27 @@ test('106 unique card IDs; full deal conserves all cards for 2–6 players', () 
     assert.equal(s.stock.length + s.discard.length + s.players.reduce((n, p) => n + p.hand.length, 0), 106);
     assert.ok(s.players.every((p, i) => p.hand.length === (i === s.currentPlayerIndex ? 14 : 13)));
     assert.equal(s.phase, 'play');
+    assert.deepEqual(s.discard, []);
+    assert.equal(s.stock.length, 106 - (13 * n + 1));
     assert.equal(applyAction(s, actingPlayerId(s), { type: 'draw', source: 'stock' }), s);
   }
   assert.throws(() => createGame(['a']), /2–6/);
   assert.throws(() => createGame(['a', 'b', 'c', 'd', 'e', 'f', 'g']), /2–6/);
 });
+test('the first discard creates the open pile and each new round starts with it empty', () => {
+  const initial = fixedGame(['a', 'b', 'c']);
+  const firstCard = initial.players[0].hand[0];
+  const discarded = applyAction(initial, 'player-1', { type: 'discard', cardId: firstCard.id });
+  assert.deepEqual(discarded.discard, [firstCard]);
+  assert.equal(discarded.players[0].hand.length, 13);
+  assert.equal(discarded.stock.length, initial.stock.length);
+  const next = nextRound({ ...discarded, phase: 'round-over' }, () => 0);
+  assert.deepEqual(next.discard, []);
+  assert.equal(next.stock.length, 66);
+  assert.equal(next.players[next.startingPlayerIndex].hand.length, 14);
+  assert.equal(next.stock.length + next.players.reduce((total, player) => total + player.hand.length, 0), 106);
+});
+
 test('set size, duplicates, suit and ace rules', () => {
   assert.ok(isValidMeld([c('7'), c('7', 'clubs'), j], 'set'));
   assert.ok(!isValidMeld([c('7'), c('7', 'hearts', 'duplicate'), j], 'set'));
@@ -172,7 +188,7 @@ test('a configured contract sequence controls short-game completion', () => {
   assert.equal(nextRound(state).phase, 'game-over');
 });
 
-test('an exact joker replacement is playable and its discard penalty survives winning the hand', () => {
+test('an exact joker replacement used as the finishing discard adds no penalty', () => {
   const s = stateWithHand([c('10', 'spades')]);
   s.players[0].hasOpened = true;
   s.melds = [{
@@ -184,11 +200,47 @@ test('an exact joker replacement is playable and its discard penalty survives wi
   const ended = applyAction(s, 'player-1', { type: 'discard', cardId: '10spades' });
   const result = ended.roundResult?.entries.find(entry => entry.playerId === 'player-1');
   assert.equal(ended.phase, 'round-over');
-  assert.equal(ended.players[0].score, 25);
-  assert.equal(result?.playableDiscardPenalty, 25);
+  assert.equal(ended.players[0].score, 0);
+  assert.equal(ended.roundPenalties?.['player-1'] ?? 0, 0);
+  assert.equal(ended.lastPenalty, undefined);
+  assert.equal(result?.playableDiscardPenalty, 0);
   assert.equal(result?.penalty, 0);
   assert.equal(result?.totalBefore, 0);
-  assert.equal(result?.totalAfter, 25);
+  assert.equal(result?.totalAfter, 0);
+});
+
+test('a finishing discard that extends a meld preserves only earlier playable penalties', () => {
+  for (const earlierPenalty of [0, 25]) {
+    const s = stateWithHand([c('7', 'diamonds')]);
+    s.players[0].hasOpened = true;
+    s.players[0].score = 40 + earlierPenalty;
+    s.roundPenalties = { 'player-1': earlierPenalty };
+    s.melds = [{ id: 'm', type: 'set', cards: [c('7'), c('7', 'clubs'), c('7', 'spades')], ownerId: 'player-2' }];
+
+    const ended = applyAction(s, 'player-1', { type: 'discard', cardId: '7diamonds' });
+    assert.equal(ended.phase, 'round-over');
+    assert.equal(ended.discardFaceDown, true);
+    assert.equal(ended.players[0].score, 40 + earlierPenalty);
+    assert.equal(ended.roundPenalties?.['player-1'], earlierPenalty);
+    assert.equal(ended.lastPenalty, undefined);
+    assert.deepEqual(ended.roundResult?.entries.find(entry => entry.playerId === 'player-1'), {
+      playerId: 'player-1', penalty: 0, playableDiscardPenalty: earlierPenalty,
+      totalBefore: 40, totalAfter: 40 + earlierPenalty, cards: [],
+    });
+  }
+});
+
+test('an atomic final adds no penalty when the finishing card fits the newly opened meld', () => {
+  const s = stateWithHand([c('7'), c('7', 'clubs'), c('7', 'spades'), c('7', 'diamonds')]);
+  s.roundIndex = 11;
+  const ended = applyAction(s, 'player-1', {
+    type: 'finish', groups: [{ type: 'set', cardIds: ['7hearts', '7clubs', '7spades'] }],
+    discardId: '7diamonds',
+  });
+  assert.equal(ended.phase, 'round-over');
+  assert.equal(ended.players[0].score, 0);
+  assert.equal(ended.lastPenalty, undefined);
+  assert.equal(ended.roundResult?.entries.find(entry => entry.playerId === 'player-1')?.playableDiscardPenalty, 0);
 });
 test('opened runs and later layoffs keep one stable ascending order', () => {
   const opening = stateWithHand([c('6', 'clubs'), c('4', 'clubs'), c('5', 'clubs'), c('A')]);
@@ -304,6 +356,7 @@ test('opening allows only exact contract; additional groups and layoffs wait unt
 
 test('penalty claim has priority, adds two cards and does not consume claimant turn', () => {
   const s = { ...fixedGame(['a', 'b', 'c']), phase: 'draw' as const };
+  s.discard = [s.stock.pop()!];
   const offered = applyAction(s, 'player-1', { type: 'draw', source: 'stock' });
   assert.equal(offered.phase, 'claim');
   assert.deepEqual(offered.claim!.playerIds, ['player-3', 'player-2']);
@@ -363,7 +416,7 @@ test('no penalty offer without enough stock; exhausted stock is recycled without
   let s = { ...fixedGame(['a', 'b', 'c']), phase: 'draw' as const };
   s = { ...s, stock: s.stock.slice(0, 1) };
   assert.equal(applyAction(s, 'player-1', { type: 'draw', source: 'stock' }).phase, 'play');
-  const top = s.discard[0];
+  const top = c('A');
   const recycled = { ...s, stock: [], discard: [...createDeck().slice(0, 4), top] };
   const result = applyAction(recycled, 'player-1', { type: 'draw', source: 'stock' });
   assert.equal(result.phase, 'claim');

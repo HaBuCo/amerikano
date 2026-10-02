@@ -7,7 +7,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { useSyncExternalStore } from 'react';
 import { Platform } from 'react-native';
 
-import { parseAuthLink } from './auth-links';
+import { isExistingAccountError, parseAuthLink } from './auth-links';
 import { isSupabaseConfigured, supabase } from './supabase';
 
 type State = {
@@ -65,18 +65,45 @@ function redirectTo(flow: 'signup' | 'upgrade' | 'recovery') {
   return Linking.createURL('login', { queryParams: { flow } });
 }
 
-async function signInWithBrowserOAuth(provider: 'google' | 'apple') {
+const EXISTING_ACCOUNT_INFO = 'Bu hesap zaten kayıtlıydı; mevcut hesabına giriş yaptın. Misafir ilerlemen bu hesaba aktarılmadı.';
+
+async function signInWithBrowserOAuth(provider: 'google' | 'apple', signInOnly = false): Promise<void> {
   const { data: sessionData, error: sessionError } = await supabase!.auth.getSession();
   if (sessionError) throw sessionError;
-  const redirectUrl = redirectTo(sessionData.session?.user.is_anonymous ? 'upgrade' : 'signup');
+  // A guest is linked to the provider account; if that account already exists we sign into it instead.
+  const linking = !signInOnly && Boolean(sessionData.session?.user.is_anonymous);
+  const redirectUrl = redirectTo(linking ? 'upgrade' : 'signup');
   const credentials = { provider, options: { redirectTo: redirectUrl, skipBrowserRedirect: true } };
-  const { data, error } = sessionData.session?.user.is_anonymous
+  const { data, error } = linking
     ? await supabase!.auth.linkIdentity(credentials)
     : await supabase!.auth.signInWithOAuth(credentials);
-  if (error) throw error;
+  if (error) {
+    if (linking && isExistingAccountError(error)) return signInWithBrowserOAuth(provider, true);
+    throw error;
+  }
   if (!data.url) throw new Error('Giriş bağlantısı oluşturulamadı.');
   const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
-  if (result.type === 'success') await handleAuthLink(result.url);
+  if (result.type !== 'success') return;
+  if (linking && isExistingAccountError(parseAuthLink(result.url)?.error)) return signInWithBrowserOAuth(provider, true);
+  await handleAuthLink(result.url);
+  if (signInOnly) update({ info: EXISTING_ACCOUNT_INFO });
+}
+
+/** Links a native ID token to the guest, or signs into the existing account when it is already registered. */
+async function linkOrSignInWithIdToken(credentials: { provider: 'google' | 'apple'; token: string; nonce?: string; access_token?: string }) {
+  const { data: sessionData, error: sessionError } = await supabase!.auth.getSession();
+  if (sessionError) throw sessionError;
+  if (!sessionData.session?.user.is_anonymous) {
+    const { error } = await supabase!.auth.signInWithIdToken(credentials);
+    if (error) throw error;
+    return;
+  }
+  const { error } = await supabase!.auth.linkIdentity(credentials);
+  if (!error) return;
+  if (!isExistingAccountError(error)) throw error;
+  const retry = await supabase!.auth.signInWithIdToken(credentials);
+  if (retry.error) throw retry.error;
+  update({ info: EXISTING_ACCOUNT_INFO });
 }
 
 function authErrorMessage(error: unknown) {
@@ -224,13 +251,7 @@ export function signInWithApple() {
       throw error;
     }
     if (!credential.identityToken) throw new Error('Apple kimlik doğrulaması tamamlanamadı.');
-    const { data: sessionData, error: sessionError } = await supabase!.auth.getSession();
-    if (sessionError) throw sessionError;
-    const credentials = { provider: 'apple' as const, token: credential.identityToken, nonce: rawNonce };
-    const { error } = sessionData.session?.user.is_anonymous
-      ? await supabase!.auth.linkIdentity(credentials)
-      : await supabase!.auth.signInWithIdToken(credentials);
-    if (error) throw error;
+    await linkOrSignInWithIdToken({ provider: 'apple', token: credential.identityToken, nonce: rawNonce });
     const fullName = [credential.fullName?.givenName, credential.fullName?.familyName].filter(Boolean).join(' ');
     if (fullName) await supabase!.auth.updateUser({ data: { full_name: fullName } });
   });
@@ -255,13 +276,7 @@ export function signInWithGoogle() {
     const idToken = response.data.idToken;
     if (!idToken) throw new Error('Google kimlik doğrulaması tamamlanamadı.');
     const { accessToken } = await GoogleSignin.getTokens();
-    const { data: sessionData, error: sessionError } = await supabase!.auth.getSession();
-    if (sessionError) throw sessionError;
-    const credentials = { provider: 'google' as const, token: idToken, access_token: accessToken };
-    const { error } = sessionData.session?.user.is_anonymous
-      ? await supabase!.auth.linkIdentity(credentials)
-      : await supabase!.auth.signInWithIdToken(credentials);
-    if (error) throw error;
+    await linkOrSignInWithIdToken({ provider: 'google', token: idToken, access_token: accessToken });
   });
 }
 

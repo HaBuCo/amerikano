@@ -54,7 +54,10 @@ test('three real clients: rooms, authority, privacy, deduplication, reconnect an
   await start();
   const connect = async () => { const p = new Peer(port); peers.push(p); await once(p.ws, 'open'); return p; };
   const a = await connect();
-  a.send({ type: 'create', name: 'Ayşe' });
+  a.send({ type: 'create', name: 'a'.repeat(21) });
+  await a.wait(m => m.type === 'error' && m.message.includes('1–20'));
+  const username = 'a'.repeat(20);
+  a.send({ type: 'create', name: username });
   const as = await a.wait(m => m.type === 'session'); assert.equal(as.type, 'session');
   const code = as.code;
   const b = await connect(), c = await connect();
@@ -64,6 +67,7 @@ test('three real clients: rooms, authority, privacy, deduplication, reconnect an
   const cs = await c.wait(m => m.type === 'session'); assert.equal(cs.type, 'session');
   b.send({ type: 'ready', ready: true }); c.send({ type: 'ready', ready: true });
   const lobby = await a.room(r => r.members.length === 3 && r.members.every(m => m.ready));
+  assert.equal(lobby.members.find(member => member.id === lobby.you)?.name, username);
   assert.ok(!JSON.stringify(lobby).includes(as.token));
   b.send({ type: 'start' });
   await b.wait(m => m.type === 'error' && m.message.includes('oda sahibi'));

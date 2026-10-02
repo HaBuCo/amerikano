@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import { createContext, PropsWithChildren, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
-export type GameSound = 'tap' | 'draw' | 'place' | 'meld' | 'joker' | 'shuffle' | 'win';
+export type GameSound = 'tap' | 'draw' | 'place' | 'meld' | 'joker' | 'shuffle' | 'win' | 'turn' | 'error' | 'tick' | 'penalty' | 'lose' | 'deal';
 type SoundContextValue = { enabled: boolean; toggle: () => void; play: (sound: GameSound) => void };
 const SoundContext = createContext<SoundContextValue | null>(null);
 const storageKey = 'amerikano-sound-enabled-v1';
@@ -15,6 +15,12 @@ const sources: Record<GameSound, number> = {
   joker: require('../../assets/sounds/joker.wav'),
   shuffle: require('../../assets/sounds/shuffle.wav'),
   win: require('../../assets/sounds/win.wav'),
+  turn: require('../../assets/sounds/turn.wav'),
+  error: require('../../assets/sounds/error.wav'),
+  tick: require('../../assets/sounds/tick.wav'),
+  penalty: require('../../assets/sounds/penalty.wav'),
+  lose: require('../../assets/sounds/lose.wav'),
+  deal: require('../../assets/sounds/deal.wav'),
 };
 
 export function GameSoundsProvider({ children }: PropsWithChildren) {

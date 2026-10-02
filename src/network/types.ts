@@ -9,6 +9,8 @@ export type RoomView = {
   you: string;
   revision: number;
   startsAt?: number;
+  botFillAvailableAt?: number;
+  serverNow?: number;
   members: {
     id: string; name: string; connected: boolean; ready: boolean;
     avatarKey: string; level: number; gamesPlayed: number; wins: number;
@@ -25,6 +27,7 @@ export type ClientMessage =
   | { type: 'ready'; ready: boolean }
   | { type: 'add-bot' }
   | { type: 'remove-bot' }
+  | { type: 'fill-bots' }
   | { type: 'start' }
   | { type: 'rematch' }
   | { type: 'reclaim' }
