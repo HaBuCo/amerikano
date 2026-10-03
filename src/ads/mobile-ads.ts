@@ -1,7 +1,9 @@
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import mobileAds, { AdsConsent, AdsConsentPrivacyOptionsRequirementStatus, MaxAdContentRating } from 'react-native-google-mobile-ads';
 import { getTrackingPermissionsAsync, requestTrackingPermissionsAsync } from 'expo-tracking-transparency';
 import { ADS_ENABLED } from './config';
+import { runAdsInitialization } from './initialization-flow';
+import { reportAdError } from './diagnostics';
 
 let adsAllowed = false;
 let initPromise: Promise<boolean> | null = null;
@@ -10,35 +12,65 @@ export function areAdsAllowed() {
   return adsAllowed;
 }
 
+async function waitForActiveApp() {
+  do {
+    if (AppState.currentState !== 'active') {
+      await new Promise<void>((resolve) => {
+        const subscription = AppState.addEventListener('change', (state) => {
+          if (state !== 'active') return;
+          subscription.remove();
+          resolve();
+        });
+        if (AppState.currentState === 'active') {
+          subscription.remove();
+          resolve();
+        }
+      });
+    }
+    // Let the foreground transition finish before presenting a system alert.
+    await new Promise<void>((resolve) => setTimeout(resolve, 250));
+  } while (AppState.currentState !== 'active');
+}
+
+async function requestTrackingPermission() {
+  if (Platform.OS !== 'ios') return;
+  await waitForActiveApp();
+  const current = await getTrackingPermissionsAsync();
+  if (current.status !== 'undetermined') return;
+  await waitForActiveApp();
+  const result = await requestTrackingPermissionsAsync();
+  if (result.status === 'undetermined') {
+    throw new Error('ATT request did not resolve; ad initialization postponed.');
+  }
+}
+
 /**
- * AB/EEA, Birleşik Krallık ve İsviçre'deki kullanıcılardan Google UMP (User
- * Messaging Platform) ile GDPR rızası alır, gerekiyorsa iOS'ta App Tracking
- * Transparency iznini ister ve ardından Mobile Ads SDK'sını başlatır. Rıza
+ * Önce iOS'ta uygulama aktifken ATT iznini ister; ardından Google UMP ile
+ * gerekiyorsa reklam rızası alır ve Mobile Ads SDK'sını başlatır. Rıza
  * gerekip alınmadığı sürece reklam istekleri gönderilmez.
  */
 export function initializeAds(): Promise<boolean> {
   if (!ADS_ENABLED) return Promise.resolve(false);
   if (initPromise) return initPromise;
   initPromise = (async () => {
-    try {
-      const consent = await AdsConsent.gatherConsent();
-      if (Platform.OS === 'ios') {
-        const current = await getTrackingPermissionsAsync();
-        if (current.status === 'undetermined') await requestTrackingPermissionsAsync();
-      }
-      await mobileAds().setRequestConfiguration({
-        maxAdContentRating: MaxAdContentRating.PG,
-        tagForChildDirectedTreatment: false,
-        tagForUnderAgeOfConsent: false,
-      });
-      await mobileAds().initialize();
-      adsAllowed = consent.canRequestAds;
-      return adsAllowed;
-    } catch {
-      adsAllowed = false;
-      return false;
-    }
+    adsAllowed = await runAdsInitialization({
+      requestTrackingPermission,
+      gatherConsent: () => AdsConsent.gatherConsent(),
+      getConsentInfo: () => AdsConsent.getConsentInfo(),
+      onError: reportAdError,
+      initializeSdk: async () => {
+        await mobileAds().setRequestConfiguration({
+          maxAdContentRating: MaxAdContentRating.PG,
+          tagForChildDirectedTreatment: false,
+          tagForUnderAgeOfConsent: false,
+        });
+        await mobileAds().initialize();
+      },
+    });
+    return adsAllowed;
   })();
+  // A failed attempt must not disable ads for the entire process lifetime.
+  void initPromise.then((allowed) => { if (!allowed) initPromise = null; });
   return initPromise;
 }
 
