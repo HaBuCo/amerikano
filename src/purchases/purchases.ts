@@ -49,14 +49,21 @@ async function findRemoveAdsPackage(): Promise<PurchasesPackage | null> {
 
 export async function fetchRemoveAdsOffer(): Promise<{ priceString: string; title: string } | null> {
   if (!PURCHASES_ENABLED) return null;
-  const pkg = await findRemoveAdsPackage();
-  if (!pkg) return null;
-  return { priceString: pkg.product.priceString, title: pkg.product.title };
+  try {
+    // Alt bileşenlerin efektleri kök düzenden önce çalıştığından SDK'nın yapılandırılmasını bekle.
+    await initializePurchases();
+    const pkg = await findRemoveAdsPackage();
+    if (!pkg) return null;
+    return { priceString: pkg.product.priceString, title: pkg.product.title };
+  } catch {
+    return null;
+  }
 }
 
 export async function purchaseRemoveAds(): Promise<{ ok: boolean; cancelled?: boolean; error?: string }> {
   if (!PURCHASES_ENABLED) return { ok: false, error: 'Satın alma bu ortamda desteklenmiyor.' };
   try {
+    await initializePurchases();
     const pkg = await findRemoveAdsPackage();
     if (!pkg) return { ok: false, error: 'Ürün şu anda yüklenemedi, daha sonra tekrar dene.' };
     const result = await Purchases.purchasePackage(pkg);
@@ -72,6 +79,7 @@ export async function purchaseRemoveAds(): Promise<{ ok: boolean; cancelled?: bo
 export async function restorePurchases(): Promise<{ ok: boolean; error?: string }> {
   if (!PURCHASES_ENABLED) return { ok: false, error: 'Bu ortamda desteklenmiyor.' };
   try {
+    await initializePurchases();
     applyCustomerInfo(await Purchases.restorePurchases());
     return { ok: true };
   } catch {

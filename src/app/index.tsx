@@ -81,6 +81,11 @@ export default function HomeScreen() {
               <Text style={s.playCaption}>Masa kur, kodla katıl veya arkadaşını çağır</Text>
             </Pressable>
           </View>
+
+          {auth.status === 'anonymous' && <Pressable accessibilityRole="button" onPress={() => setAccountOpenFor('anonymous')} style={s.guestNotice}>
+            <View><Text style={s.guestNoticeTitle}>Misafir olarak oynuyorsun</Text><Text style={s.guestNoticeText}>İlerlemeni korumak için ücretsiz hesap oluşturabilirsin.</Text></View>
+            <Text style={s.guestNoticeAction}>KAYDET</Text>
+          </Pressable>}
         </View>
 
         <View style={s.dashboardColumn}>
@@ -96,10 +101,6 @@ export default function HomeScreen() {
             <MenuLink label="Ayarlar" detail="Oyun, hesap ve gizlilik" onPress={() => router.push('/settings' as Href)} />
           </View>
 
-          {auth.status === 'anonymous' && <Pressable accessibilityRole="button" onPress={() => setAccountOpenFor('anonymous')} style={s.guestNotice}>
-            <View><Text style={s.guestNoticeTitle}>Misafir olarak oynuyorsun</Text><Text style={s.guestNoticeText}>İlerlemeni korumak için ücretsiz hesap oluşturabilirsin.</Text></View>
-            <Text style={s.guestNoticeAction}>KAYDET</Text>
-          </Pressable>}
         </View>
       </View>
 
