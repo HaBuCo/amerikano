@@ -87,7 +87,7 @@
       [
         "expo-tracking-transparency",
         {
-          "userTrackingPermission": "Sana daha ilgili reklamlar gösterebilmemiz için bu tanımlayıcı kullanılacak."
+          "userTrackingPermission": "Bu izin, sana kişiselleştirilmiş reklamlar göstermek için diğer şirketlerin uygulama ve web sitelerindeki etkinliklerinle bağlantı kurulmasına olanak tanır."
         }
       ]
     ],
