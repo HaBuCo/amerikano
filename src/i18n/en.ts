@@ -259,7 +259,7 @@ export const english: Record<string, string> = {
   "Giriş yap veya kayıt ol": "Sign in or create an account",
   "Hesap ve veri silme talebi": "Account and data deletion request",
   "Uygulama dışından silme talebi gönder": "Request deletion outside the app",
-  "AMERİKANO · SÜRÜM 1.0.0": "AMERIKANO · VERSION 1.0.0",
+  "AMERİKANO · SÜRÜM {0}": "AMERIKANO · VERSION {0}",
   "Giriş penceresini kapat": "Close sign-in window",
   "Oyuncu 1": "Player 1",
   "Oyuncu 2": "Player 2",

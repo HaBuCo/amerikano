@@ -1,4 +1,5 @@
 import { useTranslations } from '@/i18n/language';
+import Constants from 'expo-constants';
 import { useEffect, useState } from 'react';
 import { Href, router, Stack } from 'expo-router';
 import * as Linking from 'expo-linking';
@@ -105,7 +106,7 @@ export default function SettingsScreen() {
       <View style={s.deletionLink}>
         <LinkRow label={t("Hesap ve veri silme talebi")} detail={t("Uygulama dışından silme talebi gönder")} url={deleteAccountUrl(language)} />
       </View>
-      <Text style={s.footer}>{t("AMERİKANO · SÜRÜM 1.0.0")}</Text>
+      <Text style={s.footer}>{t("AMERİKANO · SÜRÜM {0}", [Constants.expoConfig?.version ?? "—"])}</Text>
     </KeyboardAwareScrollView>
 
     <Modal visible={accountOpenFor === accountIdentity && (auth.status !== 'signed-in' || auth.recovery)} transparent animationType="slide" onRequestClose={() => setAccountOpenFor(null)}>
