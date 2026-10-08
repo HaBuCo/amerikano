@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 import { supabase } from './supabase';
-import { normalizeUsername, usernameError } from './usernames';
+import { normalizeUsername, RESERVED_USERNAME_MESSAGE, usernameError } from './usernames';
 
 export const AVATAR_OPTIONS = [
   { key: 'emerald', color: '#2d8b65', symbol: 'A' },
@@ -114,7 +114,9 @@ export async function savePlayerProfile(username: string, avatarKey: AvatarKey) 
         : 'Profil kaydedilemedi.';
     const message = /profiles_username_idx|duplicate key/i.test(rawMessage)
       ? 'Bu kullanıcı adı alınmış. Başka bir tane dene.'
-      : rawMessage;
+      : /profiles_username_reserved/i.test(rawMessage)
+        ? RESERVED_USERNAME_MESSAGE
+        : rawMessage;
     update({ saving: false, error: message });
     throw new Error(message);
   }

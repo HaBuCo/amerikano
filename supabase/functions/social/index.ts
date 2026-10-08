@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { enforceRateLimit, publicErrorMessage } from '../_shared/guard.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -61,7 +62,7 @@ Deno.serve(async (request) => {
       const inviteSenders = (inviteRows ?? []).map((row) => row.sender_id);
       const profileIds = [...new Set([...relationUsers, ...inviteSenders])];
       const { data: profiles, error: profilesError } = profileIds.length
-        ? await admin.from('profiles').select('user_id, display_name, username, avatar_key, experience, games_played, wins, last_active_at').in('user_id', profileIds)
+        ? await admin.from('profiles').select('user_id, username, avatar_key, experience, games_played, wins, last_active_at').in('user_id', profileIds)
         : { data: [], error: null };
       if (profilesError) throw profilesError;
       const profileMap = new Map((profiles ?? []).map((profile) => [profile.user_id, profile]));
@@ -96,7 +97,8 @@ Deno.serve(async (request) => {
         const profile = profileMap.get(id);
         return {
           userId: id,
-          displayName: profile?.display_name ?? 'Oyuncu',
+          // display_name may hold a provider's real name or e-mail prefix; only the public username leaves the server.
+          displayName: profile?.username || 'Oyuncu',
           username: profile?.username ?? '',
           avatarKey: profile?.avatar_key ?? 'emerald',
           level: Math.floor(Math.sqrt(Math.max(0, profile?.experience ?? 0) / 100)) + 1,
@@ -135,10 +137,11 @@ Deno.serve(async (request) => {
     if (command.type === 'list') return json(await list());
 
     if (command.type === 'search') {
+      await enforceRateLimit(admin, user.id, 'social-search', 120, 600);
       const query = String(command.query ?? '').trim().toLowerCase().replace(/[^a-z0-9._]/g, '').slice(0, 20);
       if (query.length < 3) return json({ results: [] });
       const { data: matches, error: searchError } = await admin.from('profiles')
-        .select('user_id, display_name, username, avatar_key, experience, games_played, wins')
+        .select('user_id, username, avatar_key, experience, games_played, wins')
         .neq('user_id', user.id)
         .gte('username', query)
         .lt('username', `${query}\uffff`)
@@ -160,7 +163,7 @@ Deno.serve(async (request) => {
         .sort((a, b) => Number(b.username === query) - Number(a.username === query))
         .map((profile) => ({
           userId: profile.user_id,
-          displayName: profile.display_name,
+          displayName: profile.username,
           username: profile.username,
           avatarKey: profile.avatar_key,
           level: Math.floor(Math.sqrt(Math.max(0, profile.experience ?? 0) / 100)) + 1,
@@ -175,6 +178,7 @@ Deno.serve(async (request) => {
     }
 
     if (command.type === 'request') {
+      await enforceRateLimit(admin, user.id, 'social-request', 20, 3600);
       let target: { user_id: string } | null = null;
       if (command.userId) {
         const userId = String(command.userId);
@@ -197,6 +201,9 @@ Deno.serve(async (request) => {
         .eq('user_low', userLow).eq('user_high', userHigh).maybeSingle();
       if (existing?.status === 'accepted') throw new Error('Bu oyuncu zaten arkadaşın.');
       if (existing) throw new Error(existing.requested_by === user.id ? 'Arkadaşlık isteğin zaten bekliyor.' : 'Bu oyuncunun isteği seni bekliyor.');
+      const { count: pendingCount } = await admin.from('friendships').select('*', { count: 'exact', head: true })
+        .eq('requested_by', user.id).eq('status', 'pending');
+      if ((pendingCount ?? 0) >= 50) throw new Error('Çok fazla bekleyen arkadaşlık isteğin var. Bazıları yanıtlanınca tekrar dene.');
       const { error } = await admin.from('friendships').insert({ user_low: userLow, user_high: userHigh, requested_by: user.id });
       if (error) throw error;
       return json({ ok: true, social: await list() });
@@ -223,6 +230,7 @@ Deno.serve(async (request) => {
     }
 
     if (command.type === 'invite') {
+      await enforceRateLimit(admin, user.id, 'social-invite', 30, 600);
       const targetId = String(command.userId ?? '');
       const [userLow, userHigh] = pair(user.id, targetId);
       const { data: friendship } = await admin.from('friendships').select('status')
@@ -251,7 +259,6 @@ Deno.serve(async (request) => {
 
     throw new Error('Bilinmeyen işlem.');
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Arkadaş işlemi tamamlanamadı.';
-    return json({ error: message }, 400);
+    return json({ error: publicErrorMessage(error, 'Arkadaş işlemi tamamlanamadı.') }, 400);
   }
 });

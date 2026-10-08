@@ -5,6 +5,7 @@ import { QUICK_ROOM_MINIMUM, QUICK_ROOM_BOT_WAIT_MS, quickRoomStartsAt } from '.
 import { botAction } from '../../../src/game/bot.ts';
 import { projectGame } from '../../../src/game/view.ts';
 import type { GameAction, GameState } from '../../../src/game/types.ts';
+import { enforceRateLimit, publicErrorMessage } from '../_shared/guard.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -250,12 +251,13 @@ Deno.serve(async (request) => {
     };
 
     if (command.type === 'single-result') {
-      const result = await admin.rpc('record_single_player_xp', { p_won: !!command.won });
+      const result = await admin.rpc('record_single_player_xp', { p_user_id: user.id, p_won: command.won === true });
       if (result.error) throw result.error;
       return json({ experience: result.data as number });
     }
 
     if (command.type === 'create') {
+      await enforceRateLimit(admin, user.id, 'room-create', 10, 600);
       await admin.from('rooms').delete().lt('expires_at', new Date().toISOString());
       const name = await accountName();
       let roomId: string | null = null;
@@ -271,6 +273,8 @@ Deno.serve(async (request) => {
     }
 
     if (command.type === 'join') {
+      // Also caps room-code guessing.
+      await enforceRateLimit(admin, user.id, 'room-join', 20, 600);
       await admin.from('rooms').delete().lt('expires_at', new Date().toISOString());
       const result = await admin.rpc('join_online_room', {
         p_code: String(command.code || '').toUpperCase(),
@@ -288,6 +292,7 @@ Deno.serve(async (request) => {
     }
 
     if (command.type === 'matchmake') {
+      await enforceRateLimit(admin, user.id, 'room-matchmake', 20, 600);
       await admin.from('rooms').delete().lt('expires_at', new Date().toISOString());
       let targetRoomId: string | null = null;
       for (let attempt = 0; attempt < 8 && !targetRoomId; attempt += 1) {
@@ -515,7 +520,6 @@ Deno.serve(async (request) => {
 
     throw new Error('Bilinmeyen işlem.');
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Beklenmeyen bir hata oluştu.';
-    return json({ error: message }, 400);
+    return json({ error: publicErrorMessage(error, 'Beklenmeyen bir hata oluştu.') }, 400);
   }
 });

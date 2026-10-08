@@ -90,6 +90,23 @@ async function refreshRoom() {
   }
 }
 
+// Any room member can broadcast on the room channel, so a flood of
+// "room_changed" signals collapses into one in-flight fetch plus one follow-up.
+let refreshInFlight: Promise<void> | null = null;
+let refreshQueued = false;
+function requestRefresh() {
+  if (refreshInFlight) {
+    refreshQueued = true;
+    return;
+  }
+  refreshInFlight = refreshRoom().finally(() => {
+    refreshInFlight = null;
+    if (!refreshQueued) return;
+    refreshQueued = false;
+    requestRefresh();
+  });
+}
+
 function clearRoomTimers() {
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   if (deadlineTimer) clearTimeout(deadlineTimer);
@@ -135,7 +152,7 @@ function listenToRoom(nextRoomId: string) {
   heartbeatTimer = setInterval(() => { if (roomId) void refreshRoom(); }, 20_000);
   roomChannel = supabase
     .channel(`room:${nextRoomId}`, { config: { private: true } })
-    .on('broadcast', { event: 'room_changed' }, () => { void refreshRoom(); })
+    .on('broadcast', { event: 'room_changed' }, requestRefresh)
     .on('broadcast', { event: 'reaction' }, ({ payload }) => receiveReaction(payload))
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {

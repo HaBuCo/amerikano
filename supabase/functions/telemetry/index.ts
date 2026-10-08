@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { withinRateLimit } from '../_shared/guard.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,14 +20,18 @@ Deno.serve(async (request) => {
   try {
     const url = Deno.env.get('SUPABASE_URL');
     const publicKey = Deno.env.get('SUPABASE_ANON_KEY');
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const authorization = request.headers.get('Authorization');
-    if (!url || !publicKey || !authorization) return json({ error: 'Oturum doğrulanamadı.' }, 401);
+    if (!url || !publicKey || !serviceKey || !authorization) return json({ error: 'Oturum doğrulanamadı.' }, 401);
     const authClient = createClient(url, publicKey, {
       global: { headers: { Authorization: authorization } },
       auth: { persistSession: false },
     });
     const { data: { user }, error } = await authClient.auth.getUser();
     if (error || !user) return json({ error: 'Oturum süresi doldu.' }, 401);
+    // Over the limit the report is dropped quietly so the app does not retry it.
+    const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
+    if (!await withinRateLimit(admin, user.id, 'telemetry', 30, 600)) return json({ accepted: false });
     const payload = await request.json() as Record<string, unknown>;
     console.error('[amerikano-client-error]', JSON.stringify({
       userId: user.id,

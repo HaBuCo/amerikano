@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { decodeJwt, importPKCS8, SignJWT } from 'npm:jose@5.9.6';
+import { publicErrorMessage } from '../_shared/guard.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -109,7 +110,6 @@ Deno.serve(async (request) => {
     if (deleteError) throw deleteError;
     return json({ deleted: true });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Hesap silinemedi.';
-    return json({ error: message }, 400);
+    return json({ error: publicErrorMessage(error, 'Hesap silinemedi.') }, 400);
   }
 });

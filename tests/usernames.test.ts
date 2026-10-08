@@ -14,3 +14,11 @@ test('validates username length and edge punctuation', () => {
   assert.match(usernameError('_ali'), /başlamalı/);
   assert.match(usernameError('ali.'), /bitmeli/);
 });
+
+test('rejects usernames that could pass for staff or the game', () => {
+  assert.match(usernameError('admin'), /ayrılmış/);
+  assert.match(usernameError('amerikano_destek'), /ayrılmış/);
+  assert.match(usernameError('destek.ekibi'), /ayrılmış/);
+  assert.equal(usernameError('oyuncu_1a2b3c4d'), '');
+  assert.equal(usernameError('ali_admin'), '');
+});
