@@ -764,6 +764,8 @@ export const english: Record<string, string> = {
   "Apple doğrulaması tamamlanamadı.": "Apple verification could not be completed.",
   "Hesabın ve profil verilerin silindi.": "Your account and profile data were deleted.",
   "Hesap silinemedi.": "Could not delete account.",
+  "Bizi değerlendir": "Rate us",
+  "Amerikano'yu beğendiysen birkaç yıldız bırak": "Enjoying Amerikano? Leave a few stars",
   "Çok fazla deneme yaptın. Biraz bekleyip tekrar dene.": "Too many attempts. Wait a moment and try again.",
   "Çok fazla bekleyen arkadaşlık isteğin var. Bazıları yanıtlanınca tekrar dene.": "You have too many pending friend requests. Try again once some are answered.",
   "Bu kullanıcı adı ayrılmış. Başka bir tane dene.": "This username is reserved. Try another one.",

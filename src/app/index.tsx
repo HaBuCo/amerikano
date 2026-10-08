@@ -16,6 +16,7 @@ import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
 import { useAuth } from '@/network/auth';
 import { connectRoom } from '@/network/client';
 import { refreshSocial, useSocial } from '@/network/social';
+import { openStoreReviewPage, storeReviewSupported } from '@/review/store-review';
 
 const sampleCards: Card[] = [
   { id: 'hero-1', rank: 'Q', suit: 'hearts', isJoker: false },
@@ -102,6 +103,10 @@ export default function HomeScreen() {
             <MenuLink label={t("Nasıl oynanır?")} detail={t("Kurallara göz at")} onPress={() => router.push('/rules')} />
             <View style={s.utilityLine} />
             <MenuLink label={t("Ayarlar")} detail={t("Oyun, hesap ve gizlilik")} onPress={() => router.push('/settings' as Href)} />
+            {storeReviewSupported && <>
+              <View style={s.utilityLine} />
+              <MenuLink label={t("Bizi değerlendir")} detail={t("Amerikano'yu beğendiysen birkaç yıldız bırak")} onPress={() => { void openStoreReviewPage().catch(() => undefined); }} />
+            </>}
           </View>
 
         </View>

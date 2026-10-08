@@ -21,6 +21,7 @@ import { pickOpponentNames } from '@/game/opponent-names';
 import { recordSinglePlayerResult } from '@/game/single-stats';
 import { registerRoundOver, showMatchEndInterstitial } from '@/ads/interstitial';
 import { recordSinglePlayerXp } from '@/network/client';
+import { maybeRequestReview } from '@/review/store-review';
 
 function createSingleGame(options: SingleGameOptions) {
   const names = ["Sen", ...pickOpponentNames(options.playerCount - 1, Math.random, ["Sen"])];
@@ -82,7 +83,10 @@ export default function GameScreen() {
         const score = game.players[0]?.score ?? 0;
         const winningScore = Math.min(...game.players.map(player => player.score));
         const won = score === winningScore;
-        void recordSinglePlayerResult(score, won);
+        void recordSinglePlayerResult(score, won).then((stats) => {
+          // Let the final score settle on screen before the store sheet appears.
+          setTimeout(() => { void maybeRequestReview(won, stats.gamesPlayed); }, 1_500);
+        }).catch(() => undefined);
         void recordSinglePlayerXp(won);
       }
     } else void saveSingleGame(game);
