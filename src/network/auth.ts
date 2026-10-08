@@ -139,17 +139,14 @@ export function handleAuthLink(url: string) {
 
   return run(async () => {
     if (payload.error) throw new Error(decodeURIComponent(payload.error.replace(/\+/g, ' ')));
-    if (payload.code) {
-      const { error } = await supabase!.auth.exchangeCodeForSession(payload.code);
-      if (error) throw error;
-    } else if (payload.accessToken && payload.refreshToken) {
-      const { error } = await supabase!.auth.setSession({
-        access_token: payload.accessToken,
-        refresh_token: payload.refreshToken,
-      });
-      if (error) throw error;
-    } else {
-      throw new Error('Giriş bağlantısı eksik veya süresi dolmuş. Yeniden bağlantı iste.');
+    if (!payload.code) throw new Error('Giriş bağlantısı eksik veya süresi dolmuş. Yeniden bağlantı iste.');
+    // The code only works with the verifier this device stored when the flow began.
+    const { error } = await supabase!.auth.exchangeCodeForSession(payload.code, payload.flowId ? { flowId: payload.flowId } : undefined);
+    if (error) {
+      if (error.name === 'AuthPKCECodeVerifierMissingError') {
+        throw new Error('Bu bağlantı bu cihazda başlatılan bir isteğe ait değil. Bağlantıyı, isteği yaptığın cihazda aç veya yeni bağlantı iste.');
+      }
+      throw error;
     }
 
     const recovery = payload.type === 'recovery' || payload.flow === 'recovery';

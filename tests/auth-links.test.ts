@@ -3,13 +3,18 @@ import test from 'node:test';
 
 import { parseAuthLink } from '../src/network/auth-links.ts';
 
-test('parses Supabase implicit recovery links', () => {
+test('ignores raw session tokens so a crafted link cannot swap accounts', () => {
+  assert.equal(parseAuthLink('amerikano://login#access_token=access&refresh_token=refresh'), null);
   assert.deepEqual(
     parseAuthLink('amerikano://login?flow=recovery#access_token=access&refresh_token=refresh&type=recovery'),
-    {
-      accessToken: 'access', refreshToken: 'refresh', code: undefined,
-      type: 'recovery', flow: 'recovery', error: undefined,
-    },
+    { code: undefined, flowId: undefined, type: 'recovery', flow: 'recovery', error: undefined },
+  );
+});
+
+test('parses PKCE recovery links with a flow id', () => {
+  assert.deepEqual(
+    parseAuthLink('amerikano://login?flow=recovery&code=abc123&sb_flow_id=f1'),
+    { code: 'abc123', flowId: 'f1', type: undefined, flow: 'recovery', error: undefined },
   );
 });
 

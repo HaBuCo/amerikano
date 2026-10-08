@@ -1,7 +1,8 @@
+// Only PKCE codes are accepted. Raw access/refresh tokens in a link are ignored:
+// anyone can craft such a link and silently sign the player into another account.
 export type AuthLinkPayload = {
-  accessToken?: string;
-  refreshToken?: string;
   code?: string;
+  flowId?: string;
   type?: string;
   flow?: string;
   error?: string;
@@ -29,9 +30,8 @@ export function parseAuthLink(url: string): AuthLinkPayload | null {
     : new URLSearchParams();
   const sources = [fragment, query];
   const payload: AuthLinkPayload = {
-    accessToken: first(sources, 'access_token'),
-    refreshToken: first(sources, 'refresh_token'),
     code: first(sources, 'code'),
+    flowId: first(sources, 'sb_flow_id'),
     type: first(sources, 'type'),
     flow: first(sources, 'flow'),
     error: first(sources, 'error_description') ?? first(sources, 'error'),

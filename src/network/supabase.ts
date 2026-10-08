@@ -19,6 +19,8 @@ export const supabase = url && publishableKey
         autoRefreshToken: !serverRendering,
         persistSession: !serverRendering,
         detectSessionInUrl: false,
+        // Links carry a one-time code that only this device's stored verifier can redeem.
+        flowType: 'pkce',
       },
     })
   : null;
