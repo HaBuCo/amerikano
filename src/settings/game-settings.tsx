@@ -1,9 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Vibration } from 'react-native';
+import { getLanguage, setLanguage } from '@/i18n/language';
+import { validLanguage, type Language } from '@/i18n/translate';
 
 type Settings = {
+  language: Language;
   haptics: boolean;
   criticalTimer: boolean;
   compactCards: boolean;
@@ -18,28 +21,35 @@ type SettingsContextValue = {
   feedback: (kind?: Feedback) => void;
 };
 
-const defaults: Settings = { haptics: true, criticalTimer: true, compactCards: false, dragHints: true, showReactions: true };
+const defaults: Settings = { language: getLanguage(), haptics: true, criticalTimer: true, compactCards: false, dragHints: true, showReactions: true };
 const storageKey = 'amerikano:game-settings:v1';
 const SettingsContext = createContext<SettingsContextValue | null>(null);
 
 export function GameSettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState(defaults);
+  const changedBeforeLoad = useRef(false);
 
   useEffect(() => {
     let active = true;
     void AsyncStorage.getItem(storageKey).then((raw) => {
-      if (!active || !raw) return;
+      if (!active || !raw || changedBeforeLoad.current) return;
       try {
-        setSettings({ ...defaults, ...JSON.parse(raw) as Partial<Settings> });
+        const saved = JSON.parse(raw) as Partial<Settings>;
+        // Settings saved before English existed have no language and stay Turkish.
+        const next = { ...defaults, ...saved, language: validLanguage(saved.language) };
+        setLanguage(next.language);
+        setSettings(next);
       } catch { /* Keep safe defaults. */ }
-    });
+    }).catch(() => undefined);
     return () => { active = false; };
   }, []);
 
   const updateSettings = useCallback((patch: Partial<Settings>) => {
+    changedBeforeLoad.current = true;
+    if (patch.language !== undefined) setLanguage(patch.language);
     setSettings((current) => {
       const next = { ...current, ...patch };
-      void AsyncStorage.setItem(storageKey, JSON.stringify(next));
+      void AsyncStorage.setItem(storageKey, JSON.stringify(next)).catch(() => undefined);
       return next;
     });
   }, []);

@@ -1,3 +1,4 @@
+import { useTranslations } from '@/i18n/language';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -34,6 +35,7 @@ const profileCopy: Record<Exclude<SingleGameProfile, 'custom'>, { title: string;
 };
 
 export default function SingleSetupScreen() {
+  const { t } = useTranslations();
   const { isTablet } = useResponsiveLayout();
   const [options, setOptions] = useState<SingleGameOptions>({ ...DEFAULT_SINGLE_GAME_OPTIONS });
   const [advanced, setAdvanced] = useState(false);
@@ -50,40 +52,40 @@ export default function SingleSetupScreen() {
 
   return <SafeAreaView edges={['bottom']} style={s.safeArea}>
     <ScrollView contentContainerStyle={[s.content, isTablet && s.contentTablet]}>
-      <Text style={s.eyebrow}>TEK OYUNCULU</Text>
-      <Text style={s.title}>Oyunu nasıl kuralım?</Text>
-      <Text style={s.description}>Hazır bir tarz seç veya masayı kendine göre ayarla.</Text>
+      <Text style={s.eyebrow}>{t("TEK OYUNCULU")}</Text>
+      <Text style={s.title}>{t("Oyunu nasıl kuralım?")}</Text>
+      <Text style={s.description}>{t("Hazır bir tarz seç veya masayı kendine göre ayarla.")}</Text>
 
       <View style={s.profiles}>{(['classic', 'relaxed', 'fast'] as const).map(profile => <Pressable key={profile} accessibilityRole="button" accessibilityState={{ selected: options.profile === profile }} onPress={() => chooseProfile(profile)} style={[s.profile, options.profile === profile && s.profileActive]}>
-        <Text style={[s.profileTitle, options.profile === profile && s.profileTitleActive]}>{profileCopy[profile].title}</Text>
-        <Text style={[s.profileCaption, options.profile === profile && s.profileCaptionActive]}>{profileCopy[profile].caption}</Text>
+        <Text style={[s.profileTitle, options.profile === profile && s.profileTitleActive]}>{t(profileCopy[profile].title)}</Text>
+        <Text style={[s.profileCaption, options.profile === profile && s.profileCaptionActive]}>{t(profileCopy[profile].caption)}</Text>
       </Pressable>)}</View>
-      {options.profile === 'custom' && <Text style={s.customLabel}>ÖZEL AYAR</Text>}
+      {options.profile === 'custom' && <Text style={s.customLabel}>{t("ÖZEL AYAR")}</Text>}
 
       <View style={[s.settingsGrid, isTablet && s.settingsGridTablet]}>
-        <Selector wide={isTablet} label="Oyuncu sayısı" value={options.playerCount} choices={[2, 3, 4, 5, 6].map(value => ({ value, label: String(value) }))} onChange={value => update('playerCount', value)} />
-        <Selector wide={isTablet} label="Rakip seviyesi" value={options.difficulty} choices={[{ value: 'easy', label: 'Kolay' }, { value: 'normal', label: 'Normal' }, { value: 'hard', label: 'Zor' }]} onChange={value => update('difficulty', value)} />
-        <Selector wide={isTablet} label="Rakip oynama hızı" value={options.speed} choices={[{ value: 'fast', label: 'Hızlı' }, { value: 'normal', label: 'Normal' }, { value: 'relaxed', label: 'Sakin' }]} onChange={value => update('speed', value)} />
-        <Selector wide={isTablet} label="Oyun uzunluğu" value={options.length} choices={[{ value: 'mini', label: 'Mini', caption: '3 el' }, { value: 'quick', label: 'Hızlı', caption: '6 el' }, { value: 'full', label: 'Tam', caption: '12 el' }]} onChange={value => update('length', value)} />
+        <Selector wide={isTablet} label={t("Oyuncu sayısı")} value={options.playerCount} choices={[2, 3, 4, 5, 6].map(value => ({ value, label: String(value) }))} onChange={value => update('playerCount', value)} />
+        <Selector wide={isTablet} label={t("Rakip seviyesi")} value={options.difficulty} choices={[{ value: 'easy', label: t("Kolay") }, { value: 'normal', label: t("Normal") }, { value: 'hard', label: t("Zor") }]} onChange={value => update('difficulty', value)} />
+        <Selector wide={isTablet} label={t("Rakip oynama hızı")} value={options.speed} choices={[{ value: 'fast', label: t("Hızlı") }, { value: 'normal', label: t("Normal") }, { value: 'relaxed', label: t("Sakin") }]} onChange={value => update('speed', value)} />
+        <Selector wide={isTablet} label={t("Oyun uzunluğu")} value={options.length} choices={[{ value: 'mini', label: t("Mini"), caption: t("3 el") }, { value: 'quick', label: t("Hızlı"), caption: t("6 el") }, { value: 'full', label: t("Tam"), caption: t("12 el") }]} onChange={value => update('length', value)} />
       </View>
 
       <Pressable accessibilityRole="button" accessibilityState={{ expanded: advanced }} onPress={() => setAdvanced(value => !value)} style={s.advancedButton}>
-        <View><Text style={s.advancedTitle}>Gelişmiş ayarlar</Text><Text style={s.advancedCaption}>Teklif, cezalar, Joker ve yardımcılar</Text></View><Text style={s.chevron}>{advanced ? '−' : '+'}</Text>
+        <View><Text style={s.advancedTitle}>{t("Gelişmiş ayarlar")}</Text><Text style={s.advancedCaption}>{t("Teklif, cezalar, Joker ve yardımcılar")}</Text></View><Text style={s.chevron}>{advanced ? '−' : '+'}</Text>
       </Pressable>
 
       {advanced && <View style={s.advancedPanel}>
-        <ToggleRow label="Açık kart teklifi" caption={options.playerCount <= 2 ? 'İki kişilik oyunda kullanılmaz.' : 'Desteden çekilince açık kart diğer oyunculara cezalı sunulur.'} value={options.claimsEnabled && options.playerCount > 2} disabled={options.playerCount <= 2} onPress={() => update('claimsEnabled', !options.claimsEnabled)} />
-        {options.claimsEnabled && options.playerCount > 2 && <Selector label="Teklif karar süresi" value={options.claimSeconds} choices={[5, 8, 12].map(value => ({ value: value as 5 | 8 | 12, label: `${value} sn` }))} onChange={value => update('claimSeconds', value)} />}
-        <ToggleRow label="İşlek kart cezası" caption="Masadaki bir gruba uyabilecek kartı atmak +25 puan yazar." value={options.playableDiscardPenalty} onPress={() => update('playableDiscardPenalty', !options.playableDiscardPenalty)} />
-        <Selector label="Açılışta Joker yasağı" value={options.jokerOpeningRestrictionRounds} choices={[{ value: 0, label: 'Kapalı' }, { value: 4, label: 'İlk 4 el' }, { value: 5, label: 'İlk 5 el' }]} onChange={value => update('jokerOpeningRestrictionRounds', value)} />
-        <ToggleRow label="Son hamleyi geri al" caption="Rakibin oynamadan önce yaptığın son hamleyi geri alabilirsin." value={options.undoEnabled} onPress={() => update('undoEnabled', !options.undoEnabled)} />
-        <Selector label="İlk başlayan" value={options.starter} choices={[{ value: 'random', label: 'Rastgele' }, { value: 'you', label: 'Sen' }]} onChange={value => update('starter', value)} />
-        <Selector label="Yeni el açıklaması" value={options.roundIntro} choices={[{ value: 'off', label: 'Kapalı' }, { value: 'short', label: 'Kısa' }, { value: 'detailed', label: 'Detaylı' }]} onChange={value => update('roundIntro', value)} />
+        <ToggleRow label={t("Açık kart teklifi")} caption={options.playerCount <= 2 ? t("İki kişilik oyunda kullanılmaz.") : t("Desteden çekilince açık kart diğer oyunculara cezalı sunulur.")} value={options.claimsEnabled && options.playerCount > 2} disabled={options.playerCount <= 2} onPress={() => update('claimsEnabled', !options.claimsEnabled)} />
+        {options.claimsEnabled && options.playerCount > 2 && <Selector label={t("Teklif karar süresi")} value={options.claimSeconds} choices={[5, 8, 12].map(value => ({ value: value as 5 | 8 | 12, label: t("{0} sn", [value]) }))} onChange={value => update('claimSeconds', value)} />}
+        <ToggleRow label={t("İşlek kart cezası")} caption={t("Masadaki bir gruba uyabilecek kartı atmak +25 puan yazar.")} value={options.playableDiscardPenalty} onPress={() => update('playableDiscardPenalty', !options.playableDiscardPenalty)} />
+        <Selector label={t("Açılışta Joker yasağı")} value={options.jokerOpeningRestrictionRounds} choices={[{ value: 0, label: t("Kapalı") }, { value: 4, label: t("İlk 4 el") }, { value: 5, label: t("İlk 5 el") }]} onChange={value => update('jokerOpeningRestrictionRounds', value)} />
+        <ToggleRow label={t("Son hamleyi geri al")} caption={t("Rakibin oynamadan önce yaptığın son hamleyi geri alabilirsin.")} value={options.undoEnabled} onPress={() => update('undoEnabled', !options.undoEnabled)} />
+        <Selector label={t("İlk başlayan")} value={options.starter} choices={[{ value: 'random', label: t("Rastgele") }, { value: 'you', label: t("Sen") }]} onChange={value => update('starter', value)} />
+        <Selector label={t("Yeni el açıklaması")} value={options.roundIntro} choices={[{ value: 'off', label: t("Kapalı") }, { value: 'short', label: t("Kısa") }, { value: 'detailed', label: t("Detaylı") }]} onChange={value => update('roundIntro', value)} />
       </View>}
 
-      <View style={s.infoCard}><Text style={s.infoIcon}>♣</Text><Text style={s.infoText}><Text style={s.infoStrong}>Açık kart teklifi nedir?</Text>{'\n'}Bir oyuncu kapalı desteden çekerse yerdeki açık kart diğer oyunculara sırayla sorulur. Alan oyuncu açık kartın yanında bir ceza kartı da çeker; normal sırası değişmez.</Text></View>
+      <View style={s.infoCard}><Text style={s.infoIcon}>♣</Text><Text style={s.infoText}><Text style={s.infoStrong}>{t("Açık kart teklifi nedir?")}</Text>{'\n'}{t("Bir oyuncu kapalı desteden çekerse yerdeki açık kart diğer oyunculara sırayla sorulur. Alan oyuncu açık kartın yanında bir ceza kartı da çeker; normal sırası değişmez.")}</Text></View>
     </ScrollView>
-    <View style={s.bottomBar}><Pressable accessibilityRole="button" onPress={start} style={({ pressed }) => [s.startButton, isTablet && s.startButtonTablet, pressed && s.pressed]}><View><Text style={s.startText}>Masayı Kur</Text><Text style={s.startCaption}>{options.playerCount - 1} rakip · {options.length === 'full' ? 12 : options.length === 'quick' ? 6 : 3} el</Text></View><Text style={s.arrow}>→</Text></Pressable></View>
+    <View style={s.bottomBar}><Pressable accessibilityRole="button" onPress={start} style={({ pressed }) => [s.startButton, isTablet && s.startButtonTablet, pressed && s.pressed]}><View><Text style={s.startText}>{t("Masayı Kur")}</Text><Text style={s.startCaption}>{options.playerCount - 1} {' '}{t("rakip ·")} {options.length === 'full' ? 12 : options.length === 'quick' ? 6 : 3} {t("el")}</Text></View><Text style={s.arrow}>→</Text></Pressable></View>
   </SafeAreaView>;
 }
 

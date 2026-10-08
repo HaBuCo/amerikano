@@ -1,3 +1,4 @@
+import { useTranslations } from '@/i18n/language';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -6,43 +7,44 @@ import { ROUND_CONTRACTS } from '@/game/contracts';
 import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
 
 export default function RulesScreen() {
+  const { t } = useTranslations();
   const { isTablet } = useResponsiveLayout();
   return (
     <SafeAreaView edges={['bottom']} style={styles.safeArea}>
       <ScrollView contentContainerStyle={[styles.content, isTablet && styles.contentTablet]}>
-        <Text style={styles.intro}>12 el boyunca görevleri tamamla, elini bitir ve en az ceza puanını topla.</Text>
+        <Text style={styles.intro}>{t("12 el boyunca görevleri tamamla, elini bitir ve en az ceza puanını topla.")}</Text>
 
         <View style={[styles.ruleGrid, isTablet && styles.ruleGridTablet]}>
-          <Rule tablet={isTablet} title="Dağıtım ve yön" symbol="↶" text="2 deste + 2 joker: 106 kart. Başlayan oyuncu 14, diğerleri 13 kart alır. Başlayan kart çekmeden oynar. Oyun saat yönünün tersine, dağıtıcının sağından ilerler." />
-          <Rule tablet={isTablet} title="Küt" symbol="777" text="Aynı değerde, farklı türlerden en az üç kart. Örnek: ♥7 ♣7 ♠7" />
-          <Rule tablet={isTablet} title="Seri" symbol="456" text="Aynı türden ardışık en az üç kart. As yalnızca yüksek karttır: Q-K-A olur; A-2-3 ve K-A-2 olmaz." />
-          <Rule tablet={isTablet} title="Joker" symbol="★" text="İstenen kartın yerine geçer. İlk beş elin açılış görevinde kullanılamaz. Elini açtıktan sonra yerdeki jokerin tam karşılık kartını koyup jokeri eline alabilirsin. Seride aynı sembol ve eksik değer gerekir; kütte aynı değerin eksik sembollerinden biri gerekir." />
-          <Rule tablet={isTablet} title="Çekme ve ceza kartı" symbol="+1" text="Sıranda açık kartı doğrudan alabilirsin. 3 veya daha fazla oyunculu masada desteyi seçersen diğer oyunculara sırayla açık kartı alma hakkı sunulur. Alan kişi açık kartla birlikte desteden 1 ceza kartı alır; sonra senin kapalı kartın çekilir. Birden fazla isteyen varsa oyun yönündeki sıra önceliklidir. Çevrim içi odada her karar için 8 saniye vardır; yanıt yoksa pas geçilir. İki kişilik oyunda bu teklif aşaması atlanır. Kapalı deste ilk kez tükenince eski açık kartlar karıştırılır; ikinci kez tükenirse el çıkmaz biter ve elde kalan kartlar ceza yazılır." />
-          <Rule tablet={isTablet} title="Açılış ve işleme" symbol="↓" text="İlk açılış yalnızca o elin görevinden oluşur. Aynı turda ek grup açamaz veya masaya kart işleyemezsin. Sonraki sıralarında kendi veya diğer oyuncuların gruplarına uygun kart işleyebilir, ek grup açabilirsin." />
-          <Rule tablet={isTablet} title="Bitiş ve final" symbol="12" text="Son kartını kapalı atarak bitersin. 12. elde önceden açmak yok: bütün elini gruplara ayır, bir bitiş kartı bırak ve Elden bit düğmesine bas. Açma ve bitiş tek hamlede gerçekleşir." />
+          <Rule tablet={isTablet} title={t("Dağıtım ve yön")} symbol="↶" text={t("2 deste + 2 joker: 106 kart. Başlayan oyuncu 14, diğerleri 13 kart alır. Başlayan kart çekmeden oynar. Oyun saat yönünün tersine, dağıtıcının sağından ilerler.")} />
+          <Rule tablet={isTablet} title={t("Küt")} symbol="777" text={t("Aynı değerde, farklı türlerden en az üç kart. Örnek: ♥7 ♣7 ♠7")} />
+          <Rule tablet={isTablet} title={t("Seri")} symbol="456" text={t("Aynı türden ardışık en az üç kart. As yalnızca yüksek karttır: Q-K-A olur; A-2-3 ve K-A-2 olmaz.")} />
+          <Rule tablet={isTablet} title={t("Joker")} symbol="★" text={t("İstenen kartın yerine geçer. İlk beş elin açılış görevinde kullanılamaz. Elini açtıktan sonra yerdeki jokerin tam karşılık kartını koyup jokeri eline alabilirsin. Seride aynı sembol ve eksik değer gerekir; kütte aynı değerin eksik sembollerinden biri gerekir.")} />
+          <Rule tablet={isTablet} title={t("Çekme ve ceza kartı")} symbol="+1" text={t("Sıranda açık kartı doğrudan alabilirsin. 3 veya daha fazla oyunculu masada desteyi seçersen diğer oyunculara sırayla açık kartı alma hakkı sunulur. Alan kişi açık kartla birlikte desteden 1 ceza kartı alır; sonra senin kapalı kartın çekilir. Birden fazla isteyen varsa oyun yönündeki sıra önceliklidir. Çevrim içi odada her karar için 8 saniye vardır; yanıt yoksa pas geçilir. İki kişilik oyunda bu teklif aşaması atlanır. Kapalı deste ilk kez tükenince eski açık kartlar karıştırılır; ikinci kez tükenirse el çıkmaz biter ve elde kalan kartlar ceza yazılır.")} />
+          <Rule tablet={isTablet} title={t("Açılış ve işleme")} symbol="↓" text={t("İlk açılış yalnızca o elin görevinden oluşur. Aynı turda ek grup açamaz veya masaya kart işleyemezsin. Sonraki sıralarında kendi veya diğer oyuncuların gruplarına uygun kart işleyebilir, ek grup açabilirsin.")} />
+          <Rule tablet={isTablet} title={t("Bitiş ve final")} symbol="12" text={t("Son kartını kapalı atarak bitersin. 12. elde önceden açmak yok: bütün elini gruplara ayır, bir bitiş kartı bırak ve Elden bit düğmesine bas. Açma ve bitiş tek hamlede gerçekleşir.")} />
         </View>
 
         <View style={[styles.referenceGrid, isTablet && styles.referenceGridTablet]}>
           <View style={styles.referenceColumn}>
-            <Text style={styles.sectionTitle}>12 EL</Text>
+            <Text style={styles.sectionTitle}>{t("12 EL")}</Text>
             <View style={styles.roundList}>
               {ROUND_CONTRACTS.map((round, index) => (
-                <View key={round.title} style={styles.roundRow}>
+                <View key={t(round.title)} style={styles.roundRow}>
                   <Text style={styles.roundNumber}>{String(index + 1).padStart(2, '0')}</Text>
-                  <Text style={styles.roundTitle}>{round.title}</Text>
+                  <Text style={styles.roundTitle}>{t(round.title)}</Text>
                 </View>
               ))}
             </View>
           </View>
           <View style={styles.referenceColumn}>
-            <Text style={styles.sectionTitle}>PUANLAMA</Text>
+            <Text style={styles.sectionTitle}>{t("PUANLAMA")}</Text>
             <View style={styles.points}>
-              <Point label="2–10" value="Kart değeri" />
-              <Point label="J · Q · K" value="10 puan" />
-              <Point label="As" value="11 puan" />
-              <Point label="Joker" value="25 puan" />
+              <Point label="2–10" value={t("Kart değeri")} />
+              <Point label="J · Q · K" value={t("10 puan")} />
+              <Point label={t("As")} value={t("11 puan")} />
+              <Point label={t("Joker")} value={t("25 puan")} />
             </View>
-            <Text style={styles.note}>Her el sonunda elde kalan kartlar ceza puanıdır. Hiç açamayanlara da yalnızca ellerindeki kartların toplamı yazılır; ek sabit ceza yoktur. 12 el sonunda en düşük toplam puan kazanır.</Text>
+            <Text style={styles.note}>{t("Her el sonunda elde kalan kartlar ceza puanıdır. Hiç açamayanlara da yalnızca ellerindeki kartların toplamı yazılır; ek sabit ceza yoktur. 12 el sonunda en düşük toplam puan kazanır.")}</Text>
           </View>
         </View>
       </ScrollView>

@@ -1,9 +1,11 @@
+import { useTranslations } from '@/i18n/language';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
 import { palette as p } from '@/constants/palette';
 import { ROUND_CONTRACTS } from '@/game/contracts';
 
 export function RoundIntro({ roundIndex, contractIndex = roundIndex, roundCount = 12, starterName, jokerRestricted = contractIndex < 5, mode = 'detailed', enabled = true }: { roundIndex: number; contractIndex?: number; roundCount?: number; starterName: string; jokerRestricted?: boolean; mode?: 'short' | 'detailed' | 'off'; enabled?: boolean }) {
+  const { t } = useTranslations();
   const [progress] = useState(() => new Animated.Value(0));
   const lastShownRound = useRef<number | null>(null);
   const contract = ROUND_CONTRACTS[contractIndex];
@@ -30,7 +32,7 @@ export function RoundIntro({ roundIndex, contractIndex = roundIndex, roundCount 
 
   if (!contract) return null;
   if (mode === 'off') return null;
-  const note = contract.final ? 'Bütün elini tek seferde aç' : jokerRestricted ? 'Açılışta Joker kullanılamaz' : 'Açılışta Joker kullanılabilir';
+  const note = contract.final ? t("Bütün elini tek seferde aç") : jokerRestricted ? t("Açılışta Joker kullanılamaz") : t("Açılışta Joker kullanılabilir");
   return <Animated.View style={[s.overlay, {
     opacity: progress,
     transform: [
@@ -39,10 +41,10 @@ export function RoundIntro({ roundIndex, contractIndex = roundIndex, roundCount 
     ],
   }]}>
     <View style={s.rule} />
-    <Text style={s.eyebrow}>YENİ EL</Text>
+    <Text style={s.eyebrow}>{t("YENİ EL")}</Text>
     <Text style={s.number}>{String(roundIndex + 1).padStart(2, '0')} <Text style={s.of}>/ {roundCount}</Text></Text>
-    <Text style={s.contract}>{contract.title}</Text>
-    {mode === 'detailed' && <View style={s.details}><Text style={s.detail}>Başlayan · {starterName}</Text><Text style={s.dot}>◆</Text><Text style={s.detail}>{note}</Text></View>}
+    <Text style={s.contract}>{t(contract.title)}</Text>
+    {mode === 'detailed' && <View style={s.details}><Text style={s.detail}>{t("Başlayan ·")} {starterName}</Text><Text style={s.dot}>◆</Text><Text style={s.detail}>{note}</Text></View>}
     <View style={s.rule} />
   </Animated.View>;
 }

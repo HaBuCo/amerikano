@@ -1,3 +1,4 @@
+import { useTranslations } from '@/i18n/language';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -8,17 +9,18 @@ import { palette } from '@/constants/palette';
 import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
 
 export default function SetupScreen() {
+  const { t } = useTranslations();
   const { isTablet } = useResponsiveLayout();
-  const [names, setNames] = useState(['Oyuncu 1', 'Oyuncu 2', 'Oyuncu 3', 'Oyuncu 4']);
+  const [names, setNames] = useState([t("Oyuncu 1"), t("Oyuncu 2"), t("Oyuncu 3"), t("Oyuncu 4")]);
 
   function resizePlayers(count: number) {
     setNames((current) =>
-      Array.from({ length: count }, (_, i) => current[i] ?? `Oyuncu ${i + 1}`),
+      Array.from({ length: count }, (_, i) => current[i] ?? t("Oyuncu {0}", [i + 1])),
     );
   }
 
   function start() {
-    const cleanNames = names.map((name, index) => name.trim().replaceAll('|', '') || `Oyuncu ${index + 1}`);
+    const cleanNames = names.map((name, index) => name.trim().replaceAll('|', '') || t("Oyuncu {0}", [index + 1]));
     router.push({ pathname: '/game', params: { players: cleanNames.join('|'), mode: 'local' } });
   }
 
@@ -26,9 +28,9 @@ export default function SetupScreen() {
     <SafeAreaView edges={['bottom']} style={styles.safeArea}>
       <View style={styles.flex}>
         <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={[styles.content, isTablet && styles.contentTablet]} keyboardShouldPersistTaps="handled">
-          <Text style={styles.eyebrow}>OYUNCULAR</Text>
-          <Text style={styles.title}>Masada kimler var?</Text>
-          <Text style={styles.description}>Telefon her tur sıradaki oyuncuya geçecek. Elini göstermeden önce yalnız olduğundan emin ol.</Text>
+          <Text style={styles.eyebrow}>{t("OYUNCULAR")}</Text>
+          <Text style={styles.title}>{t("Masada kimler var?")}</Text>
+          <Text style={styles.description}>{t("Telefon her tur sıradaki oyuncuya geçecek. Elini göstermeden önce yalnız olduğundan emin ol.")}</Text>
 
           <View style={styles.counter}>
             {[3, 4, 5, 6].map((count) => (
@@ -46,11 +48,11 @@ export default function SetupScreen() {
               <View key={index} style={[styles.inputRow, isTablet && styles.inputRowTablet]}>
                 <View style={styles.number}><Text style={styles.numberText}>{index + 1}</Text></View>
                 <TextInput
-                  accessibilityLabel={`${index + 1}. oyuncunun adı`}
+                  accessibilityLabel={t("{0}. oyuncunun adı", [index + 1])}
                   autoCapitalize="words"
                   maxLength={18}
                   onChangeText={(value) => setNames((current) => current.map((item, itemIndex) => itemIndex === index ? value : item))}
-                  placeholder="Oyuncu adı"
+                  placeholder={t("Oyuncu adı")}
                   placeholderTextColor="#809487"
                   returnKeyType="done"
                   style={styles.input}
@@ -63,15 +65,15 @@ export default function SetupScreen() {
           <View style={styles.infoCard}>
             <Text style={styles.infoIcon}>♠</Text>
             <View style={styles.infoCopy}>
-              <Text style={styles.infoTitle}>12 el · yaklaşık 45–90 dk.</Text>
-              <Text style={styles.infoText}>İki deste, 2 joker ve yaygın puanlama sistemi kullanılır.</Text>
+              <Text style={styles.infoTitle}>{t("12 el · yaklaşık 45–90 dk.")}</Text>
+              <Text style={styles.infoText}>{t("İki deste, 2 joker ve yaygın puanlama sistemi kullanılır.")}</Text>
             </View>
           </View>
         </KeyboardAwareScrollView>
 
         <View style={styles.bottomBar}>
           <Pressable onPress={start} style={({ pressed }) => [styles.startButton, isTablet && styles.startButtonTablet, pressed && styles.pressed]}>
-            <Text style={styles.startText}>Masayı Kur</Text><Text style={styles.arrow}>→</Text>
+            <Text style={styles.startText}>{t("Masayı Kur")}</Text><Text style={styles.arrow}>→</Text>
           </Pressable>
         </View>
       </View>

@@ -1,3 +1,5 @@
+import { useTranslations, type Translator } from '@/i18n/language';
+import { LanguagePicker } from '@/components/language-picker';
 import { useEffect, useState } from 'react';
 import { Href, router } from 'expo-router';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -21,14 +23,15 @@ const sampleCards: Card[] = [
   { id: 'hero-3', rank: 'A', suit: 'spades', isJoker: false },
 ];
 
-function greetingFor(hour: number) {
-  if (hour < 6) return { eyebrow: 'GECE MASASI', title: 'Geceye bir el daha yakışır.', note: 'Deste hazır, rakipler masada.' };
-  if (hour < 12) return { eyebrow: 'GÜNÜN İLK ELİ', title: 'Günaydın. İlk el senden.', note: 'Güne sakin bir masayla başla.' };
-  if (hour < 18) return { eyebrow: 'OYUN MOLASI', title: 'Kısa bir mola, güzel bir el.', note: 'Rakiplerini seç, kartlarını hazırla.' };
-  return { eyebrow: 'AKŞAM MASASI', title: 'Akşamın masası seni bekliyor.', note: 'Kartlar dağıtılsın, oyun başlasın.' };
+function greetingFor(hour: number, t: Translator) {
+  if (hour < 6) return { eyebrow: t("GECE MASASI"), title: t("Geceye bir el daha yakışır."), note: t("Deste hazır, rakipler masada.") };
+  if (hour < 12) return { eyebrow: t("GÜNÜN İLK ELİ"), title: t("Günaydın. İlk el senden."), note: t("Güne sakin bir masayla başla.") };
+  if (hour < 18) return { eyebrow: t("OYUN MOLASI"), title: t("Kısa bir mola, güzel bir el."), note: t("Rakiplerini seç, kartlarını hazırla.") };
+  return { eyebrow: t("AKŞAM MASASI"), title: t("Akşamın masası seni bekliyor."), note: t("Kartlar dağıtılsın, oyun başlasın.") };
 }
 
 export default function HomeScreen() {
+  const { t } = useTranslations();
   const auth = useAuth();
   const { isTablet, isWideTablet } = useResponsiveLayout();
   const [accountOpenFor, setAccountOpenFor] = useState<'anonymous' | 'signed-in' | null>(null);
@@ -44,8 +47,8 @@ export default function HomeScreen() {
   if (auth.status === 'loading') return <LoadingScreen />;
   if (auth.status === 'signed-out' || auth.recovery) return <EntryScreen />;
 
-  const greeting = greetingFor(new Date().getHours());
-  const accountLabel = auth.status === 'signed-in' ? firstName(auth.user?.user_metadata?.full_name || auth.user?.email) : 'Misafir';
+  const greeting = greetingFor(new Date().getHours(), t);
+  const accountLabel = auth.status === 'signed-in' ? firstName(auth.user?.user_metadata?.full_name || auth.user?.email, t) : t("Misafir");
 
   return <SafeAreaView style={s.page}>
     <ScrollView contentContainerStyle={[s.homeContent, isTablet && s.homeContentTablet]} showsVerticalScrollIndicator={false}>
@@ -64,53 +67,53 @@ export default function HomeScreen() {
       <View style={[s.dashboard, isWideTablet && s.dashboardWide]}>
         <View style={s.dashboardColumn}>
           <RemoveAdsCard compact />
-          <Text style={s.sectionLabel}>NASIL OYNAMAK İSTERSİN?</Text>
+          <Text style={s.sectionLabel}>{t("NASIL OYNAMAK İSTERSİN?")}</Text>
           <Pressable accessibilityRole="button" onPress={() => router.push('/game?mode=single' as Href)} style={({ pressed }) => [s.featureButton, pressed && s.pressed]}>
-            <View style={s.buttonCopy}><View style={s.titleLine}><Text style={s.featureTitle}>Tek oyunculu</Text><View style={s.offlineBadge}><Text style={s.offlineText}>ÇEVRİMDIŞI</Text></View></View><Text style={s.featureCaption}>Kaldığın oyuna devam et veya yeni masa kur</Text></View>
+            <View style={s.buttonCopy}><View style={s.titleLine}><Text style={s.featureTitle}>{t("Tek oyunculu")}</Text><View style={s.offlineBadge}><Text style={s.offlineText}>{t("ÇEVRİMDIŞI")}</Text></View></View><Text style={s.featureCaption}>{t("Kaldığın oyuna devam et veya yeni masa kur")}</Text></View>
           </Pressable>
 
           <View style={s.playGrid}>
             <Pressable accessibilityRole="button" onPress={() => router.push('/online?quick=1')} style={({ pressed }) => [s.playCard, s.quickCard, pressed && s.pressed]}>
-              <Text style={s.playEyebrowDark}>HIZLI EŞLEŞME</Text>
-              <Text style={s.playTitleDark}>Hemen oyna</Text>
-              <Text style={s.playCaptionDark}>Uygun çevrim içi masaya otomatik katıl</Text>
+              <Text style={s.playEyebrowDark}>{t("HIZLI EŞLEŞME")}</Text>
+              <Text style={s.playTitleDark}>{t("Hemen oyna")}</Text>
+              <Text style={s.playCaptionDark}>{t("Uygun çevrim içi masaya otomatik katıl")}</Text>
             </Pressable>
             <Pressable accessibilityRole="button" onPress={() => router.push('/online')} style={({ pressed }) => [s.playCard, pressed && s.pressed]}>
-              <Text style={s.playEyebrow}>ARKADAŞLARINLA</Text>
-              <Text style={s.playTitle}>Özel masa</Text>
-              <Text style={s.playCaption}>Masa kur, kodla katıl veya arkadaşını çağır</Text>
+              <Text style={s.playEyebrow}>{t("ARKADAŞLARINLA")}</Text>
+              <Text style={s.playTitle}>{t("Özel masa")}</Text>
+              <Text style={s.playCaption}>{t("Masa kur, kodla katıl veya arkadaşını çağır")}</Text>
             </Pressable>
           </View>
         </View>
 
         <View style={s.dashboardColumn}>
           <View style={s.utilityCard}>
-            <MenuLink label="Arkadaşlar" detail={social.invites.length > 0 ? `${social.invites.length} masa daveti bekliyor` : 'Oyuncu ara ve ekle'} badge={social.invites.length} onPress={() => router.push('/friends' as Href)} />
+            <MenuLink label={t("Arkadaşlar")} detail={social.invites.length > 0 ? t("{0} masa daveti bekliyor", [social.invites.length]) : t("Oyuncu ara ve ekle")} badge={social.invites.length} onPress={() => router.push('/friends' as Href)} />
             <View style={s.utilityLine} />
-            <MenuLink label="İstatistiklerim" detail="Kariyerini ve rekorlarını gör" onPress={() => router.push('/stats' as Href)} />
+            <MenuLink label={t("İstatistiklerim")} detail={t("Kariyerini ve rekorlarını gör")} onPress={() => router.push('/stats' as Href)} />
             <View style={s.utilityLine} />
-            <MenuLink label="Aynı cihazda" detail="Yan yana oyna" onPress={() => router.push('/setup')} />
+            <MenuLink label={t("Aynı cihazda")} detail={t("Yan yana oyna")} onPress={() => router.push('/setup')} />
             <View style={s.utilityLine} />
-            <MenuLink label="Nasıl oynanır?" detail="Kurallara göz at" onPress={() => router.push('/rules')} />
+            <MenuLink label={t("Nasıl oynanır?")} detail={t("Kurallara göz at")} onPress={() => router.push('/rules')} />
             <View style={s.utilityLine} />
-            <MenuLink label="Ayarlar" detail="Oyun, hesap ve gizlilik" onPress={() => router.push('/settings' as Href)} />
+            <MenuLink label={t("Ayarlar")} detail={t("Oyun, hesap ve gizlilik")} onPress={() => router.push('/settings' as Href)} />
           </View>
 
           {auth.status === 'anonymous' && <Pressable accessibilityRole="button" onPress={() => setAccountOpenFor('anonymous')} style={s.guestNotice}>
-            <View><Text style={s.guestNoticeTitle}>Misafir olarak oynuyorsun</Text><Text style={s.guestNoticeText}>İlerlemeni korumak için ücretsiz hesap oluşturabilirsin.</Text></View>
-            <Text style={s.guestNoticeAction}>KAYDET</Text>
+            <View><Text style={s.guestNoticeTitle}>{t("Misafir olarak oynuyorsun")}</Text><Text style={s.guestNoticeText}>{t("İlerlemeni korumak için ücretsiz hesap oluşturabilirsin.")}</Text></View>
+            <Text style={s.guestNoticeAction}>{t("KAYDET")}</Text>
           </Pressable>}
         </View>
       </View>
 
-      <Text style={s.footer}>AMERİKANO · 12 EL · KLASİK KURALLAR</Text>
+      <Text style={s.footer}>{t("AMERİKANO · 12 EL · KLASİK KURALLAR")}</Text>
     </ScrollView>
 
     <AdBanner />
 
     <Modal visible={accountOpenFor !== null && !(accountOpenFor === 'anonymous' && auth.status === 'signed-in')} transparent animationType="slide" onRequestClose={() => setAccountOpenFor(null)}>
       <View style={[s.modalRoot, isTablet && s.modalRootTablet]}>
-        <Pressable accessibilityLabel="Hesap penceresini kapat" style={s.modalBackdrop} onPress={() => setAccountOpenFor(null)} />
+        <Pressable accessibilityLabel={t("Hesap penceresini kapat")} style={s.modalBackdrop} onPress={() => setAccountOpenFor(null)} />
         <View style={[s.sheet, isTablet && s.sheetTablet]}><View style={s.sheetHandle} /><KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}><AuthPanel onClose={() => setAccountOpenFor(null)} /></KeyboardAwareScrollView></View>
       </View>
     </Modal>
@@ -118,31 +121,35 @@ export default function HomeScreen() {
 }
 
 function EntryScreen() {
+  const { t } = useTranslations();
   const { isTabletLandscape } = useResponsiveLayout();
   return <SafeAreaView style={s.page}>
     <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={[s.entryContent, isTabletLandscape && s.entryContentWide]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-      <View style={s.entryBrand}><Text style={s.brand}>AMERİKANO</Text></View>
+      <View style={s.entryBrand}><Text style={s.brand}>{t("AMERİKANO")}</Text></View>
+      <LanguagePicker />
       <View style={[s.entryBody, isTabletLandscape && s.entryBodyWide]}>
         <View style={[s.entryHero, isTabletLandscape && s.entryHeroWide]}>
           <CardFan />
-          <Text style={s.entryKicker}>KLASİK OYUN · YENİ MASA</Text>
-          <Text style={s.entryTitle}>Kartlar hazır.{`\n`}Masadaki yerin belli.</Text>
-          <Text style={s.entrySubtitle}>Hesabınla devam et veya misafir olarak hemen oyuna katıl.</Text>
+          <Text style={s.entryKicker}>{t("KLASİK OYUN · YENİ MASA")}</Text>
+          <Text style={s.entryTitle}>{t("Kartlar hazır.")}{`\n`}{t("Masadaki yerin belli.")}</Text>
+          <Text style={s.entrySubtitle}>{t("Hesabınla devam et veya misafir olarak hemen oyuna katıl.")}</Text>
         </View>
         <View style={[s.authCard, isTabletLandscape && s.authCardWide]}><AuthPanel entry /></View>
       </View>
-      <Text style={s.privacyNote}>Devam ederek oyun verilerinin cihazında ve güvenli sunucularda saklanmasını kabul edersin.</Text>
+      <Text style={s.privacyNote}>{t("Devam ederek oyun verilerinin cihazında ve güvenli sunucularda saklanmasını kabul edersin.")}</Text>
     </KeyboardAwareScrollView>
   </SafeAreaView>;
 }
 
 function LoadingScreen() {
-  return <SafeAreaView style={[s.page, s.loading]}><Text style={s.loadingBrand}>AMERİKANO</Text><Text style={s.loadingText}>Masa hazırlanıyor…</Text></SafeAreaView>;
+  const { t } = useTranslations();
+  return <SafeAreaView style={[s.page, s.loading]}><Text style={s.loadingBrand}>{t("AMERİKANO")}</Text><Text style={s.loadingText}>{t("Masa hazırlanıyor…")}</Text></SafeAreaView>;
 }
 
 function BrandHeader({ accountLabel, onAccount }: { accountLabel: string; onAccount: () => void }) {
+  const { t } = useTranslations();
   return <View style={s.brandRow}>
-    <View style={s.brandLockup}><View><Text style={s.brand}>AMERİKANO</Text><Text style={s.brandSub}>KLASİK KART OYUNU</Text></View></View>
+    <View style={s.brandLockup}><View><Text style={s.brand}>{t("AMERİKANO")}</Text><Text style={s.brandSub}>{t("KLASİK KART OYUNU")}</Text></View></View>
     <Pressable accessibilityRole="button" onPress={onAccount} style={s.accountChip}><Text numberOfLines={1} style={s.accountText}>{accountLabel}</Text></Pressable>
   </View>;
 }
@@ -167,8 +174,8 @@ function MenuLink({ label, detail, badge, onPress }: { label: string; detail: st
   </Pressable>;
 }
 
-function firstName(value: unknown) {
-  return String(value || 'Hesabım').trim().split(/\s+/)[0].slice(0, 14);
+function firstName(value: unknown, t: Translator) {
+  return String(value || t("Hesabım")).trim().split(/\s+/)[0].slice(0, 14);
 }
 
 const s = StyleSheet.create({

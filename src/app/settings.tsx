@@ -1,3 +1,4 @@
+import { useTranslations } from '@/i18n/language';
 import { useEffect, useState } from 'react';
 import { Href, router, Stack } from 'expo-router';
 import * as Linking from 'expo-linking';
@@ -15,6 +16,7 @@ import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
 import { useAuth } from '@/network/auth';
 import { useGameSettings } from '@/settings/game-settings';
 import { RemoveAdsCard } from '@/components/remove-ads-card';
+import { LanguagePicker } from '@/components/language-picker';
 
 function SettingRow({ label, detail, value, onPress }: { label: string; detail: string; value: boolean; onPress: () => void }) {
   return <Pressable accessibilityRole="switch" accessibilityState={{ checked: value }} onPress={onPress} style={s.row}>
@@ -24,13 +26,15 @@ function SettingRow({ label, detail, value, onPress }: { label: string; detail: 
 }
 
 function LinkRow({ label, detail, url }: { label: string; detail: string; url: string }) {
+  const { t } = useTranslations();
   return <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(url)} style={s.row}>
     <View style={s.rowCopy}><Text style={s.rowTitle}>{label}</Text><Text style={s.rowDetail}>{detail}</Text></View>
-    <Text style={s.openText}>Aç</Text>
+    <Text style={s.openText}>{t("Aç")}</Text>
   </Pressable>;
 }
 
 export default function SettingsScreen() {
+  const { t } = useTranslations();
   const { isTablet } = useResponsiveLayout();
   const auth = useAuth();
   const { enabled: soundEnabled, toggle: toggleSound } = useGameSounds();
@@ -48,58 +52,65 @@ export default function SettingsScreen() {
   return <SafeAreaView style={s.page}>
     <Stack.Screen options={{ headerShown: false }} />
     <KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled" contentContainerStyle={[s.content, isTablet && s.contentTablet]} showsVerticalScrollIndicator={false}>
-      <Pressable accessibilityRole="button" onPress={() => router.back()} style={s.backButton}><Text style={s.backText}>Geri</Text></Pressable>
-      <Text style={s.eyebrow}>AYARLAR</Text>
-      <Text style={s.title}>Oyun sana uysun.</Text>
-      <Text style={s.body}>Ses, titreşim, oyun yardımları, hesap ve yasal belgeler tek yerde.</Text>
+      <Pressable accessibilityRole="button" onPress={() => router.back()} style={s.backButton}><Text style={s.backText}>{t("Geri")}</Text></Pressable>
+      <Text style={s.eyebrow}>{t("AYARLAR")}</Text>
+      <Text style={s.title}>{t("Oyun sana uysun.")}</Text>
+      <Text style={s.body}>{t("Ses, titreşim, oyun yardımları, hesap ve yasal belgeler tek yerde.")}</Text>
 
       <View style={s.profileCard}>
         <Pressable accessibilityRole="button" onPress={() => router.push('/profile' as Href)} style={s.row}>
-          <View style={s.rowCopy}><Text style={s.rowTitle}>Profilim</Text><Text style={s.rowDetail}>Kullanıcı adını ve avatarını düzenle</Text></View>
-          <Text style={s.openText}>Aç</Text>
+          <View style={s.rowCopy}><Text style={s.rowTitle}>{t("Profilim")}</Text><Text style={s.rowDetail}>{t("Kullanıcı adını ve avatarını düzenle")}</Text></View>
+          <Text style={s.openText}>{t("Aç")}</Text>
         </Pressable>
       </View>
 
       <RemoveAdsCard />
 
+      <View style={s.card}>
+        <View style={s.row}>
+          <View style={s.rowCopy}><Text style={s.rowTitle}>{t('Dil')}</Text><Text style={s.rowDetail}>{t('Oyun dilini seç. Tercihin bu cihazda saklanır.')}</Text></View>
+          <LanguagePicker />
+        </View>
+      </View>
+
       <View style={[s.settingsGrid, isTablet && s.settingsGridTablet]}>
         <View style={s.settingsColumn}>
-          <Text style={s.sectionTitle}>OYUN</Text>
+          <Text style={s.sectionTitle}>{t("OYUN")}</Text>
           <View style={s.card}>
-            <SettingRow label="Ses efektleri" detail="Kart ve masa seslerini açar." value={soundEnabled} onPress={() => { toggleSound(); feedback(); }} />
-            <SettingRow label="Titreşim" detail="Dokunuşlarda geri bildirim verir." value={settings.haptics} onPress={() => updateSettings({ haptics: !settings.haptics })} />
-            <SettingRow label="Süre uyarısı" detail="Son 10 saniyede uyarır." value={settings.criticalTimer} onPress={() => { feedback(); updateSettings({ criticalTimer: !settings.criticalTimer }); }} />
-            <SettingRow label="Küçük kartlar" detail="Kalabalık elleri daha sıkı gösterir." value={settings.compactCards} onPress={() => { feedback(); updateSettings({ compactCards: !settings.compactCards }); }} />
-            <SettingRow label="Sürükleme ipuçları" detail="Uygun bırakma alanlarını vurgular." value={settings.dragHints} onPress={() => { feedback(); updateSettings({ dragHints: !settings.dragHints }); }} />
-            <SettingRow label="Tepkiler" detail="Diğer oyuncuların gönderdiği emoji ve hazır yazıları gösterir." value={settings.showReactions} onPress={() => { feedback(); updateSettings({ showReactions: !settings.showReactions }); }} />
+            <SettingRow label={t("Ses efektleri")} detail={t("Kart ve masa seslerini açar.")} value={soundEnabled} onPress={() => { toggleSound(); feedback(); }} />
+            <SettingRow label={t("Titreşim")} detail={t("Dokunuşlarda geri bildirim verir.")} value={settings.haptics} onPress={() => updateSettings({ haptics: !settings.haptics })} />
+            <SettingRow label={t("Süre uyarısı")} detail={t("Son 10 saniyede uyarır.")} value={settings.criticalTimer} onPress={() => { feedback(); updateSettings({ criticalTimer: !settings.criticalTimer }); }} />
+            <SettingRow label={t("Küçük kartlar")} detail={t("Kalabalık elleri daha sıkı gösterir.")} value={settings.compactCards} onPress={() => { feedback(); updateSettings({ compactCards: !settings.compactCards }); }} />
+            <SettingRow label={t("Sürükleme ipuçları")} detail={t("Uygun bırakma alanlarını vurgular.")} value={settings.dragHints} onPress={() => { feedback(); updateSettings({ dragHints: !settings.dragHints }); }} />
+            <SettingRow label={t("Tepkiler")} detail={t("Diğer oyuncuların gönderdiği emoji ve hazır yazıları gösterir.")} value={settings.showReactions} onPress={() => { feedback(); updateSettings({ showReactions: !settings.showReactions }); }} />
           </View>
         </View>
 
         <View style={s.settingsColumn}>
-          <Text style={s.sectionTitle}>YASAL VE GİZLİLİK</Text>
+          <Text style={s.sectionTitle}>{t("YASAL VE GİZLİLİK")}</Text>
           <View style={s.card}>
-            <LinkRow label="Gizlilik politikası" detail="Toplanan veriler ve kullanım amaçları" url={PRIVACY_POLICY_URL} />
-            <LinkRow label={TERMS_LABEL} detail={TERMS_LABEL === 'Apple Standart EULA' ? 'iOS lisans koşulları' : 'Android uygulama koşulları'} url={TERMS_URL} />
+            <LinkRow label={t("Gizlilik politikası")} detail={t("Toplanan veriler ve kullanım amaçları")} url={PRIVACY_POLICY_URL} />
+            <LinkRow label={TERMS_LABEL} detail={TERMS_LABEL === 'Apple Standart EULA' ? t("iOS lisans koşulları") : t("Android uygulama koşulları")} url={TERMS_URL} />
             {adsPrivacyRequired && <Pressable accessibilityRole="button" onPress={() => void manageAdsPrivacyChoices()} style={s.row}>
-              <View style={s.rowCopy}><Text style={s.rowTitle}>Reklam tercihlerini yönet</Text><Text style={s.rowDetail}>Kişiselleştirilmiş reklam rızanı gözden geçir</Text></View>
-              <Text style={s.openText}>Aç</Text>
+              <View style={s.rowCopy}><Text style={s.rowTitle}>{t("Reklam tercihlerini yönet")}</Text><Text style={s.rowDetail}>{t("Kişiselleştirilmiş reklam rızanı gözden geçir")}</Text></View>
+              <Text style={s.openText}>{t("Aç")}</Text>
             </Pressable>}
           </View>
         </View>
       </View>
       {(auth.status !== 'signed-in' || auth.recovery) && <Pressable accessibilityRole="button" onPress={() => setAccountOpenFor(accountIdentity)} style={s.primary}>
-        <Text style={s.primaryText}>{auth.recovery ? 'Parolamı yenile' : 'Giriş yap veya kayıt ol'}</Text>
+        <Text style={s.primaryText}>{auth.recovery ? t("Parolamı yenile") : t("Giriş yap veya kayıt ol")}</Text>
       </Pressable>}
       <AccountActions key={auth.user?.id ?? 'signed-out'} />
       <View style={s.deletionLink}>
-        <LinkRow label="Hesap ve veri silme talebi" detail="Uygulama dışından silme talebi gönder" url={DELETE_ACCOUNT_URL} />
+        <LinkRow label={t("Hesap ve veri silme talebi")} detail={t("Uygulama dışından silme talebi gönder")} url={DELETE_ACCOUNT_URL} />
       </View>
-      <Text style={s.footer}>AMERİKANO · SÜRÜM 1.0.0</Text>
+      <Text style={s.footer}>{t("AMERİKANO · SÜRÜM 1.0.0")}</Text>
     </KeyboardAwareScrollView>
 
     <Modal visible={accountOpenFor === accountIdentity && (auth.status !== 'signed-in' || auth.recovery)} transparent animationType="slide" onRequestClose={() => setAccountOpenFor(null)}>
       <View style={[s.modalRoot, isTablet && s.modalRootTablet]}>
-        <Pressable accessibilityLabel="Giriş penceresini kapat" style={s.modalBackdrop} onPress={() => setAccountOpenFor(null)} />
+        <Pressable accessibilityLabel={t("Giriş penceresini kapat")} style={s.modalBackdrop} onPress={() => setAccountOpenFor(null)} />
         <View style={[s.sheet, isTablet && s.sheetTablet]}><View style={s.sheetHandle} /><KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled"><AuthPanel onClose={() => setAccountOpenFor(null)} /></KeyboardAwareScrollView></View>
       </View>
     </Modal>

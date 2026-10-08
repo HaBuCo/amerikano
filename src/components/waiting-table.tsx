@@ -1,3 +1,4 @@
+import { useTranslations } from '@/i18n/language';
 import { useEffect, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import { palette as p } from '@/constants/palette';
@@ -24,20 +25,22 @@ function PulsingDots() {
 type Seat = RoomView['members'][number];
 
 function SeatTile({ seat, isYou, isHost, tileWidth }: { seat: Seat; isYou: boolean; isHost: boolean; tileWidth: number }) {
+  const { t } = useTranslations();
   const avatar = avatarFor(seat.avatarKey);
-  const statusLabel = !seat.connected ? 'Yeniden bağlanıyor' : seat.ready ? '✓ Hazır' : 'Bekleniyor';
+  const statusLabel = !seat.connected ? t("Yeniden bağlanıyor") : seat.ready ? t("✓ Hazır") : t("Bekleniyor");
   return <View style={[s.seat, s.seatFilled, { width: tileWidth }, isYou && s.seatYou]}>
     <View style={[s.seatAvatar, { backgroundColor: avatar.color }]}><Text style={s.seatAvatarText}>{avatar.symbol}</Text></View>
-    <Text numberOfLines={1} style={s.seatName}>{seat.name}{seat.isBot ? ' · BOT' : isHost ? ' ♛' : ''}</Text>
-    <Text numberOfLines={1} style={[s.seatStatus, seat.ready && seat.connected && s.seatStatusReady]}>{isYou ? 'SEN' : statusLabel}</Text>
+    <Text numberOfLines={1} style={s.seatName}>{seat.name}{seat.isBot ? t(" · BOT") : isHost ? ' ♛' : ''}</Text>
+    <Text numberOfLines={1} style={[s.seatStatus, seat.ready && seat.connected && s.seatStatusReady]}>{isYou ? t("SEN") : statusLabel}</Text>
   </View>;
 }
 
 function EmptySeatTile({ searching, tileWidth, onPress }: { searching: boolean; tileWidth: number; onPress?: () => void }) {
+  const { t } = useTranslations();
   const Wrapper = onPress ? Pressable : View;
   return <Wrapper accessibilityRole={onPress ? 'button' : undefined} onPress={onPress} style={[s.seat, s.seatEmpty, { width: tileWidth }]}>
     <View style={s.seatAvatarEmpty} />
-    <Text style={s.seatEmptyLabel}>{searching ? 'Aranıyor' : onPress ? 'Davet et' : 'Boş koltuk'}</Text>
+    <Text style={s.seatEmptyLabel}>{searching ? t("Aranıyor") : onPress ? t("Davet et") : t("Boş koltuk")}</Text>
     {searching && <PulsingDots />}
   </Wrapper>;
 }

@@ -1,3 +1,5 @@
+import { useTranslations } from '@/i18n/language';
+import type { Language } from '@/i18n/translate';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { router, Stack } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -11,6 +13,7 @@ import { refreshPlayerProfile, usePlayerProfile } from '@/network/profile';
 import { fetchPlayerMatchResults } from '@/network/stats';
 
 export default function StatsScreen() {
+  const { t, localizeMessage, language } = useTranslations();
   const { isTablet, isWideTablet } = useResponsiveLayout();
   const profileState = usePlayerProfile();
   const singleState = useSinglePlayerStats();
@@ -47,59 +50,59 @@ export default function StatsScreen() {
   return <SafeAreaView style={s.page}>
     <Stack.Screen options={{ headerShown: false }} />
     <ScrollView contentContainerStyle={[s.content, isTablet && s.contentTablet]} showsVerticalScrollIndicator={false}>
-      <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>← Geri</Text></Pressable>
+      <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>{t("← Geri")}</Text></Pressable>
 
       <View style={s.heading}>
-        <Text style={s.eyebrow}>İSTATİSTİKLERİM</Text>
-        <Text style={s.title}>Masadaki hikâyen.</Text>
-        <Text style={s.body}>Galibiyetlerini, skor rekorlarını ve oynadığın maçları tek yerde takip et.</Text>
+        <Text style={s.eyebrow}>{t("İSTATİSTİKLERİM")}</Text>
+        <Text style={s.title}>{t("Masadaki hikâyen.")}</Text>
+        <Text style={s.body}>{t("Galibiyetlerini, skor rekorlarını ve oynadığın maçları tek yerde takip et.")}</Text>
       </View>
 
       <View style={[s.columns, isWideTablet && s.columnsWide]}>
-        <StatSection title="ÇEVRİM İÇİ KARİYER" subtitle="Hesabındaki bütün çevrim içi maçlar">
+        <StatSection title={t("ÇEVRİM İÇİ KARİYER")} subtitle={t("Hesabındaki bütün çevrim içi maçlar")}>
           <View style={s.grid}>
-            <Metric label="MAÇ" value={online.gamesPlayed} />
-            <Metric label="GALİBİYET" value={online.wins} highlight />
-            <Metric label="MAĞLUBİYET" value={online.losses} />
-            <Metric label="KAZANMA ORANI" value={`%${online.winRate}`} />
+            <Metric label={t("MAÇ")} value={online.gamesPlayed} />
+            <Metric label={t("GALİBİYET")} value={online.wins} highlight />
+            <Metric label={t("MAĞLUBİYET")} value={online.losses} />
+            <Metric label={t("KAZANMA ORANI")} value={`%${online.winRate}`} />
           </View>
         </StatSection>
 
-        <StatSection title="TEK OYUNCULU" subtitle="Bu cihazda botlara karşı oynadığın oyunlar">
+        <StatSection title={t("TEK OYUNCULU")} subtitle={t("Bu cihazda botlara karşı oynadığın oyunlar")}>
           <View style={s.grid}>
-            <Metric label="OYUN" value={single.gamesPlayed} />
-            <Metric label="GALİBİYET" value={single.wins} highlight />
-            <Metric label="MAĞLUBİYET" value={single.losses} />
-            <Metric label="KAZANMA ORANI" value={`%${single.winRate}`} />
-            <Metric label="EN DÜŞÜK SKOR" value={scoreValue(singleState.stats.bestScore)} />
-            <Metric label="ORTALAMA" value={scoreValue(singleAverage)} />
+            <Metric label={t("OYUN")} value={single.gamesPlayed} />
+            <Metric label={t("GALİBİYET")} value={single.wins} highlight />
+            <Metric label={t("MAĞLUBİYET")} value={single.losses} />
+            <Metric label={t("KAZANMA ORANI")} value={`%${single.winRate}`} />
+            <Metric label={t("EN DÜŞÜK SKOR")} value={scoreValue(singleState.stats.bestScore)} />
+            <Metric label={t("ORTALAMA")} value={scoreValue(singleAverage)} />
           </View>
         </StatSection>
       </View>
 
-      <StatSection title="SKOR REKORLARI" subtitle="Çevrim içi bitirdiğin oyunların skor özeti">
+      <StatSection title={t("SKOR REKORLARI")} subtitle={t("Çevrim içi bitirdiğin oyunların skor özeti")}>
         <View style={[s.recordGrid, isTablet && s.recordGridTablet]}>
-          <Record label="EN DÜŞÜK PUANLA BİTİRME" value={scoreValue(detailed.bestScore)} note="Galibiyet şartı olmadan" />
-          <Record label="EN DÜŞÜK GALİBİYET SKORU" value={scoreValue(detailed.bestWinningScore)} note="Kazandığın oyunlar içinde" />
-          <Record label="ORTALAMA BİTİRME SKORU" value={scoreValue(detailed.averageScore)} note={`${detailed.trackedMatches} ayrıntılı maçtan`} />
-          <Record label="İLK 3" value={detailed.podiums} note="Podyumda bitirdiğin maç" />
+          <Record label={t("EN DÜŞÜK PUANLA BİTİRME")} value={scoreValue(detailed.bestScore)} note={t("Galibiyet şartı olmadan")} />
+          <Record label={t("EN DÜŞÜK GALİBİYET SKORU")} value={scoreValue(detailed.bestWinningScore)} note={t("Kazandığın oyunlar içinde")} />
+          <Record label={t("ORTALAMA BİTİRME SKORU")} value={scoreValue(detailed.averageScore)} note={t("{0} ayrıntılı maçtan", [detailed.trackedMatches])} />
+          <Record label={t("İLK 3")} value={detailed.podiums} note={t("Podyumda bitirdiğin maç")} />
         </View>
         {!historyAvailable
-          ? <Text style={s.info}>Ayrıntılı skor takibi sunucu güncellemesi yayımlandığında başlayacak. Eski maç ve galibiyet toplamların korunuyor.</Text>
-          : detailed.trackedMatches === 0 && <Text style={s.info}>Henüz ayrıntılı skor kaydın yok. Bundan sonraki çevrim içi maçların burada görünecek.</Text>}
+          ? <Text style={s.info}>{t("Ayrıntılı skor takibi sunucu güncellemesi yayımlandığında başlayacak. Eski maç ve galibiyet toplamların korunuyor.")}</Text>
+          : detailed.trackedMatches === 0 && <Text style={s.info}>{t("Henüz ayrıntılı skor kaydın yok. Bundan sonraki çevrim içi maçların burada görünecek.")}</Text>}
       </StatSection>
 
-      <StatSection title="SON MAÇLAR" subtitle="En yeni çevrim içi sonuçların">
+      <StatSection title={t("SON MAÇLAR")} subtitle={t("En yeni çevrim içi sonuçların")}>
         {history.slice(0, 8).map(result => <View key={result.id ?? `${result.createdAt}-${result.score}`} style={s.matchRow}>
           <View style={s.matchPlace}><Text style={s.matchPlaceValue}>{result.place}.</Text><Text style={s.matchPlaceTotal}>/{result.playerCount}</Text></View>
-          <View style={s.matchCopy}><Text style={result.won ? s.win : s.loss}>{result.won ? 'GALİBİYET' : 'MAĞLUBİYET'}</Text><Text style={s.matchDate}>{formatDate(result.createdAt)}</Text></View>
-          <View><Text style={s.matchScore}>{result.score}</Text><Text style={s.matchScoreLabel}>PUAN</Text></View>
+          <View style={s.matchCopy}><Text style={result.won ? s.win : s.loss}>{result.won ? t("GALİBİYET") : t("MAĞLUBİYET")}</Text><Text style={s.matchDate}>{formatDate(result.createdAt, language)}</Text></View>
+          <View><Text style={s.matchScore}>{result.score}</Text><Text style={s.matchScoreLabel}>{t("PUAN")}</Text></View>
         </View>)}
-        {!history.length && <Text style={s.empty}>{loading ? 'İstatistiklerin hazırlanıyor…' : 'Oynadığın çevrim içi maçlar burada sıralanacak.'}</Text>}
+        {!history.length && <Text style={s.empty}>{loading ? t("İstatistiklerin hazırlanıyor…") : t("Oynadığın çevrim içi maçlar burada sıralanacak.")}</Text>}
       </StatSection>
 
-      {!!error && <View style={s.errorBox}><Text style={s.error}>{error}</Text><Pressable accessibilityRole="button" onPress={() => void load()}><Text style={s.retry}>YENİDEN DENE</Text></Pressable></View>}
-      <Text style={s.footer}>Beraberlikte en düşük skoru paylaşan oyuncuların tümü galip sayılır.</Text>
+      {!!error && <View style={s.errorBox}><Text style={s.error}>{localizeMessage(error)}</Text><Pressable accessibilityRole="button" onPress={() => void load()}><Text style={s.retry}>{t("YENİDEN DENE")}</Text></Pressable></View>}
+      <Text style={s.footer}>{t("Beraberlikte en düşük skoru paylaşan oyuncuların tümü galip sayılır.")}</Text>
     </ScrollView>
   </SafeAreaView>;
 }
@@ -120,9 +123,9 @@ function scoreValue(score: number | null) {
   return score === null ? '—' : score;
 }
 
-function formatDate(value: string) {
+function formatDate(value: string, language: Language) {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'Tarih yok' : new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
+  return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'tr-TR', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
 }
 
 const s = StyleSheet.create({

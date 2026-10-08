@@ -4,6 +4,13 @@ iOS ve Android için Expo + React Native Amerikano: botlara karşı tek oyunculu
 3–6 kişilik aynı cihaz modu ve 2–6 kişilik kodla katılınan çevrim içi arkadaş odaları.
 Klasik resimli kartların CC0 lisansı ve kaynağı assets/cards altında bulunur.
 
+Türkçe ve İngilizce desteklenir. Ana ayarlardan veya oyun içindeki ayar panelinden
+**Dil / Language** seçilebilir; tercih bu cihazda saklanır. İlk açılışta cihaz dili
+Türkçe veya bölgesi Türkiye ise Türkçe, değilse İngilizce başlar; dil seçmemiş eski
+kayıtlarda Türkçe kalır. İngilizce tanım: **Amerikano — 12-round Contract Rummy**.
+Bu, uygulamanın kendi 12 el kural setidir; diğer Contract Rummy varyantlarıyla
+aynı kuralları kullandığı anlamına gelmez. Çeviriler `src/i18n/en.ts` içinde yer alır.
+
 ## Çalıştırma
 
 Gereksinimler: Node.js 24 ve SDK 57 uyumlu Expo geliştirme ortamı.

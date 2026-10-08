@@ -1,3 +1,4 @@
+import { useTranslations } from '@/i18n/language';
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -75,40 +76,42 @@ function FlowBox({ number, label }: { number: string; label: string }) {
 }
 
 function TutorialVisual({ type, roundCount, claimSeconds }: { type: Visual; roundCount: number; claimSeconds: number }) {
+  const { t } = useTranslations();
   if (type === 'goal') return <View style={s.scoreVisual}>
-    <View style={s.scoreCard}><Text style={s.scoreLabel}>İYİ EL</Text><Text style={s.scoreGood}>+0</Text></View>
+    <View style={s.scoreCard}><Text style={s.scoreLabel}>{t("İYİ EL")}</Text><Text style={s.scoreGood}>+0</Text></View>
     <Text style={s.visualArrow}>→</Text>
-    <View style={s.scoreCard}><Text style={s.scoreLabel}>ELDE JOKER</Text><Text style={s.scoreBad}>+25</Text></View>
+    <View style={s.scoreCard}><Text style={s.scoreLabel}>{t("ELDE JOKER")}</Text><Text style={s.scoreBad}>+25</Text></View>
   </View>;
   if (type === 'turn') return <View style={s.flow}>
-    <FlowBox number="1" label="KART ÇEK" /><Text style={s.visualArrow}>›</Text><FlowBox number="2" label="OYNA" /><Text style={s.visualArrow}>›</Text><FlowBox number="3" label="KART AT" />
+    <FlowBox number="1" label={t("KART ÇEK")} /><Text style={s.visualArrow}>›</Text><FlowBox number="2" label={t("OYNA")} /><Text style={s.visualArrow}>›</Text><FlowBox number="3" label={t("KART AT")} />
   </View>;
   if (type === 'melds') return <View style={s.meldVisual}>
-    <View style={s.exampleRow}><Text style={s.exampleLabel}>KÜT</Text><MiniCard value="7" suit="♥" /><MiniCard value="7" suit="♣" /><MiniCard value="7" suit="♠" /></View>
-    <View style={s.exampleRow}><Text style={s.exampleLabel}>SERİ</Text><MiniCard value="4" suit="♦" /><MiniCard value="5" suit="♦" /><MiniCard value="6" suit="♦" /></View>
+    <View style={s.exampleRow}><Text style={s.exampleLabel}>{t("KÜT")}</Text><MiniCard value="7" suit="♥" /><MiniCard value="7" suit="♣" /><MiniCard value="7" suit="♠" /></View>
+    <View style={s.exampleRow}><Text style={s.exampleLabel}>{t("SERİ")}</Text><MiniCard value="4" suit="♦" /><MiniCard value="5" suit="♦" /><MiniCard value="6" suit="♦" /></View>
   </View>;
   if (type === 'contract') return <View style={s.contractVisual}>
-    <Text style={s.contractLabel}>EL 5 GÖREVİ</Text><Text style={s.contractTitle}>3’lü küt + seri</Text>
-    <View style={s.trayRow}><View style={s.tray}><Text style={s.trayText}>KÜT · 3/3 ✓</Text></View><View style={s.tray}><Text style={s.trayText}>SERİ · 3/3 ✓</Text></View></View>
+    <Text style={s.contractLabel}>{t("EL 5 GÖREVİ")}</Text><Text style={s.contractTitle}>{t("3’lü küt + seri")}</Text>
+    <View style={s.trayRow}><View style={s.tray}><Text style={s.trayText}>{t("KÜT · 3/3 ✓")}</Text></View><View style={s.tray}><Text style={s.trayText}>{t("SERİ · 3/3 ✓")}</Text></View></View>
   </View>;
   if (type === 'after-open') return <View style={s.flow}>
-    <FlowBox number="✓" label="AÇ" /><Text style={s.visualArrow}>›</Text><FlowBox number="+" label="İŞLE" /><Text style={s.visualArrow}>›</Text><FlowBox number="3+" label="YENİ GRUP" />
+    <FlowBox number="✓" label={t("AÇ")} /><Text style={s.visualArrow}>›</Text><FlowBox number="+" label={t("İŞLE")} /><Text style={s.visualArrow}>›</Text><FlowBox number="3+" label={t("YENİ GRUP")} />
   </View>;
   if (type === 'claim') return <View style={s.claimVisual}>
-    <MiniCard value="9" suit="♠" /><View style={s.claimCopy}><Text style={s.claimTitle}>Açık kartı al?</Text><Text style={s.claimPenalty}>+ 1 kapalı ceza kartı</Text></View><View style={s.clock}><Text style={s.clockText}>{claimSeconds}</Text></View>
+    <MiniCard value="9" suit="♠" /><View style={s.claimCopy}><Text style={s.claimTitle}>{t("Açık kartı al?")}</Text><Text style={s.claimPenalty}>{t("+ 1 kapalı ceza kartı")}</Text></View><View style={s.clock}><Text style={s.clockText}>{claimSeconds}</Text></View>
   </View>;
-  return <View style={s.finishVisual}><Text style={s.finishNumber}>{roundCount}</Text><View><Text style={s.finishLabel}>EL TAMAMLANINCA</Text><Text style={s.finishTitle}>En düşük puan kazanır</Text></View></View>;
+  return <View style={s.finishVisual}><Text style={s.finishNumber}>{roundCount}</Text><View><Text style={s.finishLabel}>{t("EL TAMAMLANINCA")}</Text><Text style={s.finishTitle}>{t("En düşük puan kazanır")}</Text></View></View>;
 }
 
 export function GameTutorial({ visible, onDone, roundCount = 12, claimsEnabled = true, claimSeconds = 8, jokerRestrictionRounds = 5, playableDiscardPenalty = true }: { visible: boolean; onDone: () => void; roundCount?: number; claimsEnabled?: boolean; claimSeconds?: number; jokerRestrictionRounds?: 0 | 4 | 5; playableDiscardPenalty?: boolean }) {
+  const { t } = useTranslations();
   const [step, setStep] = useState(0);
   const adaptedSteps = steps.map(item => {
-    if (item.visual === 'goal') return { ...item, body: `Bu oyun ${roundCount} el sürer. Her elde farklı bir açılış görevi tamamlanır; oyun sonunda en düşük toplam ceza puanı kazanır.` };
-    if (item.visual === 'contract') return { ...item, points: [item.points[0], jokerRestrictionRounds ? `İlk ${jokerRestrictionRounds} klasik görevde açılış yaparken Joker kullanılamaz.` : 'Bu oyunda açılış görevlerinde Joker kullanabilirsin.'] };
+    if (item.visual === 'goal') return { ...item, body: t("Bu oyun {0} el sürer. Her elde farklı bir açılış görevi tamamlanır; oyun sonunda en düşük toplam ceza puanı kazanır.", [roundCount]) };
+    if (item.visual === 'contract') return { ...item, points: [item.points[0], jokerRestrictionRounds ? t("İlk {0} klasik görevde açılış yaparken Joker kullanılamaz.", [jokerRestrictionRounds]) : t("Bu oyunda açılış görevlerinde Joker kullanabilirsin.")] };
     if (item.visual === 'claim') return claimsEnabled
-      ? { ...item, points: [item.points[0], `İstemiyorsan “Pas geç”; ${claimSeconds} saniye dolarsa oyun otomatik pas verir.`] }
-      : { ...item, body: 'Bu oyunda açık kart teklifi kapalı. Kapalı desteden çekildiğinde yerdeki kart diğer oyunculara sorulmaz.', points: ['Teklif, oyun kurulurken Gelişmiş ayarlardan açılabilir.', 'İki kişilik oyunda teklif her zaman kapalıdır.'] };
-    if (item.visual === 'finish') return { ...item, points: [playableDiscardPenalty ? 'İşlenebilen bir kartı açık atmak ayrıca +25 ceza verir.' : 'Bu oyunda işlek kart cezası kapalıdır.', `${roundCount}. elde bütün elini tek hamlede gruplandırıp “Elden bit” ile tamamla.`] };
+      ? { ...item, points: [item.points[0], t("İstemiyorsan “Pas geç”; {0} saniye dolarsa oyun otomatik pas verir.", [claimSeconds])] }
+      : { ...item, body: t("Bu oyunda açık kart teklifi kapalı. Kapalı desteden çekildiğinde yerdeki kart diğer oyunculara sorulmaz."), points: [t("Teklif, oyun kurulurken Gelişmiş ayarlardan açılabilir."), t("İki kişilik oyunda teklif her zaman kapalıdır.")] };
+    if (item.visual === 'finish') return { ...item, points: [playableDiscardPenalty ? t("İşlenebilen bir kartı açık atmak ayrıca +25 ceza verir.") : t("Bu oyunda işlek kart cezası kapalıdır."), t("{0}. elde bütün elini tek hamlede gruplandırıp “Elden bit” ile tamamla.", [roundCount])] };
     return item;
   });
   const current = adaptedSteps[step];
@@ -117,22 +120,22 @@ export function GameTutorial({ visible, onDone, roundCount = 12, claimsEnabled =
   return <Modal visible={visible} animationType="fade" onRequestClose={finish}>
     <SafeAreaView style={s.page}>
       <View style={s.topRow}>
-        <View><Text style={s.eyebrow}>AMERİKANO AKADEMİSİ</Text><Text style={s.topCaption}>İlk elden önce 2 dakikalık rehber</Text></View>
-        <Pressable accessibilityRole="button" onPress={finish}><Text style={s.skip}>Geç</Text></Pressable>
+        <View><Text style={s.eyebrow}>{t("AMERİKANO AKADEMİSİ")}</Text><Text style={s.topCaption}>{t("İlk elden önce 2 dakikalık rehber")}</Text></View>
+        <Pressable accessibilityRole="button" onPress={finish}><Text style={s.skip}>{t("Geç")}</Text></Pressable>
       </View>
       <View style={s.progress}>{adaptedSteps.map((_, index) => <View key={index} style={[s.progressItem, index <= step && s.progressActive]} />)}</View>
       <ScrollView style={s.scroll} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
         <View style={s.visualBox}><TutorialVisual type={current.visual} roundCount={roundCount} claimSeconds={claimSeconds} /></View>
-        <Text style={s.counter}>{String(step + 1).padStart(2, '0')} / {String(adaptedSteps.length).padStart(2, '0')} · {current.eyebrow}</Text>
-        <Text style={s.title}>{current.title}</Text>
-        <Text style={s.body}>{current.body}</Text>
-        <View style={s.points}>{current.points.map((point, index) => <View key={point} style={s.pointRow}><Text style={s.pointNumber}>{index + 1}</Text><Text style={s.pointText}>{point}</Text></View>)}</View>
-        <View style={s.tip}><Text style={s.tipLabel}>AKLINDA KALSIN</Text><Text style={s.tipText}>{current.tip}</Text></View>
+        <Text style={s.counter}>{String(step + 1).padStart(2, '0')} / {String(adaptedSteps.length).padStart(2, '0')} · {t(current.eyebrow)}</Text>
+        <Text style={s.title}>{t(current.title)}</Text>
+        <Text style={s.body}>{t(current.body)}</Text>
+        <View style={s.points}>{current.points.map((point, index) => <View key={t(point)} style={s.pointRow}><Text style={s.pointNumber}>{index + 1}</Text><Text style={s.pointText}>{t(point)}</Text></View>)}</View>
+        <View style={s.tip}><Text style={s.tipLabel}>{t("AKLINDA KALSIN")}</Text><Text style={s.tipText}>{t(current.tip)}</Text></View>
       </ScrollView>
       <View style={s.actions}>
-        {step > 0 && <Pressable accessibilityRole="button" style={s.secondary} onPress={() => setStep(value => value - 1)}><Text style={s.secondaryText}>Geri</Text></Pressable>}
+        {step > 0 && <Pressable accessibilityRole="button" style={s.secondary} onPress={() => setStep(value => value - 1)}><Text style={s.secondaryText}>{t("Geri")}</Text></Pressable>}
         <Pressable accessibilityRole="button" style={s.primary} onPress={() => step === adaptedSteps.length - 1 ? finish() : setStep(value => value + 1)}>
-          <Text style={s.primaryText}>{step === adaptedSteps.length - 1 ? 'Masaya otur' : 'Devam'}</Text>
+          <Text style={s.primaryText}>{step === adaptedSteps.length - 1 ? t("Masaya otur") : t("Devam")}</Text>
         </Pressable>
       </View>
     </SafeAreaView>

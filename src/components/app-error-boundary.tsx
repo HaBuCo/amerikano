@@ -1,3 +1,4 @@
+import { t } from '@/i18n/language';
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -29,11 +30,11 @@ export class AppErrorBoundary extends Component<Props, State> {
     if (!this.state.error) return this.props.children;
     return <View style={s.page}>
       <View style={s.content}>
-        <Text style={s.eyebrow}>OYUN GÜVENLE DURDURULDU</Text>
-        <Text style={s.title}>Beklenmeyen bir hata oluştu.</Text>
-        <Text style={s.body}>Hata kaydı inceleme için gönderildi. Çevrim içi elin sunucuda, tek oyunculu elin cihazında korunuyor.</Text>
+        <Text style={s.eyebrow}>{t("OYUN GÜVENLE DURDURULDU")}</Text>
+        <Text style={s.title}>{t("Beklenmeyen bir hata oluştu.")}</Text>
+        <Text style={s.body}>{t("Hata kaydı inceleme için gönderildi. Çevrim içi elin sunucuda, tek oyunculu elin cihazında korunuyor.")}</Text>
         {__DEV__ && !!this.state.error.message && <Text style={s.debug}>{this.state.error.message}</Text>}
-        <Pressable accessibilityRole="button" onPress={this.recover} style={s.button}><Text style={s.buttonText}>Ana menüye dön</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={this.recover} style={s.button}><Text style={s.buttonText}>{t("Ana menüye dön")}</Text></Pressable>
       </View>
     </View>;
   }

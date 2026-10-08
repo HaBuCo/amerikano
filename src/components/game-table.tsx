@@ -1,3 +1,4 @@
+import { useTranslations } from '@/i18n/language';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import type { LayoutChangeEvent } from 'react-native';
@@ -25,6 +26,7 @@ import { snapshotActor, tableSound } from '@/game/table-sounds';
 import type { TableSnapshot } from '@/game/table-sounds';
 import { REACTIONS, REACTION_VISIBLE_MS, reactionById } from '@/game/reactions';
 import { DELETE_ACCOUNT_URL, PRIVACY_POLICY_URL, TERMS_LABEL, TERMS_URL } from '@/constants/legal';
+import { LanguagePicker } from './language-picker';
 
 type Props = {
   game: PrivateGameView; viewerId: string; modeLabel: string; blocked?: boolean;
@@ -126,6 +128,7 @@ function DraggableHandCard({ card, index, step, cardsPerRow, cardWidth, cardHeig
 const ROUND_ADVANCE_DELAY_MS = 6_000;
 
 function TurnCountdown({ deadline, warningEnabled, tickEnabled, onUrgent, onTick }: { deadline?: number; warningEnabled: boolean; tickEnabled: boolean; onUrgent: () => void; onTick: () => void }) {
+  const { t } = useTranslations();
   const [seconds, setSeconds] = useState(() => deadline ? Math.max(0, Math.ceil((deadline - Date.now()) / 1000)) : 0);
   const warnedDeadline = useRef<number | undefined>(undefined);
   const tickedKey = useRef('');
@@ -150,10 +153,11 @@ function TurnCountdown({ deadline, warningEnabled, tickEnabled, onUrgent, onTick
     }
   }, [deadline, onTick, seconds, tickEnabled, warningEnabled]);
   if (!deadline) return null;
-  return <View accessibilityLabel={`Sıra süresi ${seconds} saniye`} style={[s.timer, warningEnabled && seconds <= 10 && s.timerUrgent]}><Text style={s.timerText}>{seconds}</Text></View>;
+  return <View accessibilityLabel={t("Sıra süresi {0} saniye", [seconds])} style={[s.timer, warningEnabled && seconds <= 10 && s.timerUrgent]}><Text style={s.timerText}>{seconds}</Text></View>;
 }
 
 function ReactionBubble({ reaction }: { reaction: { id: string; at: number } }) {
+  const { t } = useTranslations();
   const [hiddenAt, setHiddenAt] = useState<number | null>(() => Date.now() - reaction.at >= REACTION_VISIBLE_MS ? reaction.at : null);
   useEffect(() => {
     const remaining = REACTION_VISIBLE_MS - (Date.now() - reaction.at);
@@ -165,7 +169,7 @@ function ReactionBubble({ reaction }: { reaction: { id: string; at: number } }) 
   const item = reactionById(reaction.id);
   if (!visible || !item) return null;
   return <View pointerEvents="none" accessibilityLiveRegion="polite" style={s.reactionBubble}>
-    <Text numberOfLines={1} style={item.kind === 'emoji' ? s.reactionEmoji : s.reactionPhrase}>{item.text}</Text>
+    <Text numberOfLines={1} style={item.kind === 'emoji' ? s.reactionEmoji : s.reactionPhrase}>{t(item.text)}</Text>
   </View>;
 }
 
@@ -176,6 +180,7 @@ function SettingRow({ label, value, onPress }: { label: string; value: boolean; 
 }
 
 export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = true, canRematch = false, error, debugText, playerMeta, botControlled = false, connectionState, onReclaim, onOpenTutorial, onReact, reactions, canUndo = false, onUndo, onAction, onRematch, onForfeit, onExit }: Props) {
+  const { t, localizeMessage } = useTranslations();
   const [pendingState, setPendingState] = useState<{ key: string; groups: Pending[] }>({ key: '', groups: [] });
   const [notice, setNotice] = useState('');
   const [exitOpen, setExitOpen] = useState(false);
@@ -225,12 +230,12 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   const roundCount = roundCountForGame(game);
   const gameRules = rulesForGame(game);
   const dropSlots: DropSlot[] = me.hasOpened
-    ? [{ type: 'set', label: 'Yeni küt' }, { type: 'run', label: 'Yeni seri' }]
+    ? [{ type: 'set', label: t("Yeni küt") }, { type: 'run', label: t("Yeni seri") }]
     : contract.final
-      ? Array.from({ length: Math.max(4, Math.ceil((me.hand.length - 1) / 3)) }, (_, index) => ({ type: null, label: `Grup ${index + 1}` }))
+      ? Array.from({ length: Math.max(4, Math.ceil((me.hand.length - 1) / 3)) }, (_, index) => ({ type: null, label: t("Grup {0}", [index + 1]) }))
       : contract.parts.flatMap(part => Array.from({ length: part.count }, (_, index) => ({
           type: part.type, length: part.length,
-          label: `${part.type === 'set' ? 'Küt' : 'Seri'}${part.count > 1 ? ` ${index + 1}` : ''}`,
+          label: `${part.type === 'set' ? t("Küt") : t("Seri")}${part.count > 1 ? ` ${index + 1}` : ''}`,
         })));
   const over = game.phase === 'round-over' || game.phase === 'game-over';
   const winners = game.players.filter(player => player.score === Math.min(...game.players.map(pl => pl.score)));
@@ -448,7 +453,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       const unresolved = jokers.filter(joker => !group.jokerAssignments[joker.id]);
       const available = SUITS.filter(suit => !used.has(suit));
       if (available.length < unresolved.length) {
-        setNotice('Jokerler için geçerli sembol seçimi kalmadı.');
+        setNotice(t("Jokerler için geçerli sembol seçimi kalmadı."));
         return;
       }
       if (unresolved.length && available.length === unresolved.length) {
@@ -481,7 +486,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     const slot = dropSlots[slotIndex];
     const limit = slotLimit(slot);
     if (limit && groups[slotIndex].cardIds.length >= limit) {
-      setNotice(`${slot.label} dolu. Önce bir kartı eline geri sürükle.`);
+      setNotice(t("{0} dolu. Önce bir kartı eline geri sürükle.", [localizeMessage(slot.label)]));
       setPending(groups);
       return;
     }
@@ -503,11 +508,11 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     if (!complete) return;
     const ready = readyGroups(groups);
     if (!ready) {
-      setNotice('Görev tepsilerinden biri geçerli değil. Kartları eline geri sürükleyip düzelt.');
+      setNotice(t("Görev tepsilerinden biri geçerli değil. Kartları eline geri sürükleyip düzelt."));
       return;
     }
     if (openingJokerRestricted(game) && ready.some(group => group.cardIds.some(id => me.hand.find(card => card.id === id)?.isJoker))) {
-      setNotice('Bu elde açılış tepsilerinde joker kullanılamaz.');
+      setNotice(t("Bu elde açılış tepsilerinde joker kullanılamaz."));
       return;
     }
     setPending([]);
@@ -518,7 +523,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     if (!playing || !me.hasOpened || openedThisTurn) return;
     const ready = readyGroups(pending);
     if (!ready?.length) {
-      setNotice('Masaya açmak için en az 3 karttan oluşan geçerli bir küt veya seri hazırla.');
+      setNotice(t("Masaya açmak için en az 3 karttan oluşan geçerli bir küt veya seri hazırla."));
       return;
     }
     setPending([]);
@@ -528,7 +533,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
 
   function addTappedCard(cardId: string) {
     if (openedThisTurn) {
-      setNotice('Açılış tamamlandı. Bu tur yalnızca bir kart atabilirsin.');
+      setNotice(t("Açılış tamamlandı. Bu tur yalnızca bir kart atabilirsin."));
       return;
     }
     const groups = groupsWithSlots();
@@ -539,7 +544,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
         !slotLimit(dropSlots[index]) || group.cardIds.length < slotLimit(dropSlots[index])!);
     }
     if (slotIndex < 0) {
-      setNotice('Bütün tepsiler dolu. Bir kartı tepsiden çıkarıp tekrar dene.');
+      setNotice(t("Bütün tepsiler dolu. Bir kartı tepsiden çıkarıp tekrar dene."));
       return;
     }
     // Tapping lets the game route the card: keep the selected tray when the card
@@ -586,7 +591,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   function findAndOpenContract() {
     const groups = suggestContractGroups(me.hand, contract, !openingJokerRestricted(game));
     if (!groups) {
-      setNotice('Elinde bu görevi tamamlayan hazır bir grup bulunamadı. Kartlara dokunarak tepsileri elle doldurabilirsin.');
+      setNotice(t("Elinde bu görevi tamamlayan hazır bir grup bulunamadı. Kartlara dokunarak tepsileri elle doldurabilirsin."));
       return;
     }
     setPending([]);
@@ -628,11 +633,11 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     const meld = game.melds.find(item => item.id === meldId);
     const card = me.hand.find(item => item.id === cardId);
     if (!meld || !card || !me.hasOpened) {
-      setNotice('Kart işlemek için önce kendi görevini açmalısın.');
+      setNotice(t("Kart işlemek için önce kendi görevini açmalısın."));
       return;
     }
     if (openedThisTurn) {
-      setNotice('İşleme, açılıştan sonraki sıranda serbest.');
+      setNotice(t("İşleme, açılıştan sonraki sıranda serbest."));
       return;
     }
     const matchingJoker = meld.cards.find(joker => joker.isJoker && (meld.type === 'set'
@@ -640,7 +645,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       : isValidMeld(meld.cards.map(item => item.id === joker.id ? card : item), meld.type)));
     if (matchingJoker) act({ type: 'replaceJoker', meldId: meld.id, jokerId: matchingJoker.id, cardId });
     else if (isValidMeld([...meld.cards, card], meld.type)) act({ type: 'layoff', meldId: meld.id, cardId });
-    else setNotice('Bu kart bıraktığın gruba işlenemiyor.');
+    else setNotice(t("Bu kart bıraktığın gruba işlenemiyor."));
   }
 
   function acceptsCard(meldId: string, card = activeCard) {
@@ -669,13 +674,13 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     if (isInside('discard', point, DISCARD_DROP_PADDING)) {
       if (contract.final && !me.hasOpened) return finishFinal(cardId, removeStaged(cardId));
       if (pending.some(group => group.cardIds.length)) {
-        setNotice('Önce tepsideki kartları eline geri al veya grubu tamamla.');
+        setNotice(t("Önce tepsideki kartları eline geri al veya grubu tamamla."));
         return;
       }
       act({ type: 'discard', cardId });
       return;
     }
-    setNotice('Kartı açık karta, görev tepsisine veya yerdeki bir gruba bırak.');
+    setNotice(t("Kartı açık karta, görev tepsisine veya yerdeki bir gruba bırak."));
   }
 
   function dropStagedCard(cardId: string, point: DropPoint) {
@@ -684,7 +689,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     const withoutCard = removeStaged(cardId);
     if (isTapDrop(point)) {
       setPending(withoutCard);
-      setNotice('Kart eline geri döndü.');
+      setNotice(t("Kart eline geri döndü."));
       return;
     }
     const slot = targetIndex('slot:', point);
@@ -692,10 +697,10 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     if (contract.final && !me.hasOpened && isInside('discard', point, DISCARD_DROP_PADDING)) return finishFinal(cardId, withoutCard);
     if (isInside('hand', point, HAND_DROP_PADDING)) {
       setPending(withoutCard);
-      setNotice('Kart eline geri döndü.');
+      setNotice(t("Kart eline geri döndü."));
       return;
     }
-    setNotice('Kartı başka bir tepsiye veya eline geri bırak.');
+    setNotice(t("Kartı başka bir tepsiye veya eline geri bırak."));
   }
 
   function dropPile(source: 'stock' | 'discard', point: DropPoint) {
@@ -707,7 +712,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       return;
     }
     if (!isInside('hand', point, HAND_DROP_PADDING)) {
-      setNotice('Kartı almak için desteden elinin üzerine sürükle.');
+      setNotice(t("Kartı almak için desteden elinin üzerine sürükle."));
       return;
     }
     if (source === 'discard' && claiming) act({ type: 'claim', take: true });
@@ -717,7 +722,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   function toggleArrange() {
     playSound('tap');
     if (!arranging && pending.some(group => group.cardIds.length)) {
-      setNotice('Elini dizmeden önce hazırladığın grupları geri al.');
+      setNotice(t("Elini dizmeden önce hazırladığın grupları geri al."));
       return;
     }
     setNotice(''); setArranging((current) => !current);
@@ -781,17 +786,17 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
 
   return <SafeAreaView style={[s.page, tabletLandscape && s.pageTabletLandscape]}>
     <View style={s.header}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Masadan çık" onPress={() => setExitOpen(true)} style={s.headerMenuButton}><Text style={s.headerMenuText}>Çık</Text></Pressable>
-      <View style={s.center}><Text style={s.eyebrow}>{modeLabel}</Text><Text style={s.round}>EL {game.roundIndex + 1} / {roundCount} · {contract.shortTitle}</Text></View>
+      <Pressable accessibilityRole="button" accessibilityLabel={t("Masadan çık")} onPress={() => setExitOpen(true)} style={s.headerMenuButton}><Text style={s.headerMenuText}>{t("Çık")}</Text></Pressable>
+      <View style={s.center}><Text style={s.eyebrow}>{localizeMessage(modeLabel)}</Text><Text style={s.round}>{t("EL")} {game.roundIndex + 1} / {roundCount} · {t(contract.shortTitle)}</Text></View>
       <View style={s.headerActions}>
-        {onReact && <Pressable accessibilityRole="button" accessibilityLabel="Tepki gönder" style={s.headerMenuButton} onPress={() => { feedback(); setReactionsOpen(true); }}><Text style={s.headerMenuText}>Tepki</Text></Pressable>}
-        <Pressable accessibilityRole="button" accessibilityLabel="Hızlı kural yardımı" style={s.headerMenuButton} onPress={() => { feedback(); setHelpOpen(true); }}><Text style={s.headerMenuText}>Kural</Text></Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Oyun ayarları" style={s.headerMenuButton} onPress={() => { feedback(); setSettingsOpen(true); }}><Text style={s.headerMenuText}>Ayar</Text></Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Puan tablosu" style={s.headerMenuButton} onPress={() => { playSound('tap'); setScoresOpen(true); }}><Text style={s.headerMenuText}>Puan</Text></Pressable>
+        {onReact && <Pressable accessibilityRole="button" accessibilityLabel={t("Tepki gönder")} style={s.headerMenuButton} onPress={() => { feedback(); setReactionsOpen(true); }}><Text style={s.headerMenuText}>{t("Tepki")}</Text></Pressable>}
+        <Pressable accessibilityRole="button" accessibilityLabel={t("Hızlı kural yardımı")} style={s.headerMenuButton} onPress={() => { feedback(); setHelpOpen(true); }}><Text style={s.headerMenuText}>{t("Kural")}</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("Oyun ayarları")} style={s.headerMenuButton} onPress={() => { feedback(); setSettingsOpen(true); }}><Text style={s.headerMenuText}>{t("Ayar")}</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("Puan tablosu")} style={s.headerMenuButton} onPress={() => { playSound('tap'); setScoresOpen(true); }}><Text style={s.headerMenuText}>{t("Puan")}</Text></Pressable>
       </View>
     </View>
     {connectionState && <View style={[s.connectionBar, connectionState === 'online' ? s.connectionOnline : connectionState === 'reconnecting' ? s.connectionWaiting : s.connectionOffline]}>
-      <Text style={s.connectionText}>{connectionState === 'online' ? 'Bağlı' : connectionState === 'reconnecting' ? 'Bağlanıyor' : 'Çevrim dışı'}</Text>
+      <Text style={s.connectionText}>{connectionState === 'online' ? t("Bağlı") : connectionState === 'reconnecting' ? t("Bağlanıyor") : t("Çevrim dışı")}</Text>
     </View>}
     <View style={s.playersBar}>
       <View style={s.players}>
@@ -802,13 +807,13 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
           const isBotControlled = playerMeta?.[pl.id]?.botControlled === true;
           return <View
             key={pl.id}
-            accessibilityLabel={`${pl.name}, ${game.handCounts[pl.id]} kart, ${pl.score} puan${isCurrent ? ', sıra bu oyuncuda' : ''}`}
+            accessibilityLabel={t("{0}, {1} kart, {2} puan{3}", [pl.name, game.handCounts[pl.id], pl.score, isCurrent ? t(", sıra bu oyuncuda") : ''])}
             style={[s.playerTile, { width: playerTileWidth }, isViewer && s.viewerTile, isCurrent && s.activePlayerTile]}
           >
             <View style={[s.avatar, playerMeta?.[pl.id] && { backgroundColor: playerMeta[pl.id].avatarColor }]}><Text style={s.avatarText}>{playerMeta?.[pl.id]?.avatarSymbol ?? pl.name.charAt(0)}</Text></View>
             <View style={s.playerInfo}>
-              <Text numberOfLines={1} style={s.playerName}>{pl.name}{isViewer ? ' · SEN' : isBotControlled ? ' · bot yönetiyor' : isOffline ? ' · çevrim dışı' : ''}</Text>
-              <Text numberOfLines={1} style={s.playerStats}>{game.handCounts[pl.id]} kart · {pl.score}p{pl.hasOpened ? ' · Açtı' : ''}{playerMeta?.[pl.id]?.missedTurns ? ` · ${playerMeta[pl.id].missedTurns}/3` : ''}</Text>
+              <Text numberOfLines={1} style={s.playerName}>{pl.name}{isViewer ? t(" · SEN") : isBotControlled ? t(" · bot yönetiyor") : isOffline ? t(" · çevrim dışı") : ''}</Text>
+              <Text numberOfLines={1} style={s.playerStats}>{game.handCounts[pl.id]} {' '}{t("kart ·")}{pl.score}p{pl.hasOpened ? t(" · Açtı") : ''}{playerMeta?.[pl.id]?.missedTurns ? ` · ${playerMeta[pl.id].missedTurns}/3` : ''}</Text>
             </View>
             {isCurrent && <View style={s.turnDot} />}
             {settings.showReactions && reactions?.[pl.id] && <ReactionBubble reaction={reactions[pl.id]} />}
@@ -821,23 +826,23 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
         <View style={s.piles}>
           <View style={[s.pile, drawing && s.pileReady]}>
             <DragSurface active={drawing && Boolean(game.stockCount || game.discard.length)} onDragStart={() => beginDrag('stock')} onDrop={(point) => dropPile('stock', point)}>
-              <View style={[s.pile, s.tablePileTouch, tabletLandscape && s.tablePileTouchTablet]}><View style={[s.stackShadow, tabletLandscape && s.stackShadowTablet]} /><PlayingCard hidden small tablet={tabletLandscape} /><Text style={s.pileLabel}>DESTE · {game.stockCount}</Text></View>
+              <View style={[s.pile, s.tablePileTouch, tabletLandscape && s.tablePileTouchTablet]}><View style={[s.stackShadow, tabletLandscape && s.stackShadowTablet]} /><PlayingCard hidden small tablet={tabletLandscape} /><Text style={s.pileLabel}>{t("DESTE ·")}{game.stockCount}</Text></View>
             </DragSurface>
           </View>
-          <View style={s.tableMark}><Text style={s.tableA}>A</Text><Text style={s.tableBrand}>AMERİKANO</Text></View>
+          <View style={s.tableMark}><Text style={s.tableA}>A</Text><Text style={s.tableBrand}>{t("AMERİKANO")}</Text></View>
           <DropZoneView dropKey="discard" onNode={registerDropZone} style={[s.pile, (drawing || claiming || activeDrag === 'hand') && s.pileReady, activeDrag === 'hand' && s.dropTargetActive]}>
             <DragSurface active={(drawing || claiming) && Boolean(game.discard.length) && !game.discardFaceDown} onDragStart={() => beginDrag('discard')} onDrop={(point) => dropPile('discard', point)}>
               <View style={[s.pile, s.tablePileTouch, tabletLandscape && s.tablePileTouchTablet]}>{game.discardFaceDown ? <PlayingCard hidden small tablet={tabletLandscape} /> : game.discard.length ? <PlayingCard card={game.discard.at(-1)} small tablet={tabletLandscape} /> : <View style={[s.empty, tabletLandscape && s.emptyTablet]} />}
-                <Text style={s.pileLabel}>{game.discardFaceDown ? 'BİTİŞ KARTI · KAPALI' : activeDrag === 'hand' ? 'KARTI BURAYA AT' : 'AÇIK KART'}</Text></View>
+                <Text style={s.pileLabel}>{game.discardFaceDown ? t("BİTİŞ KARTI · KAPALI") : activeDrag === 'hand' ? t("KARTI BURAYA AT") : t("AÇIK KART")}</Text></View>
             </DragSurface>
           </DropZoneView>
         </View>
       </View>
-      <View style={s.turnRow}><Text style={s.turn}>{blocked ? 'Bekleniyor…' : game.phase === 'claim' ? claiming ? 'Karar sende' : `${claimPlayer?.name} düşünüyor…` : myTurn ? drawing ? 'Sıra sende · Çek' : 'Sıra sende · Oyna' : `${current.name} oynuyor…`}</Text><TurnCountdown deadline={game.turnDeadline} warningEnabled={settings.criticalTimer} tickEnabled={myTurn || claiming} onUrgent={() => { if (myTurn || claiming) feedback('warning'); }} onTick={() => playSound('tick')} /></View>
-      {game.lastPenalty?.reason === 'playable-discard' && <View style={s.playablePenaltyBanner}><Text style={s.playablePenaltyText}>{penalizedPlayer?.name ?? 'Oyuncu'} işlek kart attı · +{game.lastPenalty.points} ceza</Text></View>}
-      {botControlled && <View style={s.botNotice}><Text style={s.botNoticeText}>Üç süre kaçırdığın için oyun koltuğunu otomatik yönetiyor.</Text><Pressable accessibilityRole="button" disabled={blocked} onPress={onReclaim} style={[s.reclaimButton, blocked && s.disabled]}><Text style={s.reclaimText}>Koltuğu geri al</Text></Pressable></View>}
+      <View style={s.turnRow}><Text style={s.turn}>{blocked ? t("Bekleniyor…") : game.phase === 'claim' ? claiming ? t("Karar sende") : t("{0} düşünüyor…", [claimPlayer?.name ?? t("Oyuncu")]) : myTurn ? drawing ? t("Sıra sende · Çek") : t("Sıra sende · Oyna") : t("{0} oynuyor…", [current.name])}</Text><TurnCountdown deadline={game.turnDeadline} warningEnabled={settings.criticalTimer} tickEnabled={myTurn || claiming} onUrgent={() => { if (myTurn || claiming) feedback('warning'); }} onTick={() => playSound('tick')} /></View>
+      {game.lastPenalty?.reason === 'playable-discard' && <View style={s.playablePenaltyBanner}><Text style={s.playablePenaltyText}>{penalizedPlayer?.name ?? t("Oyuncu")} {' '}{t("işlek kart attı · +")}{game.lastPenalty.points} {t("ceza")}</Text></View>}
+      {botControlled && <View style={s.botNotice}><Text style={s.botNoticeText}>{t("Üç süre kaçırdığın için oyun koltuğunu otomatik yönetiyor.")}</Text><Pressable accessibilityRole="button" disabled={blocked} onPress={onReclaim} style={[s.reclaimButton, blocked && s.disabled]}><Text style={s.reclaimText}>{t("Koltuğu geri al")}</Text></Pressable></View>}
       {claiming && <View style={s.actions}>
-        <Pressable accessibilityRole="button" onPress={() => act({ type: 'claim', take: false })} style={s.secondary}><Text style={s.actionText}>Pas geç</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => act({ type: 'claim', take: false })} style={s.secondary}><Text style={s.actionText}>{t("Pas geç")}</Text></Pressable>
       </View>}
       {visibleMelds.length > 0 ? <View style={s.melds}>
         {visibleMelds.map(({ meld: m }) => {
@@ -846,22 +851,22 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
           const accepted = draggingHere && fitsMeld(m.id);
           const rejected = (draggingHere && !accepted) || (rejectedMeld?.key === pendingKey && rejectedMeld.id === m.id);
           return <DropZoneView key={m.id} dropKey={`meld:${m.id}`} onNode={registerDropZone} style={[s.meld, accepted && s.dropSlotValid, rejected && s.dropSlotInvalid]}>
-            <Text style={s.small}>{game.players.find(pl => pl.id === m.ownerId)?.name} · {m.type === 'set' ? 'Küt' : 'Seri'}</Text>
+            <Text style={s.small}>{game.players.find(pl => pl.id === m.ownerId)?.name} · {m.type === 'set' ? t("Küt") : t("Seri")}</Text>
             <View style={s.meldCards}>{m.cards.map((c, i) => <View key={c.id} style={[s.meldCard, { marginLeft: i ? -16 : 0 }]}>
               <PlayingCard card={c} compact tablet={tabletLandscape} />
               {c.isJoker && meldRank && m.jokerAssignments?.[c.id] && <Text style={s.jokerBadge}>{suitSymbol[m.jokerAssignments[c.id]]}{meldRank}</Text>}
             </View>)}</View>
-            {settings.dragHints && activeDrag === 'hand' && fitsMeld(m.id) && <Text style={s.meldDropHint}>{acceptsCard(m.id) ? 'Buraya işlenebilir' : gameRules.playableDiscardPenalty ? 'İşlek kart · atarsan +25' : 'Bu gruba uyuyor'}</Text>}
+            {settings.dragHints && activeDrag === 'hand' && fitsMeld(m.id) && <Text style={s.meldDropHint}>{acceptsCard(m.id) ? t("Buraya işlenebilir") : gameRules.playableDiscardPenalty ? t("İşlek kart · atarsan +25") : t("Bu gruba uyuyor")}</Text>}
           </DropZoneView>;
         })}
       </View> : null}
     </ScrollView>
     {playing && !arranging && !openedThisTurn && <View style={s.trayArea}>
       {!me.hasOpened && !contract.final && <Pressable accessibilityRole="button" onPress={findAndOpenContract} style={s.quickOpenButton}>
-        <Text style={s.quickOpenText}>Görevi bul ve aç</Text>
+        <Text style={s.quickOpenText}>{t("Görevi bul ve aç")}</Text>
       </Pressable>}
       {me.hasOpened && pending.some(group => group.cardIds.length) && <Pressable accessibilityRole="button" onPress={openStagedGroups} style={s.quickOpenButton}>
-        <Text style={s.quickOpenText}>Masaya aç</Text>
+        <Text style={s.quickOpenText}>{t("Masaya aç")}</Text>
       </Pressable>}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} scrollEnabled={!activeDrag} contentContainerStyle={s.trays}>
         {dropSlots.map((slot, index) => {
@@ -871,23 +876,23 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
           const previewCards = incoming ? [...groupCards, incoming] : groupCards;
           const status = meldFeedback(previewCards, slot.type, slot.length, me.hasOpened || !openingJokerRestricted(game));
           return <DropZonePressable key={index} dropKey={`slot:${index}`} onNode={registerDropZone} accessibilityRole="button" accessibilityState={{ selected: activeSlotIndex === index }} onPress={() => { setActiveSlotIndex(index); feedback('selection'); }} style={[s.dropSlot, tabletLandscape && s.dropSlotTablet, activeSlotIndex === index && s.dropSlotSelected, status === 'valid' && s.dropSlotValid, status === 'invalid' && s.dropSlotInvalid]}>
-            <Text style={s.dropSlotLabel}>{activeSlotIndex === index ? 'SEÇİLİ · ' : ''}{slot.label} · {group.cardIds.length}{slot.length ? `/${slot.length}` : ''}</Text>
+            <Text style={s.dropSlotLabel}>{activeSlotIndex === index ? t("SEÇİLİ · ") : ''}{localizeMessage(slot.label)} · {group.cardIds.length}{slot.length ? `/${slot.length}` : ''}</Text>
             <View style={[s.slotCards, tabletLandscape && s.slotCardsTablet]}>{groupCards.map((card, cardIndex) => <DragSurface key={card.id} active={playing} onDragStart={() => beginDrag('staged', card.id)} onDrop={(point) => dropStagedCard(card.id, point)} style={{ marginLeft: cardIndex ? -10 : 0 }}><PlayingCard card={card} compact tablet={tabletLandscape} /></DragSurface>)}</View>
-            {status === 'invalid' && <Text style={s.invalidDropHint}>Geçersiz grup</Text>}
+            {status === 'invalid' && <Text style={s.invalidDropHint}>{t("Geçersiz grup")}</Text>}
           </DropZonePressable>;
         })}
       </ScrollView>
     </View>}
     {activeDrag === 'hand' && playing && <DropZoneView dropKey="cancel" onNode={registerDropZone} pointerEvents="none" style={s.cancelZone}>
-      <Text style={s.cancelZoneText}>Sadece bakıyorum · buraya bırak, kart yerinde kalsın</Text>
+      <Text style={s.cancelZoneText}>{t("Sadece bakıyorum · buraya bırak, kart yerinde kalsın")}</Text>
     </DropZoneView>}
     <DropZoneView dropKey="hand" onNode={registerDropZone} style={[s.hand, tabletLandscape && s.handTablet, (activeDrag === 'stock' || activeDrag === 'discard' || activeDrag === 'staged') && s.handDropActive]}>
       <View style={s.handHeading}>
-        <Text numberOfLines={1} style={s.handName}>{me.name} <Text style={s.small}>· {me.hand.length} kart{myMissedTurns ? ` · ${myMissedTurns}/3 süre kaçtı` : ''}</Text></Text>
-        <View style={s.handMeta}><Text style={s.small}>{me.score} puan</Text>{onUndo && <Pressable accessibilityRole="button" accessibilityLabel="Son hamleyi geri al" disabled={!canUndo} onPress={onUndo} style={[s.arrangeButton, !canUndo && s.disabled]}><Text style={s.gold}>Geri al</Text></Pressable>}<Pressable accessibilityRole="button" accessibilityLabel="Eli otomatik diz" disabled={Boolean(activeDrag)} onPress={autoArrange} style={[s.arrangeButton, activeDrag && s.disabled]}><Text style={s.gold}>Oto diz</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={arranging ? 'Kart dizmeyi bitir' : 'Eli istediğin gibi diz'} onPress={toggleArrange} style={[s.arrangeButton, arranging && s.arrangeButtonActive]}><Text style={s.gold}>{arranging ? 'Bitti' : 'Elle diz'}</Text></Pressable></View>
+        <Text numberOfLines={1} style={s.handName}>{me.name} <Text style={s.small}>· {me.hand.length} {t("kart")}{myMissedTurns ? t(" · {0}/3 süre kaçtı", [myMissedTurns]) : ''}</Text></Text>
+        <View style={s.handMeta}><Text style={s.small}>{me.score} {t("puan")}</Text>{onUndo && <Pressable accessibilityRole="button" accessibilityLabel={t("Son hamleyi geri al")} disabled={!canUndo} onPress={onUndo} style={[s.arrangeButton, !canUndo && s.disabled]}><Text style={s.gold}>{t("Geri al")}</Text></Pressable>}<Pressable accessibilityRole="button" accessibilityLabel={t("Eli otomatik diz")} disabled={Boolean(activeDrag)} onPress={autoArrange} style={[s.arrangeButton, activeDrag && s.disabled]}><Text style={s.gold}>{t("Oto diz")}</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={arranging ? t("Kart dizmeyi bitir") : t("Eli istediğin gibi diz")} onPress={toggleArrange} style={[s.arrangeButton, arranging && s.arrangeButtonActive]}><Text style={s.gold}>{arranging ? t("Bitti") : t("Elle diz")}</Text></Pressable></View>
       </View>
-      {!!(notice || error) && <Text accessibilityLiveRegion="polite" style={s.notice}>{error || notice}</Text>}
-      {arranging && <Text accessibilityLiveRegion="polite" style={s.arrangeHint}>Kartı tutup istediğin konuma sürükle ve bırak.</Text>}
+      {!!(notice || error) && <Text accessibilityLiveRegion="polite" style={s.notice}>{localizeMessage(error || notice)}</Text>}
+      {arranging && <Text accessibilityLiveRegion="polite" style={s.arrangeHint}>{t("Kartı tutup istediğin konuma sürükle ve bırak.")}</Text>}
       <ScrollView scrollEnabled={!activeDrag} removeClippedSubviews={false} style={[s.handCards, tabletLandscape && s.handCardsTablet]} contentContainerStyle={s.handScroll}>
         <View style={s.rows}>{rows.map((row, index) => <View key={index} style={s.cardRow}>
           {row.map((c, i) => <DraggableHandCard key={c.id} card={c} index={index * cardsPerRow + i} step={step} cardsPerRow={cardsPerRow}
@@ -897,12 +902,12 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     </DropZoneView>
     <Modal visible={over || scoresOpen} transparent animationType="fade" onRequestClose={() => setScoresOpen(false)}>
       <View style={s.backdrop}><View style={s.sheet}>
-        <Text style={s.resultTitle}>{game.phase === 'game-over' ? winners.length === 1 && winners[0].id === viewerId ? 'Sen kazandın!' : winners.map(w => w.id === viewerId ? 'Sen' : w.name).join(' & ') + (winners.some(w => w.id === viewerId) ? ' kazandınız!' : ' kazandı!') : game.phase === 'round-over' ? game.roundResult?.reason === 'stalemate' ? 'El çıkmaz bitti' : game.roundWinnerId === viewerId ? 'Sen bitirdin!' : game.players.find(pl => pl.id === game.roundWinnerId)?.name + ' bitirdi!' : 'Puan tablosu'}</Text>
-        <Text style={s.resultCaption}>{game.phase === 'round-over' && game.roundResult?.reason === 'stalemate' ? `Deste ikinci kez tükendi; elde kalan kartlar ceza yazıldı.${nextContract ? ` Sıradaki el: ${nextContract.title}` : ''}` : game.phase === 'round-over' && nextContract ? `Sıradaki el: ${nextContract.title}` : game.phase === 'game-over' ? `${roundCount} el tamamlandı. En düşük toplam puan kazandı.` : 'En düşük toplam puan kazanır.'}</Text>
+        <Text style={s.resultTitle}>{game.phase === 'game-over' ? winners.length === 1 && winners[0].id === viewerId ? t("Sen kazandın!") : winners.map(w => w.id === viewerId ? t("Sen") : w.name).join(' & ') + (winners.some(w => w.id === viewerId) ? t(" kazandınız!") : t(" kazandı!")) : game.phase === 'round-over' ? game.roundResult?.reason === 'stalemate' ? t("El çıkmaz bitti") : game.roundWinnerId === viewerId ? t("Sen bitirdin!") : game.players.find(pl => pl.id === game.roundWinnerId)?.name + t(" bitirdi!") : t("Puan tablosu")}</Text>
+        <Text style={s.resultCaption}>{game.phase === 'round-over' && game.roundResult?.reason === 'stalemate' ? t("Deste ikinci kez tükendi; elde kalan kartlar ceza yazıldı.{0}", [nextContract ? t(" Sıradaki el: {0}", [t(nextContract.title)]) : '']) : game.phase === 'round-over' && nextContract ? t("Sıradaki el: {0}", [t(nextContract.title)]) : game.phase === 'game-over' ? t("{0} el tamamlandı. En düşük toplam puan kazandı.", [roundCount]) : t("En düşük toplam puan kazanır.")}</Text>
         <ScrollView style={s.resultList} contentContainerStyle={s.resultListContent} showsVerticalScrollIndicator={false}>
-          {scoreHistory.length > 0 && <View accessibilityLabel="El el puan geçmişi" style={s.historyTable}>
+          {scoreHistory.length > 0 && <View accessibilityLabel={t("El el puan geçmişi")} style={s.historyTable}>
             <View style={s.historyRow}>
-              <Text style={[s.historyRound, s.historyHead]}>El</Text>
+              <Text style={[s.historyRound, s.historyHead]}>{t("El")}</Text>
               {game.players.map(pl => <Text key={pl.id} numberOfLines={1} style={[s.historyCell, s.historyHead]}>{pl.name}</Text>)}
             </View>
             {scoreHistory.map((row, index) => <View key={index} style={[s.historyRow, index % 2 === 1 && s.historyRowAlt]}>
@@ -918,9 +923,9 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
             const detail = over ? game.roundResult?.entries.find((entry) => entry.playerId === pl.id) : undefined;
             const score = scoreSummary(detail, pl.score);
             return <View key={pl.id} style={s.scoreBlock}>
-              <View style={s.score}><Text style={s.scoreName}>{i + 1}. {pl.name}</Text><View style={s.scoreTotal}><Text style={s.scoreTotalLabel}>TOPLAM SKOR</Text><Text style={s.scoreValue}>{score.totalAfter}</Text></View></View>
+              <View style={s.score}><Text style={s.scoreName}>{i + 1}. {pl.name}</Text><View style={s.scoreTotal}><Text style={s.scoreTotalLabel}>{t("TOPLAM SKOR")}</Text><Text style={s.scoreValue}>{score.totalAfter}</Text></View></View>
               {detail && <>
-                <Text style={s.penalty}>{score.roundPenalty === 0 ? `Bu el: ceza yok · Önceki toplam: ${score.totalBefore}` : `Bu el: +${score.roundPenalty} ceza${score.playableDiscardPenalty ? ` · İşlek atma: +${score.playableDiscardPenalty}` : ''} · Önceki toplam: ${score.totalBefore}`}</Text>
+                <Text style={s.penalty}>{score.roundPenalty === 0 ? t("Bu el: ceza yok · Önceki toplam: {0}", [score.totalBefore]) : t("Bu el: +{0} ceza{1} · Önceki toplam: {2}", [score.roundPenalty, score.playableDiscardPenalty ? t(" · İşlek atma: +{0}", [score.playableDiscardPenalty]) : '', score.totalBefore])}</Text>
                 {detail.cards.length > 0 && <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.remainingCards}>
                   {detail.cards.map((card) => <PlayingCard key={card.id} card={card} compact />)}
                 </ScrollView>}
@@ -929,86 +934,91 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
           })}
         </ScrollView>
         {over ? game.phase === 'game-over' ? <>{onRematch && (canRematch
-            ? <Pressable disabled={blocked} style={[s.resultButton, blocked && s.disabled]} onPress={onRematch}><Text style={s.actionText}>Tekrar oyna</Text></Pressable>
-            : <Text style={s.resultCaption}>Oda sahibinin yeniden başlatması bekleniyor.</Text>)}
-          <Pressable style={s.resultButtonSecondary} onPress={onExit}><Text style={s.resultButtonSecondaryText}>Ana menü</Text></Pressable></>
+            ? <Pressable disabled={blocked} style={[s.resultButton, blocked && s.disabled]} onPress={onRematch}><Text style={s.actionText}>{t("Tekrar oyna")}</Text></Pressable>
+            : <Text style={s.resultCaption}>{t("Oda sahibinin yeniden başlatması bekleniyor.")}</Text>)}
+          <Pressable style={s.resultButtonSecondary} onPress={onExit}><Text style={s.resultButtonSecondaryText}>{t("Ana menü")}</Text></Pressable></>
           : <>
-            {botControlled && onReclaim && <Pressable disabled={blocked} style={[s.resultButton, blocked && s.disabled]} onPress={onReclaim}><Text style={s.actionText}>Koltuğu geri al</Text></Pressable>}
-            {advanceSeconds !== null && <Text style={s.resultCaption}>{advanceSeconds} saniye içinde otomatik devam edilecek.</Text>}
+            {botControlled && onReclaim && <Pressable disabled={blocked} style={[s.resultButton, blocked && s.disabled]} onPress={onReclaim}><Text style={s.actionText}>{t("Koltuğu geri al")}</Text></Pressable>}
+            {advanceSeconds !== null && <Text style={s.resultCaption}>{advanceSeconds} {' '}{t("saniye içinde otomatik devam edilecek.")}</Text>}
             {canAdvance
-              ? <Pressable disabled={blocked} style={s.resultButton} onPress={() => { setPending([]); act({ type: 'next' }); }}><Text style={s.actionText}>{game.roundIndex === 11 ? 'Sonucu gör' : 'Sonraki el'}</Text></Pressable>
-              : <Text style={s.resultCaption}>Sıradaki ele otomatik geçilecek.</Text>}
+              ? <Pressable disabled={blocked} style={s.resultButton} onPress={() => { setPending([]); act({ type: 'next' }); }}><Text style={s.actionText}>{game.roundIndex === 11 ? t("Sonucu gör") : t("Sonraki el")}</Text></Pressable>
+              : <Text style={s.resultCaption}>{t("Sıradaki ele otomatik geçilecek.")}</Text>}
           </>
-          : <Pressable style={s.resultButton} onPress={() => setScoresOpen(false)}><Text style={s.actionText}>Masaya dön</Text></Pressable>}
+          : <Pressable style={s.resultButton} onPress={() => setScoresOpen(false)}><Text style={s.actionText}>{t("Masaya dön")}</Text></Pressable>}
       </View></View>
     </Modal>
     <Modal visible={exitOpen} transparent animationType="fade" onRequestClose={() => setExitOpen(false)}><View style={s.backdrop}><View style={s.sheet}>
-      <Text style={s.resultTitle}>Masadan çıkılsın mı?</Text><Text style={s.resultCaption}>{onForfeit ? 'Şimdilik çıkarsan aynı cihazdan masaya dönebilirsin. Kalıcı ayrılırsan koltuğun otomatik yönetilir.' : 'Oyun kaydedilir; aynı cihazdan kaldığın yerden devam edebilirsin.'}</Text>
-      <Pressable style={s.resultButton} onPress={onExit}><Text style={s.actionText}>{onForfeit ? 'Şimdilik çık · koltuğumu koru' : 'Ana menüye dön'}</Text></Pressable>
-      {onForfeit && <Pressable style={s.forfeitButton} onPress={onForfeit}><Text style={s.forfeitText}>Kalıcı ayrıl · oyun devam etsin</Text></Pressable>}
-      <Pressable style={s.resultButtonSecondary} onPress={() => setExitOpen(false)}><Text style={s.resultButtonSecondaryText}>Oynamaya devam et</Text></Pressable>
+      <Text style={s.resultTitle}>{t("Masadan çıkılsın mı?")}</Text><Text style={s.resultCaption}>{onForfeit ? t("Şimdilik çıkarsan aynı cihazdan masaya dönebilirsin. Kalıcı ayrılırsan koltuğun otomatik yönetilir.") : t("Oyun kaydedilir; aynı cihazdan kaldığın yerden devam edebilirsin.")}</Text>
+      <Pressable style={s.resultButton} onPress={onExit}><Text style={s.actionText}>{onForfeit ? t("Şimdilik çık · koltuğumu koru") : t("Ana menüye dön")}</Text></Pressable>
+      {onForfeit && <Pressable style={s.forfeitButton} onPress={onForfeit}><Text style={s.forfeitText}>{t("Kalıcı ayrıl · oyun devam etsin")}</Text></Pressable>}
+      <Pressable style={s.resultButtonSecondary} onPress={() => setExitOpen(false)}><Text style={s.resultButtonSecondaryText}>{t("Oynamaya devam et")}</Text></Pressable>
     </View></View></Modal>
     <Modal visible={Boolean(jokerChoice)} transparent animationType="fade" onRequestClose={() => setJokerChoice(null)}><View style={s.backdrop}><View style={s.sheet}>
-      <Text style={s.resultTitle}>Joker hangi kart?</Text>
-      <Text style={s.resultCaption}>Bu seçim sabit kalır. Jokeri yalnızca seçtiğin tam kartla değiştiren oyuncu geri alabilir.</Text>
+      <Text style={s.resultTitle}>{t("Joker hangi kart?")}</Text>
+      <Text style={s.resultCaption}>{t("Bu seçim sabit kalır. Jokeri yalnızca seçtiğin tam kartla değiştiren oyuncu geri alabilir.")}</Text>
       <View style={s.jokerChoices}>{jokerChoice?.suits.map(suit => <Pressable key={suit} accessibilityRole="button" onPress={() => chooseJokerSuit(suit)} style={s.jokerChoiceButton}>
         <Text style={[s.jokerChoiceSymbol, (suit === 'hearts' || suit === 'diamonds') && s.jokerChoiceRed]}>{suitSymbol[suit]}</Text>
-        <Text style={s.jokerChoiceText}>{suitName[suit]} {jokerChoice.rank}</Text>
+        <Text style={s.jokerChoiceText}>{t(suitName[suit])} {jokerChoice.rank}</Text>
       </Pressable>)}</View>
-      <Pressable style={s.resultButtonSecondary} onPress={() => setJokerChoice(null)}><Text style={s.resultButtonSecondaryText}>Vazgeç</Text></Pressable>
+      <Pressable style={s.resultButtonSecondary} onPress={() => setJokerChoice(null)}><Text style={s.resultButtonSecondaryText}>{t("Vazgeç")}</Text></Pressable>
     </View></View></Modal>
     <Modal visible={debugOpen} transparent animationType="fade" onRequestClose={() => setDebugOpen(false)}><View style={s.backdrop}><View style={[s.sheet, s.debugSheet]}>
-      <Text style={s.resultTitle}>Canlı oyun durumu</Text>
-      <Text style={s.resultCaption}>Her hamlede yenilenir. Rakiplerin elleri yalnızca bu geliştirici görünümünde gösterilir.</Text>
+      <Text style={s.resultTitle}>{t("Canlı oyun durumu")}</Text>
+      <Text style={s.resultCaption}>{t("Her hamlede yenilenir. Rakiplerin elleri yalnızca bu geliştirici görünümünde gösterilir.")}</Text>
       <ScrollView style={s.debugScroll} contentContainerStyle={s.debugContent}>
         <Text selectable style={s.debugText}>{debugText}</Text>
       </ScrollView>
-      <Pressable style={s.resultButton} onPress={() => setDebugOpen(false)}><Text style={s.actionText}>Masaya dön</Text></Pressable>
+      <Pressable style={s.resultButton} onPress={() => setDebugOpen(false)}><Text style={s.actionText}>{t("Masaya dön")}</Text></Pressable>
     </View></View></Modal>
     {onReact && <Modal visible={reactionsOpen} transparent animationType="fade" onRequestClose={() => setReactionsOpen(false)}><Pressable style={s.backdrop} onPress={() => setReactionsOpen(false)}><Pressable style={s.sheet}>
-      <Text style={s.resultTitle}>Tepki gönder</Text>
-      <View style={s.reactionGrid}>{REACTIONS.filter(item => item.kind === 'emoji').map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.id} onPress={() => { onReact(item.id); setReactionsOpen(false); }} style={s.reactionEmojiButton}><Text style={s.reactionEmojiLarge}>{item.text}</Text></Pressable>)}</View>
-      <View style={s.reactionGrid}>{REACTIONS.filter(item => item.kind === 'phrase').map(item => <Pressable key={item.id} accessibilityRole="button" onPress={() => { onReact(item.id); setReactionsOpen(false); }} style={s.reactionPhraseButton}><Text style={s.reactionPhraseText}>{item.text}</Text></Pressable>)}</View>
-      <Text style={s.resultCaption}>Tepkiler masadaki herkese birkaç saniye görünür.</Text>
+      <Text style={s.resultTitle}>{t("Tepki gönder")}</Text>
+      <View style={s.reactionGrid}>{REACTIONS.filter(item => item.kind === 'emoji').map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.id} onPress={() => { onReact(item.id); setReactionsOpen(false); }} style={s.reactionEmojiButton}><Text style={s.reactionEmojiLarge}>{t(item.text)}</Text></Pressable>)}</View>
+      <View style={s.reactionGrid}>{REACTIONS.filter(item => item.kind === 'phrase').map(item => <Pressable key={item.id} accessibilityRole="button" onPress={() => { onReact(item.id); setReactionsOpen(false); }} style={s.reactionPhraseButton}><Text style={s.reactionPhraseText}>{t(item.text)}</Text></Pressable>)}</View>
+      <Text style={s.resultCaption}>{t("Tepkiler masadaki herkese birkaç saniye görünür.")}</Text>
     </Pressable></Pressable></Modal>}
     <Modal visible={settingsOpen} transparent animationType="fade" onRequestClose={() => setSettingsOpen(false)}><View style={s.backdrop}><View style={s.sheet}>
-      <Text style={s.resultTitle}>Oyun ayarları</Text>
-      <SettingRow label="Ses efektleri" value={soundEnabled} onPress={() => { toggleSound(); feedback(); }} />
-      <SettingRow label="Titreşim" value={settings.haptics} onPress={() => updateSettings({ haptics: !settings.haptics })} />
-      <SettingRow label="Son 10 saniye uyarısı" value={settings.criticalTimer} onPress={() => { feedback(); updateSettings({ criticalTimer: !settings.criticalTimer }); }} />
-      <SettingRow label="Eldeki kartları küçült" value={settings.compactCards} onPress={() => { feedback(); updateSettings({ compactCards: !settings.compactCards }); }} />
-      <SettingRow label="Sürükleme ipuçları" value={settings.dragHints} onPress={() => { feedback(); updateSettings({ dragHints: !settings.dragHints }); }} />
-      <SettingRow label="Tepkileri göster" value={settings.showReactions} onPress={() => { feedback(); updateSettings({ showReactions: !settings.showReactions }); }} />
-      <Text style={s.settingsSectionTitle}>YASAL VE GİZLİLİK</Text>
+      <Text style={s.resultTitle}>{t("Oyun ayarları")}</Text>
+      <ScrollView style={s.settingsScroll} contentContainerStyle={s.settingsScrollContent}>
+      <View style={s.settingRow}><Text style={s.settingLabel}>{t('Dil')}</Text><LanguagePicker light /></View>
+      <SettingRow label={t("Ses efektleri")} value={soundEnabled} onPress={() => { toggleSound(); feedback(); }} />
+      <SettingRow label={t("Titreşim")} value={settings.haptics} onPress={() => updateSettings({ haptics: !settings.haptics })} />
+      <SettingRow label={t("Son 10 saniye uyarısı")} value={settings.criticalTimer} onPress={() => { feedback(); updateSettings({ criticalTimer: !settings.criticalTimer }); }} />
+      <SettingRow label={t("Eldeki kartları küçült")} value={settings.compactCards} onPress={() => { feedback(); updateSettings({ compactCards: !settings.compactCards }); }} />
+      <SettingRow label={t("Sürükleme ipuçları")} value={settings.dragHints} onPress={() => { feedback(); updateSettings({ dragHints: !settings.dragHints }); }} />
+      <SettingRow label={t("Tepkileri göster")} value={settings.showReactions} onPress={() => { feedback(); updateSettings({ showReactions: !settings.showReactions }); }} />
+      <Text style={s.settingsSectionTitle}>{t("YASAL VE GİZLİLİK")}</Text>
       <View style={s.settingsLinks}>
-        <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)} style={s.settingsLink}><Text style={s.settingsLinkText}>Gizlilik politikası</Text><Text style={s.settingsLinkAction}>Aç</Text></Pressable>
-        <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(TERMS_URL)} style={s.settingsLink}><Text style={s.settingsLinkText}>{TERMS_LABEL}</Text><Text style={s.settingsLinkAction}>Aç</Text></Pressable>
-        <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(DELETE_ACCOUNT_URL)} style={s.settingsLink}><Text style={s.settingsLinkText}>Hesap ve veri silme</Text><Text style={s.settingsLinkAction}>Aç</Text></Pressable>
+        <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)} style={s.settingsLink}><Text style={s.settingsLinkText}>{t("Gizlilik politikası")}</Text><Text style={s.settingsLinkAction}>{t("Aç")}</Text></Pressable>
+        <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(TERMS_URL)} style={s.settingsLink}><Text style={s.settingsLinkText}>{t(TERMS_LABEL)}</Text><Text style={s.settingsLinkAction}>{t("Aç")}</Text></Pressable>
+        <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(DELETE_ACCOUNT_URL)} style={s.settingsLink}><Text style={s.settingsLinkText}>{t("Hesap ve veri silme")}</Text><Text style={s.settingsLinkAction}>{t("Aç")}</Text></Pressable>
       </View>
       {debugText && <Pressable accessibilityRole="button" onPress={() => { setSettingsOpen(false); setDebugOpen(true); }} style={s.debugEntry}>
-        <View><Text style={s.debugEntryTitle}>Canlı oyun durumu</Text><Text style={s.debugEntryCaption}>El, masa ve son hamleleri incele</Text></View><Text style={s.settingsLinkAction}>Aç</Text>
+        <View><Text style={s.debugEntryTitle}>{t("Canlı oyun durumu")}</Text><Text style={s.debugEntryCaption}>{t("El, masa ve son hamleleri incele")}</Text></View><Text style={s.settingsLinkAction}>{t("Aç")}</Text>
       </Pressable>}
-      <Pressable style={s.resultButton} onPress={() => setSettingsOpen(false)}><Text style={s.actionText}>Tamam</Text></Pressable>
+      </ScrollView>
+      <Pressable style={s.resultButton} onPress={() => setSettingsOpen(false)}><Text style={s.actionText}>{t("Tamam")}</Text></Pressable>
     </View></View></Modal>
     <Modal visible={helpOpen} transparent animationType="fade" onRequestClose={() => setHelpOpen(false)}><View style={s.backdrop}><View style={s.sheet}>
-      <Text style={s.resultTitle}>Bu elde ne yapacağım?</Text>
-      <View style={s.helpTask}><Text style={s.helpTaskLabel}>EL {game.roundIndex + 1} / {roundCount} GÖREVİ</Text><Text style={s.helpTaskTitle}>{contract.title}</Text></View>
+      <Text style={s.resultTitle}>{t("Bu elde ne yapacağım?")}</Text>
+      <View style={s.helpTask}><Text style={s.helpTaskLabel}>{t("EL")} {game.roundIndex + 1} / {roundCount} {' '}{t("GÖREVİ")}</Text><Text style={s.helpTaskTitle}>{t(contract.title)}</Text></View>
       <ScrollView style={s.helpScroll} contentContainerStyle={s.helpContent}>
-        <Text style={s.helpLine}><Text style={s.helpStrong}>1. Kart çek:</Text> Deste veya açık kartı eline sürükle.</Text>
-        <Text style={s.helpLine}><Text style={s.helpStrong}>2. Aç / işle:</Text> Görev tepsilerini doldur. Elini açtıktan sonra 3 veya daha fazla kartı yeni küt ya da seri tepsisinde hazırlayıp tek seferde masaya açabilirsin.</Text>
-        <Text style={s.helpLine}><Text style={s.helpStrong}>3. Kart at:</Text> Bir kartı açık kart alanına sürükleyerek sıranı bitir.</Text>
-        <Text style={s.helpLine}><Text style={s.helpStrong}>Küt:</Text> Aynı sayı, farklı semboller. <Text style={s.helpStrong}>Seri:</Text> Aynı sembolde ardışık kartlar; As yalnızca Q-K-A sonunda kullanılır.</Text>
-        <Text style={s.helpLine}><Text style={s.helpStrong}>Joker:</Text> {gameRules.jokerOpeningRestrictionRounds ? `İlk ${gameRules.jokerOpeningRestrictionRounds} elin ilk açılışında kullanılamaz.` : 'Açılış görevlerinde kullanılabilir.'} Kütte jokerin temsil ettiği sembol açılırken seçilir; joker yalnızca ilan edilen tam kartla değiştirilebilir.</Text>
-        <Text style={s.helpLine}><Text style={s.helpStrong}>Açık kart teklifi:</Text> {gameRules.claimsEnabled ? `3+ kişilik masada desteden kart seçildiğinde diğer oyuncular açık kartı 1 ceza kartıyla alabilir. Karar süresi ${gameRules.claimTimeoutMs / 1000} saniyedir; iki kişilik oyunda teklif açılmaz.` : 'Bu oyunda kapalı.'}</Text>
-        <Text style={s.helpLine}><Text style={s.helpStrong}>İşlek kart:</Text> Yerdeki bir küt veya seriye işlenebilen kartı atmak +25 ceza verir. Bu kural, henüz elini açmamış oyuncuya da uygulanır.</Text>
-        <Text style={s.helpLine}><Text style={s.helpStrong}>Puan:</Text> Elde kalan sayılar değeri kadar, J-Q-K 10, As 11, Joker 25 ceza verir. En düşük toplam kazanır.</Text>
+        <Text style={s.helpLine}><Text style={s.helpStrong}>{t("1. Kart çek:")}</Text>{' '}{t("Deste veya açık kartı eline sürükle.")}</Text>
+        <Text style={s.helpLine}><Text style={s.helpStrong}>{t("2. Aç / işle:")}</Text>{' '}{t("Görev tepsilerini doldur. Elini açtıktan sonra 3 veya daha fazla kartı yeni küt ya da seri tepsisinde hazırlayıp tek seferde masaya açabilirsin.")}</Text>
+        <Text style={s.helpLine}><Text style={s.helpStrong}>{t("3. Kart at:")}</Text>{' '}{t("Bir kartı açık kart alanına sürükleyerek sıranı bitir.")}</Text>
+        <Text style={s.helpLine}><Text style={s.helpStrong}>{t("Küt:")}</Text>{' '}{t("Aynı sayı, farklı semboller.")}<Text style={s.helpStrong}>{t("Seri:")}</Text>{' '}{t("Aynı sembolde ardışık kartlar; As yalnızca Q-K-A sonunda kullanılır.")}</Text>
+        <Text style={s.helpLine}><Text style={s.helpStrong}>{t("Joker:")}</Text> {gameRules.jokerOpeningRestrictionRounds ? t("İlk {0} elin ilk açılışında kullanılamaz.", [gameRules.jokerOpeningRestrictionRounds]) : t("Açılış görevlerinde kullanılabilir.")}{t("Kütte jokerin temsil ettiği sembol açılırken seçilir; joker yalnızca ilan edilen tam kartla değiştirilebilir.")}</Text>
+        <Text style={s.helpLine}><Text style={s.helpStrong}>{t("Açık kart teklifi:")}</Text> {gameRules.claimsEnabled ? t("3+ kişilik masada desteden kart seçildiğinde diğer oyuncular açık kartı 1 ceza kartıyla alabilir. Karar süresi {0} saniyedir; iki kişilik oyunda teklif açılmaz.", [gameRules.claimTimeoutMs / 1000]) : t("Bu oyunda kapalı.")}</Text>
+        <Text style={s.helpLine}><Text style={s.helpStrong}>{t("İşlek kart:")}</Text>{' '}{t("Yerdeki bir küt veya seriye işlenebilen kartı atmak +25 ceza verir. Bu kural, henüz elini açmamış oyuncuya da uygulanır.")}</Text>
+        <Text style={s.helpLine}><Text style={s.helpStrong}>{t("Puan:")}</Text>{' '}{t("Elde kalan sayılar değeri kadar, J-Q-K 10, As 11, Joker 25 ceza verir. En düşük toplam kazanır.")}</Text>
       </ScrollView>
-      {onOpenTutorial && <Pressable style={s.resultButtonSecondary} onPress={() => { setHelpOpen(false); onOpenTutorial(); }}><Text style={s.resultButtonSecondaryText}>Detaylı eğitimi tekrar izle</Text></Pressable>}
-      <Pressable style={s.resultButton} onPress={() => setHelpOpen(false)}><Text style={s.actionText}>Masaya dön</Text></Pressable>
+      {onOpenTutorial && <Pressable style={s.resultButtonSecondary} onPress={() => { setHelpOpen(false); onOpenTutorial(); }}><Text style={s.resultButtonSecondaryText}>{t("Detaylı eğitimi tekrar izle")}</Text></Pressable>}
+      <Pressable style={s.resultButton} onPress={() => setHelpOpen(false)}><Text style={s.actionText}>{t("Masaya dön")}</Text></Pressable>
     </View></View></Modal>
   </SafeAreaView>;
 }
 const s = StyleSheet.create({
+  settingsScroll: { flexGrow: 0 },
+  settingsScrollContent: { paddingBottom: 8 },
   page: { flex: 1, backgroundColor: '#09271e', width: '100%', maxWidth: 1180, alignSelf: 'center' },
   pageTabletLandscape: { borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#ffffff0d' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 6 },

@@ -1,3 +1,4 @@
+import { useTranslations } from '@/i18n/language';
 import { useEffect, useState } from 'react';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { Alert, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -12,6 +13,7 @@ import { clearPlayerSearch, dismissInvite, FriendPlayer, inviteFriend, refreshSo
 import { normalizeUsername } from '@/network/usernames';
 
 export default function FriendsScreen() {
+  const { t, localizeMessage } = useTranslations();
   const { isTablet } = useResponsiveLayout();
   const { roomCode } = useLocalSearchParams<{ roomCode?: string }>();
   const social = useSocial();
@@ -58,11 +60,11 @@ export default function FriendsScreen() {
 
   const confirmRemove = (player: FriendPlayer) => {
     Alert.alert(
-      'Arkadaş kaldırılsın mı?',
-      `${player.username || player.displayName} arkadaş listenden kaldırılacak.`,
+      t("Arkadaş kaldırılsın mı?"),
+      t("{0} arkadaş listenden kaldırılacak.", [player.username || player.displayName]),
       [
-        { text: 'Vazgeç', style: 'cancel' },
-        { text: 'Kaldır', style: 'destructive', onPress: () => { void removeFriend(player.userId); } },
+        { text: t("Vazgeç"), style: 'cancel' },
+        { text: t("Kaldır"), style: 'destructive', onPress: () => { void removeFriend(player.userId); } },
       ],
     );
   };
@@ -70,64 +72,64 @@ export default function FriendsScreen() {
   return <SafeAreaView style={s.page}>
     <Stack.Screen options={{ headerShown: false }} />
     <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={[s.content, isTablet && s.contentTablet]} keyboardShouldPersistTaps="handled">
-      <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>← Geri</Text></Pressable>
-      <Text style={s.eyebrow}>ARKADAŞLAR</Text>
-      <Text style={s.title}>{roomCode ? 'Masaya kimi çağıralım?' : 'Masan artık bir koddan fazlası.'}</Text>
-      <Text style={s.body}>{roomCode ? 'Arkadaşların daveti alır ve tek dokunuşla bekleyen masaya oturur.' : 'Arkadaş ekle, çevrim içi olduklarını gör ve açık masalarına katıl.'}</Text>
+      <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>{t("← Geri")}</Text></Pressable>
+      <Text style={s.eyebrow}>{t("ARKADAŞLAR")}</Text>
+      <Text style={s.title}>{roomCode ? t("Masaya kimi çağıralım?") : t("Masan artık bir koddan fazlası.")}</Text>
+      <Text style={s.body}>{roomCode ? t("Arkadaşların daveti alır ve tek dokunuşla bekleyen masaya oturur.") : t("Arkadaş ekle, çevrim içi olduklarını gör ve açık masalarına katıl.")}</Text>
 
       <View style={s.codePanel}>
-        <View><Text style={s.label}>KULLANICI ADIN</Text><Text selectable style={s.ownCode}>@{social.username || 'hazırlanıyor'}</Text></View>
-        <Pressable disabled={!social.username} onPress={() => void Share.share({ message: `Amerikano'da beni ekle: @${social.username}` })}><Text style={s.link}>Paylaş ↗</Text></Pressable>
+        <View><Text style={s.label}>{t("KULLANICI ADIN")}</Text><Text selectable style={s.ownCode}>@{social.username || t("hazırlanıyor")}</Text></View>
+        <Pressable disabled={!social.username} onPress={() => void Share.share({ message: t("Amerikano'da beni ekle: @{0}", [social.username]) })}><Text style={s.link}>{t("Paylaş ↗")}</Text></Pressable>
       </View>
 
-      <Text style={s.label}>KULLANICI ADIYLA ARA</Text>
-      <TextInput accessibilityLabel="Kullanıcı adıyla arkadaş ara" autoCapitalize="none" autoCorrect={false} maxLength={20} value={query}
-        onChangeText={(value) => setQuery(normalizeUsername(value))} placeholder="@kullaniciadi" placeholderTextColor={p.muted} style={s.input} />
-      {query.length > 0 && query.length < 3 && <Text style={s.searchHint}>Aramak için en az 3 karakter yaz.</Text>}
-      {social.searching && <Text style={s.searchHint}>Oyuncular aranıyor…</Text>}
-      {query.length >= 3 && !social.searching && social.searchResults.length === 0 && !social.error && <Text style={s.searchHint}>Bu kullanıcı adıyla eşleşen oyuncu bulunamadı.</Text>}
-      {social.searchResults.length > 0 && <Section title="ARAMA SONUÇLARI">{social.searchResults.map((player) => <PlayerRow key={player.userId} player={player}
+      <Text style={s.label}>{t("KULLANICI ADIYLA ARA")}</Text>
+      <TextInput accessibilityLabel={t("Kullanıcı adıyla arkadaş ara")} autoCapitalize="none" autoCorrect={false} maxLength={20} value={query}
+        onChangeText={(value) => setQuery(normalizeUsername(value))} placeholder={t('@kullaniciadi')} placeholderTextColor={p.muted} style={s.input} />
+      {query.length > 0 && query.length < 3 && <Text style={s.searchHint}>{t("Aramak için en az 3 karakter yaz.")}</Text>}
+      {social.searching && <Text style={s.searchHint}>{t("Oyuncular aranıyor…")}</Text>}
+      {query.length >= 3 && !social.searching && social.searchResults.length === 0 && !social.error && <Text style={s.searchHint}>{t("Bu kullanıcı adıyla eşleşen oyuncu bulunamadı.")}</Text>}
+      {social.searchResults.length > 0 && <Section title={t("ARAMA SONUÇLARI")}>{social.searchResults.map((player) => <PlayerRow key={player.userId} player={player}
         detail={`@${player.username} · Sv. ${player.level}`}
         actions={player.relationship === 'friend'
-          ? <SmallButton label="Arkadaşın" disabled onPress={() => {}} />
+          ? <SmallButton label={t("Arkadaşın")} disabled onPress={() => {}} />
           : player.relationship === 'outgoing'
-            ? <SmallButton label="İstek gönderildi" disabled onPress={() => {}} />
+            ? <SmallButton label={t("İstek gönderildi")} disabled onPress={() => {}} />
             : player.relationship === 'incoming'
-              ? <SmallButton label="Kabul et" filled disabled={social.busy} onPress={() => void respondFriend(player.userId, true)} />
-              : <SmallButton label="Ekle" filled disabled={social.busy} onPress={() => void addFriend(player.userId)} />} />)}</Section>}
+              ? <SmallButton label={t("Kabul et")} filled disabled={social.busy} onPress={() => void respondFriend(player.userId, true)} />
+              : <SmallButton label={t("Ekle")} filled disabled={social.busy} onPress={() => void addFriend(player.userId)} />} />)}</Section>}
 
-      {!!social.error && <Text style={s.error}>{social.error}</Text>}
-      {!!social.info && <Text style={s.success}>{social.info}</Text>}
+      {!!social.error && <Text style={s.error}>{localizeMessage(social.error)}</Text>}
+      {!!social.info && <Text style={s.success}>{localizeMessage(social.info)}</Text>}
 
-      {social.invites.length > 0 && <Section title="MASA DAVETLERİ">{social.invites.map((invite) => <PlayerRow key={invite.inviteId} player={invite.sender}
-        detail={`Seni ${invite.roomCode} masasına çağırıyor`} actions={<>
-          <SmallButton label="Katıl" filled onPress={() => void joinRoom(invite.roomCode)} />
-          <SmallButton label="Kapat" onPress={() => void dismissInvite(invite.inviteId)} />
+      {social.invites.length > 0 && <Section title={t("MASA DAVETLERİ")}>{social.invites.map((invite) => <PlayerRow key={invite.inviteId} player={invite.sender}
+        detail={t("Seni {0} masasına çağırıyor", [invite.roomCode])} actions={<>
+          <SmallButton label={t("Katıl")} filled onPress={() => void joinRoom(invite.roomCode)} />
+          <SmallButton label={t("Kapat")} onPress={() => void dismissInvite(invite.inviteId)} />
         </>} />)}</Section>}
 
-      {social.incoming.length > 0 && <Section title="GELEN İSTEKLER">{social.incoming.map((player) => <PlayerRow key={player.userId} player={player} detail={`@${player.username} · Arkadaşlık isteği gönderdi`} actions={<>
-        <SmallButton label="Kabul" filled onPress={() => void respondFriend(player.userId, true)} />
-        <SmallButton label="Reddet" onPress={() => void respondFriend(player.userId, false)} />
+      {social.incoming.length > 0 && <Section title={t("GELEN İSTEKLER")}>{social.incoming.map((player) => <PlayerRow key={player.userId} player={player} detail={`@${player.username} · Arkadaşlık isteği gönderdi`} actions={<>
+        <SmallButton label={t("Kabul")} filled onPress={() => void respondFriend(player.userId, true)} />
+        <SmallButton label={t("Reddet")} onPress={() => void respondFriend(player.userId, false)} />
       </>} />)}</Section>}
 
-      <Section title={`ARKADAŞLAR · ${social.friends.length}`}>
-        {social.friends.length === 0 && !social.loading ? <Text style={s.empty}>Henüz arkadaşın yok. Kullanıcı adıyla arayarak ilk arkadaşını ekleyebilirsin.</Text> : null}
+      <Section title={t("ARKADAŞLAR · {0}", [social.friends.length])}>
+        {social.friends.length === 0 && !social.loading ? <Text style={s.empty}>{t("Henüz arkadaşın yok. Kullanıcı adıyla arayarak ilk arkadaşını ekleyebilirsin.")}</Text> : null}
         {social.friends.map((player) => <PlayerRow key={player.userId} player={player}
-          detail={`@${player.username} · ${player.online ? '● Çevrim içi' : '○ Çevrim dışı'} · Sv. ${player.level} · ${player.wins}/${player.gamesPlayed} galibiyet`}
+          detail={`@${player.username} · ${player.online ? t("● Çevrim içi") : t("○ Çevrim dışı")} · Sv. ${player.level} · ${player.wins}/${player.gamesPlayed} galibiyet`}
           actions={<>
             {roomCode
-              ? <SmallButton label="Davet et" filled disabled={social.busy} onPress={() => void inviteFriend(player.userId, roomCode)} />
+              ? <SmallButton label={t("Davet et")} filled disabled={social.busy} onPress={() => void inviteFriend(player.userId, roomCode)} />
               : player.roomCode
-                ? <SmallButton label="Masaya otur" filled disabled={roomState.room?.status === 'playing'} onPress={() => void joinRoom(player.roomCode!)} />
+                ? <SmallButton label={t("Masaya otur")} filled disabled={roomState.room?.status === 'playing'} onPress={() => void joinRoom(player.roomCode!)} />
                 : null}
-            <SmallButton label="Kaldır" disabled={social.busy} onPress={() => confirmRemove(player)} />
+            <SmallButton label={t("Kaldır")} disabled={social.busy} onPress={() => confirmRemove(player)} />
           </>} />)}
       </Section>
 
-      {social.outgoing.length > 0 && <Section title="BEKLEYEN İSTEKLER">{social.outgoing.map((player) => <PlayerRow key={player.userId} player={player} detail={`@${player.username} · İstek gönderildi`}
-        actions={<SmallButton label="İptal et" disabled={social.busy} onPress={() => void removeFriend(player.userId, 'Arkadaşlık isteği iptal edildi.')} />} />)}</Section>}
-      {social.loading && <Text style={s.empty}>Arkadaşların yükleniyor…</Text>}
-      {roomState.room?.status === 'playing' && <Text style={s.note}>Devam eden oyun varken başka bir masaya geçemezsin.</Text>}
+      {social.outgoing.length > 0 && <Section title={t("BEKLEYEN İSTEKLER")}>{social.outgoing.map((player) => <PlayerRow key={player.userId} player={player} detail={`@${player.username} · İstek gönderildi`}
+        actions={<SmallButton label={t("İptal et")} disabled={social.busy} onPress={() => void removeFriend(player.userId, t("Arkadaşlık isteği iptal edildi."))} />} />)}</Section>}
+      {social.loading && <Text style={s.empty}>{t("Arkadaşların yükleniyor…")}</Text>}
+      {roomState.room?.status === 'playing' && <Text style={s.note}>{t("Devam eden oyun varken başka bir masaya geçemezsin.")}</Text>}
     </KeyboardAwareScrollView>
   </SafeAreaView>;
 }

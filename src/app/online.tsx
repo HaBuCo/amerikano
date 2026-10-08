@@ -1,3 +1,4 @@
+import { useTranslations } from '@/i18n/language';
 import { useEffect, useRef, useState } from 'react';
 import { Href, router, useLocalSearchParams } from 'expo-router';
 import { Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -16,6 +17,7 @@ import { registerRoundOver, showMatchEndInterstitial } from '@/ads/interstitial'
 import { GameAction } from '@/game/types';
 
 export default function OnlineScreen() {
+  const { t, localizeMessage } = useTranslations();
   const { isTablet } = useResponsiveLayout();
   const { quick } = useLocalSearchParams<{ quick?: string }>();
   const state = useRoom();
@@ -67,62 +69,62 @@ export default function OnlineScreen() {
       botControlled={me?.botControlled} onReclaim={() => sendRoom({ type: 'reclaim' })}
       blocked={state.status !== 'online' || state.busy} onAction={(action: GameAction) => { if (action.type === 'next' && room.game?.phase === 'round-over') registerRoundOver(); sendAction(action); }}
       connectionState={state.status === 'online' ? 'online' : state.status === 'connecting' ? 'reconnecting' : 'offline'}
-      error={state.error || (state.status !== 'online' ? 'Yeniden bağlanılıyor… Elin korunuyor.' : '')}
+      error={state.error || (state.status !== 'online' ? t("Yeniden bağlanılıyor… Elin korunuyor.") : '')}
       onForfeit={() => { void forfeitRoom().then((left) => { if (left) router.replace('/'); }); }}
       onExit={() => { if (room.game?.phase === 'game-over') { showMatchEndInterstitial(); forgetRoom(); } else suspendRoom(); router.replace('/'); }} />
-    <RoundIntro roundIndex={room.game.roundIndex} starterName={room.game.players[room.game.startingPlayerIndex]?.name ?? 'Oyuncu'} enabled={state.status === 'online'} />
+    <RoundIntro roundIndex={room.game.roundIndex} starterName={room.game.players[room.game.startingPlayerIndex]?.name ?? t("Oyuncu")} enabled={state.status === 'online'} />
   </View>;
   return <SafeAreaView style={s.page}>
     <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={[s.content, isTablet && s.contentTablet]} keyboardShouldPersistTaps="handled">
-      <Pressable accessibilityRole="button" disabled={state.busy} onPress={goBack}><Text style={s.back}>← Ana menü</Text></Pressable>
+      <Pressable accessibilityRole="button" disabled={state.busy} onPress={goBack}><Text style={s.back}>{t("← Ana menü")}</Text></Pressable>
       <Pressable accessibilityRole="button" onPress={() => router.push('/profile')} style={s.profileLink}>
-        <Text style={s.profileLinkText}>Profilim · Sv. {profileLevel(profileState.profile?.experience ?? 0)} →</Text>
+        <Text style={s.profileLinkText}>{t("Profilim · Sv.")}{profileLevel(profileState.profile?.experience ?? 0)} →</Text>
       </Pressable>
-      <Text style={s.eyebrow}>{room?.visibility === 'public' || (!room && quick === '1') ? 'HIZLI MASA' : 'ARKADAŞ MASASI'}</Text>
-      <Text style={s.title}>{room ? 'Masana oturdun.' : quick === '1' ? 'Sana bir masa buluyoruz.' : 'Aynı masa.\nNerede olursan.'}</Text>
-      <Text style={s.body}>{room?.visibility === 'public' ? 'Yerini tuttun. Sistem yeni oyuncuları bu masaya yerleştirirken sen bekle.' : room ? 'Kodunu veya arkadaş davetini paylaş. Herkes hazır olduğunda başlayın.' : quick === '1' ? 'Oyuncuların toplandığı bir masaya katılıyorsun.' : 'Arkadaşların için oda oluştur veya gelen kodla masalarına katıl.'}</Text>
-      <Text style={s.status}>{state.status === 'online' ? '● Sunucuya bağlı' : '○ Bağlantı bekleniyor'}</Text>
-      {!!state.error && <View style={s.error}><Text style={s.body}>{state.error}</Text><Pressable onPress={forgetRoom}><Text style={s.link}>Oturumu sıfırla ve yeniden dene</Text></Pressable></View>}
-      {!room ? quick === '1' ? <Text style={s.roomHint}>{state.status === 'online' ? 'Masa aranıyor…' : 'Sunucuya bağlanılıyor…'}</Text> : <>
-        <Text style={s.label}>KULLANICI ADIN</Text>
-        <Text style={s.body}>{name ? `@${name}` : 'Profil hazırlanıyor…'}</Text>
-        <Text style={s.label}>ÖZEL ARKADAŞ MASASI</Text>
-        <Pressable accessibilityRole="button" disabled={!name.trim() || state.busy || state.status !== 'online'} style={[s.primary, (!name.trim() || state.busy || state.status !== 'online') && s.disabled]} onPress={() => enterRoom(name)}><Text style={s.primaryText}>Yeni oda oluştur →</Text></Pressable>
+      <Text style={s.eyebrow}>{room?.visibility === 'public' || (!room && quick === '1') ? t("HIZLI MASA") : t("ARKADAŞ MASASI")}</Text>
+      <Text style={s.title}>{room ? t("Masana oturdun.") : quick === '1' ? t("Sana bir masa buluyoruz.") : t("Aynı masa.\nNerede olursan.")}</Text>
+      <Text style={s.body}>{room?.visibility === 'public' ? t("Yerini tuttun. Sistem yeni oyuncuları bu masaya yerleştirirken sen bekle.") : room ? t("Kodunu veya arkadaş davetini paylaş. Herkes hazır olduğunda başlayın.") : quick === '1' ? t("Oyuncuların toplandığı bir masaya katılıyorsun.") : t("Arkadaşların için oda oluştur veya gelen kodla masalarına katıl.")}</Text>
+      <Text style={s.status}>{state.status === 'online' ? t("● Sunucuya bağlı") : t("○ Bağlantı bekleniyor")}</Text>
+      {!!state.error && <View style={s.error}><Text style={s.body}>{localizeMessage(state.error)}</Text><Pressable onPress={forgetRoom}><Text style={s.link}>{t("Oturumu sıfırla ve yeniden dene")}</Text></Pressable></View>}
+      {!room ? quick === '1' ? <Text style={s.roomHint}>{state.status === 'online' ? t("Masa aranıyor…") : t("Sunucuya bağlanılıyor…")}</Text> : <>
+        <Text style={s.label}>{t("KULLANICI ADIN")}</Text>
+        <Text style={s.body}>{name ? `@${name}` : t("Profil hazırlanıyor…")}</Text>
+        <Text style={s.label}>{t("ÖZEL ARKADAŞ MASASI")}</Text>
+        <Pressable accessibilityRole="button" disabled={!name.trim() || state.busy || state.status !== 'online'} style={[s.primary, (!name.trim() || state.busy || state.status !== 'online') && s.disabled]} onPress={() => enterRoom(name)}><Text style={s.primaryText}>{t("Yeni oda oluştur →")}</Text></Pressable>
         <View style={s.divider} />
-        <Text style={s.label}>ARKADAŞINDAN GELEN KOD</Text>
-        <TextInput accessibilityLabel="Oda kodu" autoCapitalize="characters" autoCorrect={false} style={[s.input, s.codeInput]} placeholder="ABC123" placeholderTextColor={p.muted} maxLength={6} value={code} onChangeText={v => setCode(v.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
-        <Pressable accessibilityRole="button" disabled={!name.trim() || code.length !== 6 || state.busy || state.status !== 'online'} style={[s.secondary, (!name.trim() || code.length !== 6 || state.busy || state.status !== 'online') && s.disabled]} onPress={() => enterRoom(name, code)}><Text style={s.white}>Odaya katıl</Text></Pressable>
+        <Text style={s.label}>{t("ARKADAŞINDAN GELEN KOD")}</Text>
+        <TextInput accessibilityLabel={t("Oda kodu")} autoCapitalize="characters" autoCorrect={false} style={[s.input, s.codeInput]} placeholder="ABC123" placeholderTextColor={p.muted} maxLength={6} value={code} onChangeText={v => setCode(v.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
+        <Pressable accessibilityRole="button" disabled={!name.trim() || code.length !== 6 || state.busy || state.status !== 'online'} style={[s.secondary, (!name.trim() || code.length !== 6 || state.busy || state.status !== 'online') && s.disabled]} onPress={() => enterRoom(name, code)}><Text style={s.white}>{t("Odaya katıl")}</Text></Pressable>
       </> : <>
-        <View style={s.codePanel}><Text style={s.label}>ODA KODU</Text><Text selectable style={s.code}>{room.code}</Text><Pressable accessibilityRole="button" onPress={() => void Share.share({ message: `Amerikano masama katıl! Oda kodu: ${room.code}` })}><Text style={s.link}>Kodu paylaş ↗</Text></Pressable></View>
+        <View style={s.codePanel}><Text style={s.label}>{t("ODA KODU")}</Text><Text selectable style={s.code}>{room.code}</Text><Pressable accessibilityRole="button" onPress={() => void Share.share({ message: t("Amerikano masama katıl! Oda kodu: {0}", [room.code]) })}><Text style={s.link}>{t("Kodu paylaş ↗")}</Text></Pressable></View>
         <Pressable accessibilityRole="button" style={s.inviteButton} onPress={() => router.push(`/friends?roomCode=${room.code}` as Href)}>
-          <Text style={s.white}>Arkadaşlarını davet et</Text><Text style={s.inviteArrow}>→</Text>
+          <Text style={s.white}>{t("Arkadaşlarını davet et")}</Text><Text style={s.inviteArrow}>→</Text>
         </Pressable>
         <WaitingTable room={room} tableWidth={isTablet ? 780 : 560} searching={room.visibility === 'public'}
           onInviteEmptySeat={room.visibility === 'private' ? () => router.push(`/friends?roomCode=${room.code}` as Href) : undefined} />
         {room.visibility === 'private' ? <>
           {room.hostId === room.you && <View style={s.botPanel}>
-            <View style={s.botCopy}><Text style={s.white}>Yapay oyuncular</Text><Text style={s.botHint}>{botCount ? `${botCount} yapay oyuncu masada` : 'Boş koltukları botlarla doldur.'}</Text></View>
+            <View style={s.botCopy}><Text style={s.white}>{t("Yapay oyuncular")}</Text><Text style={s.botHint}>{botCount ? t("{0} yapay oyuncu masada", [botCount]) : t("Boş koltukları botlarla doldur.")}</Text></View>
             <View style={s.botActions}>
-              {botCount > 0 && <Pressable accessibilityRole="button" accessibilityLabel="Yapay oyuncu çıkar" disabled={state.busy || state.status !== 'online'} onPress={() => sendRoom({ type: 'remove-bot' })} style={[s.botButton, (state.busy || state.status !== 'online') && s.disabled]}><Text style={s.white}>−</Text></Pressable>}
-              <Pressable accessibilityRole="button" accessibilityLabel="Yapay oyuncu ekle" disabled={state.busy || state.status !== 'online' || room.members.length >= 6} onPress={() => sendRoom({ type: 'add-bot' })} style={[s.botButton, (state.busy || state.status !== 'online' || room.members.length >= 6) && s.disabled]}><Text style={s.botAddText}>+ Oyuncu ekle</Text></Pressable>
+              {botCount > 0 && <Pressable accessibilityRole="button" accessibilityLabel={t("Yapay oyuncu çıkar")} disabled={state.busy || state.status !== 'online'} onPress={() => sendRoom({ type: 'remove-bot' })} style={[s.botButton, (state.busy || state.status !== 'online') && s.disabled]}><Text style={s.white}>−</Text></Pressable>}
+              <Pressable accessibilityRole="button" accessibilityLabel={t("Yapay oyuncu ekle")} disabled={state.busy || state.status !== 'online' || room.members.length >= 6} onPress={() => sendRoom({ type: 'add-bot' })} style={[s.botButton, (state.busy || state.status !== 'online' || room.members.length >= 6) && s.disabled]}><Text style={s.botAddText}>{t("+ Oyuncu ekle")}</Text></Pressable>
             </View>
           </View>}
-          <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online'} onPress={() => sendRoom({ type: 'ready', ready: !me?.ready })} style={s.secondary}><Text style={s.white}>{me?.ready ? 'Hazır değilim' : 'Hazırım ✓'}</Text></Pressable>
-          {room.hostId === room.you && <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online' || room.members.length < MIN_GAME_PLAYERS || room.members.some(m => !m.ready || !m.connected)} style={[s.primary, (room.members.length < MIN_GAME_PLAYERS || room.members.some(m => !m.ready || !m.connected)) && s.disabled]} onPress={() => sendRoom({ type: 'start' })}><Text style={s.primaryText}>Kartları dağıt</Text></Pressable>}
-          <Text style={s.roomHint}>Herkes hazır olduğunda oda sahibi kartları dağıtır.</Text>
+          <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online'} onPress={() => sendRoom({ type: 'ready', ready: !me?.ready })} style={s.secondary}><Text style={s.white}>{me?.ready ? t("Hazır değilim") : t("Hazırım ✓")}</Text></Pressable>
+          {room.hostId === room.you && <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online' || room.members.length < MIN_GAME_PLAYERS || room.members.some(m => !m.ready || !m.connected)} style={[s.primary, (room.members.length < MIN_GAME_PLAYERS || room.members.some(m => !m.ready || !m.connected)) && s.disabled]} onPress={() => sendRoom({ type: 'start' })}><Text style={s.primaryText}>{t("Kartları dağıt")}</Text></Pressable>}
+          <Text style={s.roomHint}>{t("Herkes hazır olduğunda oda sahibi kartları dağıtır.")}</Text>
         </> : <View style={s.matchPanel}>
-          <Text style={s.matchTitle}>{quickSeconds === null ? `${connectedPlayers}/${QUICK_ROOM_TARGET} oyuncu bulundu` : connectedPlayers >= QUICK_ROOM_TARGET ? `Masa hazır · ${quickSeconds} saniye içinde başlıyor` : `4. oyuncu aranıyor · ${quickSeconds} saniye içinde başlıyor`}</Text>
-          <Text style={s.roomHint}>{quickSeconds === null ? `${Math.max(0, QUICK_ROOM_TARGET - connectedPlayers)} oyuncu aranıyor. Hızlı masa en az 3 kişiyle başlar.` : connectedPlayers < QUICK_ROOM_TARGET ? 'Dördüncü oyuncu gelmezse 3 kişiyle başlayacaksınız.' : 'Masadan ayrılma; oyun otomatik başlayacak.'}</Text>
-          {botCount > 0 && <Text style={s.roomHint}>{botCount} bot masaya katıldı. Botlar koltuklarında işaretli.</Text>}
+          <Text style={s.matchTitle}>{quickSeconds === null ? t("{0}/{1} oyuncu bulundu", [connectedPlayers, QUICK_ROOM_TARGET]) : connectedPlayers >= QUICK_ROOM_TARGET ? t("Masa hazır · {0} saniye içinde başlıyor", [quickSeconds]) : t("4. oyuncu aranıyor · {0} saniye içinde başlıyor", [quickSeconds])}</Text>
+          <Text style={s.roomHint}>{quickSeconds === null ? t("{0} oyuncu aranıyor. Hızlı masa en az 3 kişiyle başlar.", [Math.max(0, QUICK_ROOM_TARGET - connectedPlayers)]) : connectedPlayers < QUICK_ROOM_TARGET ? t("Dördüncü oyuncu gelmezse 3 kişiyle başlayacaksınız.") : t("Masadan ayrılma; oyun otomatik başlayacak.")}</Text>
+          {botCount > 0 && <Text style={s.roomHint}>{botCount}{t("bot masaya katıldı. Botlar koltuklarında işaretli.")}</Text>}
           {longWait && <>
-            {continuedRoomCode !== room.code && <Text style={s.waitNotice}>Bekleme uzadı. Masayı botlarla 4 kişiye tamamlayabilir veya gerçek oyuncuları bekleyebilirsin.</Text>}
-            <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online'} onPress={() => sendRoom({ type: 'fill-bots' })} style={[s.primary, (state.busy || state.status !== 'online') && s.disabled]}><Text style={s.primaryText}>Botlarla 4 kişiye tamamla</Text></Pressable>
-            {continuedRoomCode !== room.code && <Pressable accessibilityRole="button" onPress={() => setContinuedRoomCode(room.code)} style={s.secondary}><Text style={s.white}>Aramaya devam et</Text></Pressable>}
+            {continuedRoomCode !== room.code && <Text style={s.waitNotice}>{t("Bekleme uzadı. Masayı botlarla 4 kişiye tamamlayabilir veya gerçek oyuncuları bekleyebilirsin.")}</Text>}
+            <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online'} onPress={() => sendRoom({ type: 'fill-bots' })} style={[s.primary, (state.busy || state.status !== 'online') && s.disabled]}><Text style={s.primaryText}>{t("Botlarla 4 kişiye tamamla")}</Text></Pressable>
+            {continuedRoomCode !== room.code && <Pressable accessibilityRole="button" onPress={() => setContinuedRoomCode(room.code)} style={s.secondary}><Text style={s.white}>{t("Aramaya devam et")}</Text></Pressable>}
           </>}
         </View>}
-        <Text style={s.body}>{room.visibility === 'public' ? `${connectedPlayers}/4 oyuncu · En az 3 kişi gerekli` : `${room.members.length}/6 oyuncu · En az 2 kişi gerekli`}</Text>
-        <Text style={s.roomHint}>Ana menüye dönersen bu bekleme odasından ayrılırsın.</Text>
-        <Pressable disabled={state.busy} onPress={() => void leaveWaitingRoom()}><Text style={s.link}>{room.visibility === 'public' ? 'Aramayı iptal et' : 'Odadan ayrıl'}</Text></Pressable>
+        <Text style={s.body}>{room.visibility === 'public' ? t("{0}/4 oyuncu · En az 3 kişi gerekli", [connectedPlayers]) : t("{0}/6 oyuncu · En az 2 kişi gerekli", [room.members.length])}</Text>
+        <Text style={s.roomHint}>{t("Ana menüye dönersen bu bekleme odasından ayrılırsın.")}</Text>
+        <Pressable disabled={state.busy} onPress={() => void leaveWaitingRoom()}><Text style={s.link}>{room.visibility === 'public' ? t("Aramayı iptal et") : t("Odadan ayrıl")}</Text></Pressable>
       </>}
     </KeyboardAwareScrollView>
   </SafeAreaView>;

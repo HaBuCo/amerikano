@@ -1,3 +1,4 @@
+import { useTranslations } from '@/i18n/language';
 import { Image } from 'expo-image';
 import { memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -16,8 +17,9 @@ export const TABLET_SMALL_CARD_WIDTH = 66;
 export const TABLET_SMALL_CARD_HEIGHT = 93;
 
 export const PlayingCard = memo(function PlayingCard({ card, selected, hidden, compact, small, large, tablet, onPress }: Props) {
+  const { t } = useTranslations();
   const key = hidden || !card ? 'back' : card.isJoker ? 'joker' : `${card.rank}-${card.suit}`;
-  const label = hidden || !card ? 'Kapalı kart' : card.isJoker ? 'Joker' : `${suits[card.suit!]} ${card.rank}`;
+  const label = hidden || !card ? t("Kapalı kart") : card.isJoker ? t("Joker") : `${t(suits[card.suit!])} ${card.rank}`;
   const content = <View style={styles.nonInteractive}><Image source={cardArt[key]} style={styles.image} contentFit="fill" recyclingKey={key} transition={0} /></View>;
   const style = [styles.card, compact && styles.compact, small && styles.small, large && styles.large,
     tablet && !compact && !small && !large && styles.tablet,

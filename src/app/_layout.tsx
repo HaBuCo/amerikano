@@ -1,3 +1,4 @@
+import { useTranslations } from '@/i18n/language';
 import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -37,6 +38,7 @@ function safeWindowMetrics() {
 }
 
 export default function RootLayout() {
+  const { t } = useTranslations();
   useEffect(() => {
     preloadCardArt();
     void initializePurchases().then(() => {
@@ -59,9 +61,9 @@ export default function RootLayout() {
           headerBackButtonDisplayMode: 'minimal',
         }}>
         <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="setup" options={{ title: 'Oyunu Kur' }} />
-        <Stack.Screen name="single-setup" options={{ title: 'Tek Oyunculu' }} />
-        <Stack.Screen name="rules" options={{ title: 'Nasıl Oynanır' }} />
+        <Stack.Screen name="setup" options={{ title: t("Oyunu Kur") }} />
+        <Stack.Screen name="single-setup" options={{ title: t("Tek Oyunculu") }} />
+        <Stack.Screen name="rules" options={{ title: t("Nasıl Oynanır") }} />
         <Stack.Screen name="game" options={{ headerShown: false, gestureEnabled: false, fullScreenGestureEnabled: false }} />
         <Stack.Screen name="online" options={{ headerShown: false, gestureEnabled: false, fullScreenGestureEnabled: false }} />
         <Stack.Screen name="friends" options={{ headerShown: false }} />

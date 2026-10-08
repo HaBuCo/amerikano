@@ -1,3 +1,4 @@
+import { useTranslations } from '@/i18n/language';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -22,12 +23,13 @@ import { registerRoundOver, showMatchEndInterstitial } from '@/ads/interstitial'
 import { recordSinglePlayerXp } from '@/network/client';
 
 function createSingleGame(options: SingleGameOptions) {
-  const names = ['Sen', ...pickOpponentNames(options.playerCount - 1, Math.random, ['Sen'])];
+  const names = ["Sen", ...pickOpponentNames(options.playerCount - 1, Math.random, ["Sen"])];
   const game = createGame(names, options.starter === 'you' ? () => 0 : Math.random, rulesFromSingleOptions(options));
   return { ...game, botControlledPlayerIds: game.players.slice(1).map(player => player.id) };
 }
 
 export default function GameScreen() {
+  const { t } = useTranslations();
   const params = useLocalSearchParams<{ players?: string; mode?: string; config?: string }>();
   const single = params.mode !== 'local';
   const requestedOptions = parseSingleGameOptions(params.config);
@@ -95,7 +97,7 @@ export default function GameScreen() {
         // consecutive bot answers together so the human draw never waits once
         // per bot, but stop immediately if a real player must answer.
         next = resolveBotClaimChain(next, viewerId);
-        if (next !== game) appendDebugEvent('Rakiplerin açık kart kararları işlendi.');
+        if (next !== game) appendDebugEvent(t("Rakiplerin açık kart kararları işlendi."));
       } else {
         const action = botAction(next);
         if (action) {
@@ -112,7 +114,7 @@ export default function GameScreen() {
       return game.phase === 'claim' ? 60 : game.phase === 'draw' ? 320 : 240;
     })());
     return () => clearTimeout(timer);
-  }, [appendDebugEvent, game, single, current.id, viewerId, loadState, tutorialOpen]);
+  }, [appendDebugEvent, game, single, current.id, viewerId, loadState, tutorialOpen, t]);
   useEffect(() => {
     if (single && loadState === 'ready' && __DEV__) console.info(`[AMERİKANO CANLI DURUM]\n${debugText}`);
   }, [debugText, loadState, single]);
@@ -125,7 +127,7 @@ export default function GameScreen() {
   }
   function resume() {
     if (savedGame) setGame(savedGame);
-    appendDebugEvent('Kayıtlı single oyuna devam edildi.');
+    appendDebugEvent(t("Kayıtlı single oyuna devam edildi."));
     setSavedGame(null);
     setLoadState('ready');
   }
@@ -136,7 +138,7 @@ export default function GameScreen() {
     if (next === game) {
       const reason = explainInvalidAction(game, viewerId, action);
       setError(reason);
-      if (single) appendDebugEvent(`Reddedildi · ${description} · ${reason}`);
+      if (single) appendDebugEvent(t("Reddedildi · {0} · {1}", [description, reason]));
       return;
     }
     if (single) appendDebugEvent(description);
@@ -149,27 +151,29 @@ export default function GameScreen() {
     return <SafeAreaView style={s.resumePage}>
       <View style={s.resumeSheet}>
         {loadState === 'loading' ? <>
-          <Text style={s.eyebrow}>OYUNUN HAZIRLANIYOR</Text>
-          <Text style={s.resumeTitle}>Masa kuruluyor.</Text>
-          <Text style={s.copy}>Kayıt kontrol ediliyor…</Text>
+          <Text style={s.eyebrow}>{t("OYUNUN HAZIRLANIYOR")}</Text>
+          <Text style={s.resumeTitle}>{t("Masa kuruluyor.")}</Text>
+          <Text style={s.copy}>{t("Kayıt kontrol ediliyor…")}</Text>
         </> : <>
-          <Text style={s.eyebrow}>YARIM KALAN OYUN</Text>
-          <Text style={s.resumeTitle}>Masadaki yerin duruyor.</Text>
-          <Text style={s.copy}>El {savedGame ? savedGame.roundIndex + 1 : 1} / {savedGame ? roundCountForGame(savedGame) : rulesFromSingleOptions(requestedOptions).contractSequence.length} · Kaldığın hamleden devam edebilirsin.</Text>
-          <Pressable accessibilityRole="button" onPress={resume} style={s.button}><Text style={s.buttonText}>Oyuna devam et</Text></Pressable>
-          <Pressable accessibilityRole="button" onPress={startFresh} style={s.outlineButton}><Text style={s.outlineText}>Yeni oyun başlat</Text></Pressable>
-          <Pressable accessibilityRole="button" onPress={() => router.replace('/')}><Text style={s.menuText}>Ana menüye dön</Text></Pressable>
+          <Text style={s.eyebrow}>{t("YARIM KALAN OYUN")}</Text>
+          <Text style={s.resumeTitle}>{t("Masadaki yerin duruyor.")}</Text>
+          <Text style={s.copy}>{t("El")} {savedGame ? savedGame.roundIndex + 1 : 1} / {savedGame ? roundCountForGame(savedGame) : rulesFromSingleOptions(requestedOptions).contractSequence.length} {' '}{t("· Kaldığın hamleden devam edebilirsin.")}</Text>
+          <Pressable accessibilityRole="button" onPress={resume} style={s.button}><Text style={s.buttonText}>{t("Oyuna devam et")}</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={startFresh} style={s.outlineButton}><Text style={s.outlineText}>{t("Yeni oyun başlat")}</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={() => router.replace('/')}><Text style={s.menuText}>{t("Ana menüye dön")}</Text></Pressable>
         </>}
       </View>
     </SafeAreaView>;
   }
 
+  const view = projectGame(game, viewerId);
+  if (single) view.players = view.players.map(player => player.id === viewerId ? { ...player, name: t('Sen') } : player);
   return <View style={s.gameRoot}>
-    <GameTable key={game.roundIndex + ':' + viewerId} game={projectGame(game, viewerId)} viewerId={viewerId} modeLabel={single ? 'TEK OYUNCULU' : 'AYNI CİHAZDA'} onAction={act} error={error} debugText={single ? debugText : undefined} onOpenTutorial={single ? () => setTutorialOpen(true) : undefined} canUndo={Boolean(undoGame)} onUndo={single && rulesForGame(game).undoEnabled ? () => { if (undoGame) { setGame(undoGame); setUndoGame(null); setError(''); appendDebugEvent('Son hamle geri alındı.'); } } : undefined} onExit={() => { if (game.phase === 'game-over') showMatchEndInterstitial(); router.replace('/'); }} />
-    <RoundIntro roundIndex={game.roundIndex} contractIndex={contractIndexForRound(game)} roundCount={roundCountForGame(game)} starterName={game.players[game.startingPlayerIndex]?.name ?? 'Oyuncu'} jokerRestricted={openingJokerRestricted(game)} mode={rulesForGame(game).roundIntro} enabled={single ? !tutorialOpen : visible} />
+    <GameTable key={game.roundIndex + ':' + viewerId} game={view} viewerId={viewerId} modeLabel={single ? "TEK OYUNCULU" : "AYNI CİHAZDA"} onAction={act} error={error} debugText={single ? debugText : undefined} onOpenTutorial={single ? () => setTutorialOpen(true) : undefined} canUndo={Boolean(undoGame)} onUndo={single && rulesForGame(game).undoEnabled ? () => { if (undoGame) { setGame(undoGame); setUndoGame(null); setError(''); appendDebugEvent(t("Son hamle geri alındı.")); } } : undefined} onExit={() => { if (game.phase === 'game-over') showMatchEndInterstitial(); router.replace('/'); }} />
+    <RoundIntro roundIndex={game.roundIndex} contractIndex={contractIndexForRound(game)} roundCount={roundCountForGame(game)} starterName={view.players[game.startingPlayerIndex]?.name ?? t("Oyuncu")} jokerRestricted={openingJokerRestricted(game)} mode={rulesForGame(game).roundIntro} enabled={single ? !tutorialOpen : visible} />
     {single && <GameTutorial visible={tutorialOpen} onDone={finishTutorial} roundCount={roundCountForGame(game)} claimsEnabled={rulesForGame(game).claimsEnabled && game.players.length > 2} claimSeconds={rulesForGame(game).claimTimeoutMs / 1000} jokerRestrictionRounds={rulesForGame(game).jokerOpeningRestrictionRounds} playableDiscardPenalty={rulesForGame(game).playableDiscardPenalty} />}
     <Modal visible={!single && !visible && !['round-over', 'game-over'].includes(game.phase)} animationType="none" onRequestClose={() => router.replace('/')}>
-      <View style={s.curtain}><Text style={s.eyebrow}>TELEFONU VER</Text><Text style={s.name}>{current.name}</Text><Text style={s.copy}>Hazır olduğunda kartlarını göster.</Text><Pressable accessibilityRole="button" onPress={() => setVisible(true)} style={s.button}><Text style={s.buttonText}>Elimi göster</Text></Pressable></View>
+      <View style={s.curtain}><Text style={s.eyebrow}>{t("TELEFONU VER")}</Text><Text style={s.name}>{current.name}</Text><Text style={s.copy}>{t("Hazır olduğunda kartlarını göster.")}</Text><Pressable accessibilityRole="button" onPress={() => setVisible(true)} style={s.button}><Text style={s.buttonText}>{t("Elimi göster")}</Text></Pressable></View>
     </Modal>
   </View>;
 }

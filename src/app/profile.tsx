@@ -1,3 +1,4 @@
+import { useTranslations } from '@/i18n/language';
 import { useEffect, useState } from 'react';
 import { Href, router, Stack } from 'expo-router';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -9,6 +10,7 @@ import { AVATAR_OPTIONS, AvatarKey, PlayerProfile, profileLevel, refreshPlayerPr
 import { normalizeUsername, usernameError } from '@/network/usernames';
 
 export default function ProfileScreen() {
+  const { t } = useTranslations();
   const { isTablet } = useResponsiveLayout();
   const state = usePlayerProfile();
   useEffect(() => { void refreshPlayerProfile(); }, []);
@@ -16,18 +18,19 @@ export default function ProfileScreen() {
   return <SafeAreaView style={s.page}>
     <Stack.Screen options={{ headerShown: false }} />
     <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={[s.content, isTablet && s.contentTablet]} keyboardShouldPersistTaps="handled">
-      <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>← Geri</Text></Pressable>
-      <Text style={s.eyebrow}>OYUNCU PROFİLİ</Text>
-      <Text style={s.title}>Masadaki sen.</Text>
-      <Text style={s.body}>Kullanıcı adın ve avatarın bütün çevrim içi masalarda görünür.</Text>
+      <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>{t("← Geri")}</Text></Pressable>
+      <Text style={s.eyebrow}>{t("OYUNCU PROFİLİ")}</Text>
+      <Text style={s.title}>{t("Masadaki sen.")}</Text>
+      <Text style={s.body}>{t("Kullanıcı adın ve avatarın bütün çevrim içi masalarda görünür.")}</Text>
 
       {profile ? <ProfileForm key={`${profile.userId}:${profile.username}:${profile.avatarKey}`} profile={profile} loading={state.loading} saving={state.saving} error={state.error} tablet={isTablet} />
-        : <Text style={state.error ? s.error : s.body}>{state.error || 'Profil hazırlanıyor…'}</Text>}
+        : <Text style={state.error ? s.error : s.body}>{state.error || t("Profil hazırlanıyor…")}</Text>}
     </KeyboardAwareScrollView>
   </SafeAreaView>;
 }
 
 function ProfileForm({ profile, loading, saving, error, tablet = false }: { profile: PlayerProfile; loading: boolean; saving: boolean; error: string; tablet?: boolean }) {
+  const { t, localizeMessage } = useTranslations();
   const [username, setUsername] = useState(profile.username || '');
   const [avatar, setAvatar] = useState<AvatarKey>(profile.avatarKey);
   const [saved, setSaved] = useState('');
@@ -35,46 +38,46 @@ function ProfileForm({ profile, loading, saving, error, tablet = false }: { prof
     setSaved('');
     try {
       await savePlayerProfile(username, avatar);
-      setSaved('Profilin kaydedildi.');
+      setSaved(t("Profilin kaydedildi."));
     } catch { /* Store exposes a user-facing error. */ }
   };
   return <View style={s.form}>
       <View style={s.stats}>
-        <View style={s.stat}><Text style={s.statValue}>{profileLevel(profile?.experience ?? 0)}</Text><Text style={s.statLabel}>SEVİYE</Text></View>
-        <View style={s.stat}><Text style={s.statValue}>{profile?.gamesPlayed ?? 0}</Text><Text style={s.statLabel}>MAÇ</Text></View>
-        <View style={s.stat}><Text style={s.statValue}>{profile?.wins ?? 0}</Text><Text style={s.statLabel}>GALİBİYET</Text></View>
+        <View style={s.stat}><Text style={s.statValue}>{profileLevel(profile?.experience ?? 0)}</Text><Text style={s.statLabel}>{t("SEVİYE")}</Text></View>
+        <View style={s.stat}><Text style={s.statValue}>{profile?.gamesPlayed ?? 0}</Text><Text style={s.statLabel}>{t("MAÇ")}</Text></View>
+        <View style={s.stat}><Text style={s.statValue}>{profile?.wins ?? 0}</Text><Text style={s.statLabel}>{t("GALİBİYET")}</Text></View>
       </View>
       <Pressable accessibilityRole="button" onPress={() => router.push('/stats' as Href)} style={s.statsLink}>
-        <Text style={s.statsLinkText}>Tüm istatistiklerimi gör</Text><Text style={s.statsLinkArrow}>→</Text>
+        <Text style={s.statsLinkText}>{t("Tüm istatistiklerimi gör")}</Text><Text style={s.statsLinkArrow}>→</Text>
       </Pressable>
 
       <View style={s.friendCodePanel}>
-        <View><Text style={s.label}>KULLANICI ADIN</Text><Text selectable style={s.friendCode}>@{profile.username || 'hazırlanıyor'}</Text></View>
-        <Pressable accessibilityRole="button" onPress={() => router.push('/friends' as Href)}><Text style={s.friendLink}>Arkadaşlar →</Text></Pressable>
+        <View><Text style={s.label}>{t("KULLANICI ADIN")}</Text><Text selectable style={s.friendCode}>@{profile.username || t("hazırlanıyor")}</Text></View>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/friends' as Href)}><Text style={s.friendLink}>{t("Arkadaşlar →")}</Text></Pressable>
       </View>
 
       <View style={[s.editor, tablet && s.editorTablet]}>
         <View style={s.editorColumn}>
-          <Text style={s.label}>AVATAR</Text>
+          <Text style={s.label}>{t("AVATAR")}</Text>
           <View style={s.avatars}>{AVATAR_OPTIONS.map((option) => <Pressable key={option.key} accessibilityRole="button"
-            accessibilityLabel={`${option.key} avatarı`} accessibilityState={{ selected: avatar === option.key }}
+            accessibilityLabel={t("{0} avatarı", [option.key])} accessibilityState={{ selected: avatar === option.key }}
             onPress={() => setAvatar(option.key)} style={[s.avatarRing, avatar === option.key && s.avatarSelected]}>
             <View style={[s.avatar, { backgroundColor: option.color }]}><Text style={s.avatarText}>{option.symbol}</Text></View>
           </Pressable>)}</View>
         </View>
         <View style={s.editorColumn}>
-          <Text style={s.label}>KULLANICI ADI</Text>
-          <TextInput accessibilityLabel="Kullanıcı adı" autoCapitalize="none" autoCorrect={false} maxLength={20} value={username}
-            onChangeText={(value) => { setUsername(normalizeUsername(value)); setSaved(''); }} placeholder="kullaniciadi" placeholderTextColor={p.muted} style={s.input} />
-          <Text style={s.usernameHint}>Masada bu adla görünürsün. Arkadaşların seni @{username || 'kullaniciadi'} yazarak bulabilir.</Text>
+          <Text style={s.label}>{t("KULLANICI ADI")}</Text>
+          <TextInput accessibilityLabel={t("Kullanıcı adı")} autoCapitalize="none" autoCorrect={false} maxLength={20} value={username}
+            onChangeText={(value) => { setUsername(normalizeUsername(value)); setSaved(''); }} placeholder={t('kullaniciadi')} placeholderTextColor={p.muted} style={s.input} />
+          <Text style={s.usernameHint}>{t('Masada bu adla görünürsün. Arkadaşların seni @{0} yazarak bulabilir.', [username || t('kullaniciadi')])}</Text>
           <Pressable accessibilityRole="button" disabled={!!usernameError(username) || saving || loading}
             style={[s.primary, (!!usernameError(username) || saving || loading) && s.disabled]} onPress={() => void save()}>
-            <Text style={s.primaryText}>{saving ? 'Kaydediliyor…' : 'Profili kaydet'}</Text>
+            <Text style={s.primaryText}>{saving ? t("Kaydediliyor…") : t("Profili kaydet")}</Text>
           </Pressable>
         </View>
       </View>
-      {!!saved && <Text style={s.success}>{saved}</Text>}
-      {!!error && <Text style={s.error}>{error}</Text>}
+      {!!saved && <Text style={s.success}>{localizeMessage(saved)}</Text>}
+      {!!error && <Text style={s.error}>{localizeMessage(error)}</Text>}
     </View>;
 }
 
