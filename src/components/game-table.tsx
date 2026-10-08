@@ -907,7 +907,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
         <ScrollView style={s.resultList} contentContainerStyle={s.resultListContent} showsVerticalScrollIndicator={false}>
           {scoreHistory.length > 0 && <View accessibilityLabel={t("El el puan geçmişi")} style={s.historyTable}>
             <View style={s.historyRow}>
-              <Text style={[s.historyRound, s.historyHead]}>{t("El")}</Text>
+              <Text numberOfLines={1} style={[s.historyRound, s.historyHead]}>{t("El")}</Text>
               {game.players.map(pl => <Text key={pl.id} numberOfLines={1} style={[s.historyCell, s.historyHead]}>{pl.name}</Text>)}
             </View>
             {scoreHistory.map((row, index) => <View key={index} style={[s.historyRow, index % 2 === 1 && s.historyRowAlt]}>
@@ -1090,7 +1090,7 @@ const s = StyleSheet.create({
   scoreTotal: { alignItems: 'flex-end' }, scoreTotalLabel: { color: '#7b7568', fontSize: 8, letterSpacing: 0.8, fontWeight: '800' }, scoreValue: { fontWeight: '900', color: '#80602b', fontSize: 20 },
   historyTable: { borderWidth: 1, borderColor: '#d5cdbb', borderRadius: 12, overflow: 'hidden', marginBottom: 4 },
   historyRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 8 }, historyRowAlt: { backgroundColor: '#ece4d1' },
-  historyRound: { width: 30, color: '#7b7568', fontSize: 12, fontWeight: '700' }, historyCell: { flex: 1, textAlign: 'center', color: '#253a2e', fontSize: 14, fontVariant: ['tabular-nums'] },
+  historyRound: { width: 44, color: '#7b7568', fontSize: 12, fontWeight: '700' }, historyCell: { flex: 1, textAlign: 'center', color: '#253a2e', fontSize: 14, fontVariant: ['tabular-nums'] },
   historyHead: { color: '#7b7568', fontSize: 11, fontWeight: '800' }, historyZero: { color: '#2f7a55', fontWeight: '800' },
   historyTotalRow: { borderTopWidth: 1, borderColor: '#d5cdbb', backgroundColor: '#e6dcc4' }, historyTotal: { fontWeight: '900', color: '#80602b', fontSize: 15 }, historyLeader: { color: '#142c22' },
   penalty: { color: '#59675f', fontSize: 11, marginBottom: 5 }, remainingCards: { gap: 3, paddingRight: 8 },
