@@ -25,7 +25,7 @@ import { scoreSummary } from '@/game/score-summary';
 import { snapshotActor, tableSound } from '@/game/table-sounds';
 import type { TableSnapshot } from '@/game/table-sounds';
 import { REACTIONS, REACTION_VISIBLE_MS, reactionById } from '@/game/reactions';
-import { DELETE_ACCOUNT_URL, PRIVACY_POLICY_URL, TERMS_LABEL, TERMS_URL } from '@/constants/legal';
+import { deleteAccountUrl, privacyPolicyUrl, TERMS_LABEL, termsUrl } from '@/constants/legal';
 import { LanguagePicker } from './language-picker';
 
 type Props = {
@@ -180,7 +180,7 @@ function SettingRow({ label, value, onPress }: { label: string; value: boolean; 
 }
 
 export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = true, canRematch = false, error, debugText, playerMeta, botControlled = false, connectionState, onReclaim, onOpenTutorial, onReact, reactions, canUndo = false, onUndo, onAction, onRematch, onForfeit, onExit }: Props) {
-  const { t, localizeMessage } = useTranslations();
+  const { t, localizeMessage, language } = useTranslations();
   const [pendingState, setPendingState] = useState<{ key: string; groups: Pending[] }>({ key: '', groups: [] });
   const [notice, setNotice] = useState('');
   const [exitOpen, setExitOpen] = useState(false);
@@ -988,9 +988,9 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       <SettingRow label={t("Tepkileri göster")} value={settings.showReactions} onPress={() => { feedback(); updateSettings({ showReactions: !settings.showReactions }); }} />
       <Text style={s.settingsSectionTitle}>{t("YASAL VE GİZLİLİK")}</Text>
       <View style={s.settingsLinks}>
-        <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)} style={s.settingsLink}><Text style={s.settingsLinkText}>{t("Gizlilik politikası")}</Text><Text style={s.settingsLinkAction}>{t("Aç")}</Text></Pressable>
-        <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(TERMS_URL)} style={s.settingsLink}><Text style={s.settingsLinkText}>{t(TERMS_LABEL)}</Text><Text style={s.settingsLinkAction}>{t("Aç")}</Text></Pressable>
-        <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(DELETE_ACCOUNT_URL)} style={s.settingsLink}><Text style={s.settingsLinkText}>{t("Hesap ve veri silme")}</Text><Text style={s.settingsLinkAction}>{t("Aç")}</Text></Pressable>
+        <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(privacyPolicyUrl(language))} style={s.settingsLink}><Text style={s.settingsLinkText}>{t("Gizlilik politikası")}</Text><Text style={s.settingsLinkAction}>{t("Aç")}</Text></Pressable>
+        <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(termsUrl(language))} style={s.settingsLink}><Text style={s.settingsLinkText}>{t(TERMS_LABEL)}</Text><Text style={s.settingsLinkAction}>{t("Aç")}</Text></Pressable>
+        <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(deleteAccountUrl(language))} style={s.settingsLink}><Text style={s.settingsLinkText}>{t("Hesap ve veri silme")}</Text><Text style={s.settingsLinkAction}>{t("Aç")}</Text></Pressable>
       </View>
       {debugText && <Pressable accessibilityRole="button" onPress={() => { setSettingsOpen(false); setDebugOpen(true); }} style={s.debugEntry}>
         <View><Text style={s.debugEntryTitle}>{t("Canlı oyun durumu")}</Text><Text style={s.debugEntryCaption}>{t("El, masa ve son hamleleri incele")}</Text></View><Text style={s.settingsLinkAction}>{t("Aç")}</Text>

@@ -10,7 +10,7 @@ import { useGameSounds } from '@/audio/game-sounds';
 import { AuthPanel } from '@/components/auth-panel';
 import { AccountActions } from '@/components/account-actions';
 import { isAdsPrivacyOptionsRequired, manageAdsPrivacyChoices } from '@/ads/mobile-ads';
-import { DELETE_ACCOUNT_URL, PRIVACY_POLICY_URL, TERMS_LABEL, TERMS_URL } from '@/constants/legal';
+import { deleteAccountUrl, privacyPolicyUrl, TERMS_LABEL, termsUrl } from '@/constants/legal';
 import { palette as p } from '@/constants/palette';
 import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
 import { useAuth } from '@/network/auth';
@@ -34,7 +34,7 @@ function LinkRow({ label, detail, url }: { label: string; detail: string; url: s
 }
 
 export default function SettingsScreen() {
-  const { t } = useTranslations();
+  const { t, language } = useTranslations();
   const { isTablet } = useResponsiveLayout();
   const auth = useAuth();
   const { enabled: soundEnabled, toggle: toggleSound } = useGameSounds();
@@ -89,8 +89,8 @@ export default function SettingsScreen() {
         <View style={s.settingsColumn}>
           <Text style={s.sectionTitle}>{t("YASAL VE GİZLİLİK")}</Text>
           <View style={s.card}>
-            <LinkRow label={t("Gizlilik politikası")} detail={t("Toplanan veriler ve kullanım amaçları")} url={PRIVACY_POLICY_URL} />
-            <LinkRow label={TERMS_LABEL} detail={TERMS_LABEL === 'Apple Standart EULA' ? t("iOS lisans koşulları") : t("Android uygulama koşulları")} url={TERMS_URL} />
+            <LinkRow label={t("Gizlilik politikası")} detail={t("Toplanan veriler ve kullanım amaçları")} url={privacyPolicyUrl(language)} />
+            <LinkRow label={t(TERMS_LABEL)} detail={TERMS_LABEL === 'Apple Standart EULA' ? t("iOS lisans koşulları") : t("Android uygulama koşulları")} url={termsUrl(language)} />
             {adsPrivacyRequired && <Pressable accessibilityRole="button" onPress={() => void manageAdsPrivacyChoices()} style={s.row}>
               <View style={s.rowCopy}><Text style={s.rowTitle}>{t("Reklam tercihlerini yönet")}</Text><Text style={s.rowDetail}>{t("Kişiselleştirilmiş reklam rızanı gözden geçir")}</Text></View>
               <Text style={s.openText}>{t("Aç")}</Text>
@@ -103,7 +103,7 @@ export default function SettingsScreen() {
       </Pressable>}
       <AccountActions key={auth.user?.id ?? 'signed-out'} />
       <View style={s.deletionLink}>
-        <LinkRow label={t("Hesap ve veri silme talebi")} detail={t("Uygulama dışından silme talebi gönder")} url={DELETE_ACCOUNT_URL} />
+        <LinkRow label={t("Hesap ve veri silme talebi")} detail={t("Uygulama dışından silme talebi gönder")} url={deleteAccountUrl(language)} />
       </View>
       <Text style={s.footer}>{t("AMERİKANO · SÜRÜM 1.0.0")}</Text>
     </KeyboardAwareScrollView>
