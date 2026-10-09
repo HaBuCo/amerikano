@@ -44,6 +44,7 @@ export default function GameScreen() {
   const [debugEvents, setDebugEvents] = useState<string[]>([]);
   const [undoGame, setUndoGame] = useState<typeof game | null>(null);
   const resultRecorded = useRef(false);
+  const adPending = useRef(false);
   const current = game.players.find(p => p.id === actingPlayerId(game))!;
   const viewerId = single ? game.players[0].id : current.id;
   const appendDebugEvent = useCallback((message: string) => {
@@ -136,7 +137,16 @@ export default function GameScreen() {
     setLoadState('ready');
   }
   function act(action: GameAction) {
-    if (action.type === 'next' && game.phase === 'round-over') registerRoundOver();
+    if (action.type === 'next' && game.phase === 'round-over') {
+      // Reklam açıkken masayı değiştirmek Android'de oyunu kilitleyebiliyor; el reklam kapanınca geçer.
+      if (adPending.current) return;
+      adPending.current = true;
+      void registerRoundOver().then(() => { adPending.current = false; apply(action); });
+      return;
+    }
+    apply(action);
+  }
+  function apply(action: GameAction) {
     const description = describeDebugAction(game, viewerId, action);
     const next = applyAction(game, viewerId, action);
     if (next === game) {
@@ -173,7 +183,7 @@ export default function GameScreen() {
   const view = projectGame(game, viewerId);
   if (single) view.players = view.players.map(player => player.id === viewerId ? { ...player, name: t('Sen') } : player);
   return <View style={s.gameRoot}>
-    <GameTable key={game.roundIndex + ':' + viewerId} game={view} viewerId={viewerId} modeLabel={single ? "TEK OYUNCULU" : "AYNI CİHAZDA"} onAction={act} error={error} debugText={single ? debugText : undefined} onOpenTutorial={single ? () => setTutorialOpen(true) : undefined} canUndo={Boolean(undoGame)} onUndo={single && rulesForGame(game).undoEnabled ? () => { if (undoGame) { setGame(undoGame); setUndoGame(null); setError(''); appendDebugEvent(t("Son hamle geri alındı.")); } } : undefined} onExit={() => { if (game.phase === 'game-over') showMatchEndInterstitial(); router.replace('/'); }} />
+    <GameTable key={game.roundIndex + ':' + viewerId} game={view} viewerId={viewerId} modeLabel={single ? "TEK OYUNCULU" : "AYNI CİHAZDA"} onAction={act} error={error} debugText={single ? debugText : undefined} onOpenTutorial={single ? () => setTutorialOpen(true) : undefined} canUndo={Boolean(undoGame)} onUndo={single && rulesForGame(game).undoEnabled ? () => { if (undoGame) { setGame(undoGame); setUndoGame(null); setError(''); appendDebugEvent(t("Son hamle geri alındı.")); } } : undefined} onExit={() => { if (game.phase === 'game-over') void showMatchEndInterstitial().then(() => router.replace('/')); else router.replace('/'); }} />
     <RoundIntro roundIndex={game.roundIndex} contractIndex={contractIndexForRound(game)} roundCount={roundCountForGame(game)} starterName={view.players[game.startingPlayerIndex]?.name ?? t("Oyuncu")} jokerRestricted={openingJokerRestricted(game)} mode={rulesForGame(game).roundIntro} enabled={single ? !tutorialOpen : visible} />
     {single && <GameTutorial visible={tutorialOpen} onDone={finishTutorial} roundCount={roundCountForGame(game)} claimsEnabled={rulesForGame(game).claimsEnabled && game.players.length > 2} claimSeconds={rulesForGame(game).claimTimeoutMs / 1000} jokerRestrictionRounds={rulesForGame(game).jokerOpeningRestrictionRounds} playableDiscardPenalty={rulesForGame(game).playableDiscardPenalty} />}
     <Modal visible={!single && !visible && !['round-over', 'game-over'].includes(game.phase)} animationType="none" onRequestClose={() => router.replace('/')}>

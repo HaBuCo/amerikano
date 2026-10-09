@@ -58,31 +58,67 @@ export function preloadInterstitial() {
   loadNext();
 }
 
-function present() {
-  if (!areAdsAllowed() || hasRemovedAds() || !interstitial || !loaded) return false;
+let showing: Promise<void> | null = null;
+
+/**
+ * Reklam kapanana kadar bekleyen bir söz döndürür. Arka plandaki ekran reklam
+ * açıkken değişirse (Modal kapanması, yeni el, gezinme) Android'de görünmez bir
+ * Modal dokunmaları yutup oyunu kilitleyebiliyor; bu yüzden çağıranlar oyunu
+ * ancak bu söz çözüldükten sonra ilerletir.
+ */
+function present(): Promise<void> | null {
+  if (!areAdsAllowed() || hasRemovedAds() || !interstitial || !loaded) return null;
   const ad = interstitial;
   const previousShownAt = lastShownAt;
   const shownAt = Date.now();
   lastShownAt = shownAt;
   loaded = false;
-  void ad.show().catch((error) => {
-    reportAdError(error, 'ads-interstitial-show');
-    if (lastShownAt === shownAt) lastShownAt = previousShownAt;
-    if (interstitial === ad) { disposeCurrent?.(); scheduleRetry(); }
+  const done = new Promise<void>((resolve) => {
+    let wentInactive = false;
+    const finish = () => {
+      unsubClosed();
+      appState.remove();
+      if (showing === done) showing = null;
+      resolve();
+    };
+    const unsubClosed = ad.addAdEventListener(AdEventType.CLOSED, finish);
+    // CLOSED olayı kaçarsa uygulama öne geldiğinde yine de devam et.
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') wentInactive = true;
+      else if (wentInactive) setTimeout(finish, 500);
+    });
+    void ad.show().catch((error) => {
+      reportAdError(error, 'ads-interstitial-show');
+      if (lastShownAt === shownAt) lastShownAt = previousShownAt;
+      if (interstitial === ad) { disposeCurrent?.(); scheduleRetry(); }
+      finish();
+    });
   });
-  return true;
+  showing = done;
+  return done;
 }
 
-/** Bir el bittiğinde çağrılır; sıklık ve minimum aralık kurallarına göre reklamı gösterir. */
-export function registerRoundOver() {
-  if (!ADS_ENABLED || hasRemovedAds()) return;
+/**
+ * Bir el bittiğinde çağrılır; sıklık ve minimum aralık kurallarına göre reklamı
+ * gösterir. Döndürülen söz reklam kapanınca (reklam yoksa hemen) çözülür.
+ */
+export function registerRoundOver(): Promise<void> {
+  if (showing) return showing;
+  if (!ADS_ENABLED || hasRemovedAds()) return Promise.resolve();
   roundsSinceAd += 1;
-  if (roundsSinceAd < ROUND_INTERVAL || Date.now() - lastShownAt < MIN_GAP_MS) return;
-  if (present()) roundsSinceAd = 0;
+  if (roundsSinceAd < ROUND_INTERVAL || Date.now() - lastShownAt < MIN_GAP_MS) return Promise.resolve();
+  const shown = present();
+  if (!shown) return Promise.resolve();
+  roundsSinceAd = 0;
+  return shown;
 }
 
-/** Maç tamamen bittiğinde (skor tablosundan çıkarken) çağrılır. */
-export function showMatchEndInterstitial() {
-  if (!ADS_ENABLED || hasRemovedAds() || Date.now() - lastShownAt < MIN_GAP_MS) return;
-  if (present()) roundsSinceAd = 0;
+/** Maç tamamen bittiğinde (skor tablosundan çıkarken) çağrılır; reklam kapanınca çözülür. */
+export function showMatchEndInterstitial(): Promise<void> {
+  if (showing) return showing;
+  if (!ADS_ENABLED || hasRemovedAds() || Date.now() - lastShownAt < MIN_GAP_MS) return Promise.resolve();
+  const shown = present();
+  if (!shown) return Promise.resolve();
+  roundsSinceAd = 0;
+  return shown;
 }

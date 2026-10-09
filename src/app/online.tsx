@@ -13,7 +13,6 @@ import { avatarFor, profileLevel, refreshPlayerProfile, usePlayerProfile } from 
 import { MIN_GAME_PLAYERS } from '@/game/engine';
 import { QUICK_ROOM_TARGET } from '@/game/quick-room';
 import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
-import { registerRoundOver, showMatchEndInterstitial } from '@/ads/interstitial';
 import { GameAction } from '@/game/types';
 
 export default function OnlineScreen() {
@@ -67,11 +66,11 @@ export default function OnlineScreen() {
       modeLabel={`ÇEVRİM İÇİ · ${room.code}`} canAdvance={room.hostId === room.you || hostIsBot} canRematch={room.hostId === room.you || hostIsBot}
       playerMeta={playerMeta} reactions={reactions} onReact={sendReaction} onRematch={() => sendRoom({ type: 'rematch' })}
       botControlled={me?.botControlled} onReclaim={() => sendRoom({ type: 'reclaim' })}
-      blocked={state.status !== 'online' || state.busy} onAction={(action: GameAction) => { if (action.type === 'next' && room.game?.phase === 'round-over') registerRoundOver(); sendAction(action); }}
+      blocked={state.status !== 'online' || state.busy} onAction={(action: GameAction) => sendAction(action)}
       connectionState={state.status === 'online' ? 'online' : state.status === 'connecting' ? 'reconnecting' : 'offline'}
       error={state.error || (state.status !== 'online' ? t("Yeniden bağlanılıyor… Elin korunuyor.") : '')}
       onForfeit={() => { void forfeitRoom().then((left) => { if (left) router.replace('/'); }); }}
-      onExit={() => { if (room.game?.phase === 'game-over') { showMatchEndInterstitial(); forgetRoom(); } else suspendRoom(); router.replace('/'); }} />
+      onExit={() => { if (room.game?.phase === 'game-over') forgetRoom(); else suspendRoom(); router.replace('/'); }} />
     <RoundIntro roundIndex={room.game.roundIndex} starterName={room.game.players[room.game.startingPlayerIndex]?.name ?? t("Oyuncu")} enabled={state.status === 'online'} />
   </View>;
   return <SafeAreaView style={s.page}>
