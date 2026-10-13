@@ -1,0 +1,8 @@
+.venv/
+data/
+runs/
+exports/
+*.pt
+*.tflite
+*.log
+__pycache__/
