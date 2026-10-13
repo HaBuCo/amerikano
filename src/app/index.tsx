@@ -100,6 +100,8 @@ export default function HomeScreen() {
             <View style={s.utilityLine} />
             <MenuLink label={t("Aynı cihazda")} detail={t("Yan yana oyna")} onPress={() => router.push('/setup')} />
             <View style={s.utilityLine} />
+            <MenuLink label={t("Skor tutucu")} detail={t("Gerçek kartlarla oynarken puanları tut")} onPress={() => router.push('/score-keeper' as Href)} />
+            <View style={s.utilityLine} />
             <MenuLink label={t("Nasıl oynanır?")} detail={t("Kurallara göz at")} onPress={() => router.push('/rules')} />
             <View style={s.utilityLine} />
             <MenuLink label={t("Ayarlar")} detail={t("Oyun, hesap ve gizlilik")} onPress={() => router.push('/settings' as Href)} />

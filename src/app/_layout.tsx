@@ -68,6 +68,7 @@ export default function RootLayout() {
         <Stack.Screen name="online" options={{ headerShown: false, gestureEnabled: false, fullScreenGestureEnabled: false }} />
         <Stack.Screen name="friends" options={{ headerShown: false }} />
         <Stack.Screen name="stats" options={{ headerShown: false }} />
+        <Stack.Screen name="score-keeper" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
       </Stack>
