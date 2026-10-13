@@ -1,6 +1,8 @@
 {
   "ios": {
     "CFBundleDisplayName": "Amerikano",
-    "NSUserTrackingUsageDescription": "Takibe izin verirsen, diğer şirketlerin uygulama ve web sitelerindeki etkinliğin sana daha uygun reklamlar göstermek ve reklamların etkisini ölçmek için kullanılabilir."
+    "NSUserTrackingUsageDescription": "Takibe izin verirsen, diğer şirketlerin uygulama ve web sitelerindeki etkinliğin sana daha uygun reklamlar göstermek ve reklamların etkisini ölçmek için kullanılabilir.",
+    "NSCameraUsageDescription": "Skor tutucuda masadaki kartları okuyup puanı hesaplamak için kameranı kullanır.",
+    "NSPhotoLibraryUsageDescription": "Skor tutucuda kartların fotoğrafını galeriden seçebilmen için fotoğraflarına erişir."
   }
 }

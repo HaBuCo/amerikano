@@ -1,10 +1,11 @@
 import { useTranslations } from '@/i18n/language';
 import { router, Stack } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { cardScannerSupported, preloadCardScanner, scanCards } from '@/camera/card-scanner';
 import { palette as p } from '@/constants/palette';
 import { ROUND_CONTRACTS } from '@/game/contracts';
 import {
@@ -13,6 +14,7 @@ import {
 } from '@/game/score-keeper';
 import { loadScoreSheet, saveScoreSheet } from '@/game/score-keeper-store';
 import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
+import { hasRemovedAds, purchaseRemoveAds, subscribeRemoveAds } from '@/purchases/purchases';
 
 type Cell = { round: number; player: number };
 
@@ -153,6 +155,34 @@ function EntryModal({ sheet, cell, onClose, onSave }: { sheet: ScoreSheet; cell:
   // Kart eklenince toplam kartlardan gelir; elle yazılan sayı ise kartları siler.
   const score = cards.length ? sumCardValues(cards) : typed.trim() === '' ? null : Number(typed);
   const valid = score === null || Number.isInteger(score);
+  const ownsRemoveAds = useSyncExternalStore(subscribeRemoveAds, hasRemovedAds, hasRemovedAds);
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState('');
+
+  useEffect(() => { if (cardScannerSupported && ownsRemoveAds) preloadCardScanner(); }, [ownsRemoveAds]);
+
+  async function scan(source: 'camera' | 'library') {
+    if (!ownsRemoveAds) {
+      Alert.alert(t("Kamerayla okuma reklamsız sürümde"), t("Reklamsız sürümü alınca kartların fotoğrafını çekip puanı otomatik hesaplayabilirsin."), [
+        { text: t("Vazgeç"), style: 'cancel' },
+        { text: t("Reklamsız sürümü al"), onPress: () => { void purchaseRemoveAds(); } },
+      ]);
+      return;
+    }
+    setScanning(true);
+    setScanNote('');
+    const result = await scanCards(source);
+    setScanning(false);
+    if (result.status === 'cancelled') return;
+    if (result.status === 'error') {
+      setScanNote(result.reason === 'permission' ? t("Kamera izni verilmedi. Ayarlardan izin verebilirsin.") : t("Fotoğraf okunamadı, tekrar dene."));
+      return;
+    }
+    setCards(result.cards);
+    setScanNote(result.cards.length
+      ? t("{0} kart bulundu. Eksik ya da fazla varsa düzelt.", [result.cards.length])
+      : t("Kart bulunamadı. Köşeleri görünecek şekilde yayıp tekrar çek."));
+  }
 
   return <Modal visible transparent animationType="fade" onRequestClose={onClose}>
     <View style={s.backdrop}>
@@ -170,6 +200,16 @@ function EntryModal({ sheet, cell, onClose, onSave }: { sheet: ScoreSheet; cell:
         <Pressable accessibilityRole="button" onPress={() => onSave(0)} style={({ pressed }) => [s.finishButton, pressed && s.pressed]}>
           <Text style={s.finishText}>{t("Eli bitirdi · 0")}</Text>
         </Pressable>
+
+        {cardScannerSupported && <View style={s.scanRow}>
+          <Pressable accessibilityRole="button" disabled={scanning} onPress={() => { void scan('camera'); }} style={({ pressed }) => [s.scanButton, pressed && s.pressed]}>
+            {scanning ? <ActivityIndicator color={p.cream} /> : <Text style={s.scanText}>{t("Kamerayla oku")}{ownsRemoveAds ? '' : ' 🔒'}</Text>}
+          </Pressable>
+          <Pressable accessibilityRole="button" disabled={scanning} onPress={() => { void scan('library'); }} style={s.scanGallery}>
+            <Text style={s.scanGalleryText}>{t("Galeriden")}</Text>
+          </Pressable>
+        </View>}
+        {!!scanNote && <Text style={s.scanNote}>{scanNote}</Text>}
 
         <Text style={s.chipsLabel}>{t("ELİNDE KALAN KARTLAR")}</Text>
         <View style={s.values}>
@@ -249,6 +289,12 @@ const s = StyleSheet.create({
   scoreUnit: { color: '#6d6658', fontSize: 14, fontWeight: '700' },
   finishButton: { borderRadius: 12, borderWidth: 1.5, borderColor: '#143e2c', paddingVertical: 11, alignItems: 'center' },
   finishText: { color: '#143e2c', fontSize: 14, fontWeight: '900' },
+  scanRow: { flexDirection: 'row', gap: 8 },
+  scanButton: { flex: 1, minHeight: 44, borderRadius: 12, backgroundColor: '#143e2c', alignItems: 'center', justifyContent: 'center' },
+  scanText: { color: p.cream, fontSize: 14, fontWeight: '900' },
+  scanGallery: { minHeight: 44, borderRadius: 12, paddingHorizontal: 14, backgroundColor: '#e6dcc5', alignItems: 'center', justifyContent: 'center' },
+  scanGalleryText: { color: p.ink, fontSize: 13, fontWeight: '800' },
+  scanNote: { color: '#6d6658', fontSize: 12, lineHeight: 17, marginTop: -4 },
   chipsLabel: { color: '#6d6658', fontSize: 10, letterSpacing: 1.5, fontWeight: '900', marginTop: 2 },
   values: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   value: { width: 50, height: 52, borderRadius: 10, backgroundColor: p.paper, borderWidth: 1, borderColor: '#d9cfb8', alignItems: 'center', justifyContent: 'center' },

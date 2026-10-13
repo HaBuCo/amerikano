@@ -35,6 +35,7 @@
       "versionCode": 6,
       "permissions": [
         "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.CAMERA",
         "com.google.android.gms.permission.AD_ID"
       ]
     },
@@ -93,7 +94,16 @@
           "skAdNetworkItems": ["cstr6suwn9.skadnetwork"]
         }
       ],
-      "expo-tracking-transparency"
+      "expo-tracking-transparency",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Skor tutucuda masadaki kartları okuyup puanı hesaplamak için kameranı kullanır.",
+          "photosPermission": "Skor tutucuda kartların fotoğrafını galeriden seçebilmen için fotoğraflarına erişir.",
+          "microphonePermission": false
+        }
+      ],
+      "react-native-fast-tflite"
     ],
     "experiments": {
       "typedRoutes": true,

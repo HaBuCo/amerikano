@@ -927,5 +927,14 @@ export const english: Record<string, string> = {
   "{0} ekle": "Add {0}",
   "{0} çıkar": "Remove {0}",
   "Hücreyi temizle": "Clear cell",
-  "Kaydet": "Save"
+  "Kaydet": "Save",
+  "Kamerayla oku": "Read with camera",
+  "Galeriden": "From photos",
+  "Kamerayla okuma reklamsız sürümde": "Camera reading comes with the ad-free version",
+  "Reklamsız sürümü alınca kartların fotoğrafını çekip puanı otomatik hesaplayabilirsin.": "With the ad-free version you can photograph the cards and the points are added up for you.",
+  "Reklamsız sürümü al": "Get the ad-free version",
+  "Kamera izni verilmedi. Ayarlardan izin verebilirsin.": "Camera access was not allowed. You can turn it on in Settings.",
+  "Fotoğraf okunamadı, tekrar dene.": "Couldn't read the photo. Try again.",
+  "{0} kart bulundu. Eksik ya da fazla varsa düzelt.": "Found {0} cards. Fix anything missing or extra.",
+  "Kart bulunamadı. Köşeleri görünecek şekilde yayıp tekrar çek.": "No cards found. Spread them so the corners show and try again."
 };

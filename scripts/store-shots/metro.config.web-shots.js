@@ -1,8 +1,9 @@
-// Copy to the project root as metro.config.js only while capturing store screenshots, then delete it.
+// Copy over the project's metro.config.js only while capturing store screenshots, then restore it with git checkout.
 // The web build otherwise fails on native-only ad, purchase and tracking modules.
 const path = require('path');
 const { getDefaultConfig } = require('expo/metro-config');
 const config = getDefaultConfig(__dirname);
+config.resolver.assetExts.push('tflite');
 const stub = path.resolve(__dirname, 'scripts/store-shots/native-web-stub.js');
 const nativeOnly = ['react-native-google-mobile-ads', 'react-native-purchases', 'expo-tracking-transparency'];
 const resolve = config.resolver.resolveRequest;

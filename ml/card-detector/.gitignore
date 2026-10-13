@@ -6,3 +6,4 @@ exports/
 *.tflite
 *.log
 __pycache__/
+calibration_image_sample_data_*.npy

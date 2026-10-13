@@ -1,6 +1,8 @@
 {
   "ios": {
     "CFBundleDisplayName": "Amerikano",
-    "NSUserTrackingUsageDescription": "If you allow tracking, your activity across other companies' apps and websites may be used to show more relevant ads and measure their effectiveness."
+    "NSUserTrackingUsageDescription": "If you allow tracking, your activity across other companies' apps and websites may be used to show more relevant ads and measure their effectiveness.",
+    "NSCameraUsageDescription": "Used by the score keeper to read the cards on the table and add up the points.",
+    "NSPhotoLibraryUsageDescription": "Lets you pick a photo of the cards from your library in the score keeper."
   }
 }
