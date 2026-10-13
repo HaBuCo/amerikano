@@ -72,7 +72,7 @@ export function AuthPanel({ entry = false, onClose }: { entry?: boolean; onClose
         </View>
         <View style={s.savedBadge}><Text style={s.savedBadgeText}>{t("KAYITLI")}</Text></View>
       </View>
-      <Text style={s.body}>{t("Profilin, seviyen ve çevrim içi istatistiklerin bu hesaba bağlı.")}</Text>
+      <Text style={s.body}>{t("Profilin, coin bakiyen ve çevrim içi istatistiklerin bu hesaba bağlı.")}</Text>
       <Pressable accessibilityRole="button" disabled={auth.busy} style={[s.secondary, auth.busy && s.disabled]} onPress={() => void signOut()}>
         <Text style={s.white}>{t("Çıkış yap")}</Text>
       </Pressable>
@@ -84,7 +84,7 @@ export function AuthPanel({ entry = false, onClose }: { entry?: boolean; onClose
       ) : (
         <View style={s.dangerPanel}>
           <Text style={s.dangerTitle}>{t("Hesabı kalıcı olarak sil")}</Text>
-          <Text style={s.body}>{t("Profilin, kullanıcı adın, seviyen, istatistiklerin ve arkadaşlıkların geri alınamaz. Onaylamak için SİL yaz.")}</Text>
+          <Text style={s.body}>{t("Profilin, kullanıcı adın, coin bakiyen, istatistiklerin ve arkadaşlıkların geri alınamaz. Onaylamak için SİL yaz.")}</Text>
           <TextInput accessibilityLabel={t("Hesap silme onayı")} autoCapitalize="characters" value={deleteText} onChangeText={setDeleteText}
             placeholder={t("SİL")} placeholderTextColor={p.muted} style={s.input} />
           <Pressable accessibilityRole="button" disabled={deleteText.trim().toLocaleUpperCase('tr-TR') !== t("SİL") || auth.busy}

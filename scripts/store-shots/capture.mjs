@@ -1,11 +1,13 @@
 // Captures English app screens from the local web build for the store images.
-// Usage: node capture.mjs <outDir> [phone|ipad ...] [only=name]
+// Usage: node capture.mjs <outDir> [phone|ipad ...] [only=name] [lang=en|tr]
 import { chromium } from 'playwright-core';
 import { mkdirSync, readFileSync } from 'node:fs';
 
 const BASE = 'http://localhost:8085';
 const OUT = process.argv[2];
-const groups = process.argv.slice(3).filter(a => !a.startsWith('only='));
+const groups = process.argv.slice(3).filter(a => !a.includes('='));
+const LANG = process.argv.find(a => a.startsWith('lang='))?.slice(5) ?? 'en';
+const START_LABEL = LANG === 'tr' ? 'Masayı Kur' : 'Set up table';
 const only = process.argv.find(a => a.startsWith('only='))?.slice(5);
 const STATES = JSON.parse(readFileSync(new URL('./states.json', import.meta.url), 'utf8'));
 const PROJECT_REF = 'mzpqzajnmxecwkykdcju';
@@ -65,10 +67,10 @@ const browser = await chromium.launch({ channel: 'chrome' });
 for (const group of groups) {
   for (const shot of SHOTS[group]) {
     if (only && !shot.name.includes(only)) continue;
-    const context = await browser.newContext({ ...DEVICES[group], locale: 'en-US', timezoneId: 'Europe/Istanbul' });
+    const context = await browser.newContext({ ...DEVICES[group], locale: LANG === 'tr' ? 'tr-TR' : 'en-US', timezoneId: 'Europe/Istanbul' });
     await context.route(/supabase\.co/, (route) => route.abort());
     const storage = {
-      'amerikano:game-settings:v1': JSON.stringify({ language: 'en' }),
+      'amerikano:game-settings:v1': JSON.stringify({ language: LANG }),
       'amerikano:first-game-tutorial:v2': shot.tutorial ? null : 'seen',
       'amerikano:review-asked-at:v1': String(Date.now()),
       [`sb-${PROJECT_REF}-auth-token`]: shot.guest ? JSON.stringify(fakeGuestSession()) : null,
@@ -93,7 +95,7 @@ for (const group of groups) {
       await page.getByRole('button').first().click();
     }
     if (shot.start) {
-      await page.getByText('Set up table', { exact: true }).click();
+      await page.getByText(START_LABEL, { exact: true }).click();
     }
     await page.waitForTimeout(shot.wait ?? 600);
     await page.screenshot({ path: `${OUT}/${shot.name}.png` });

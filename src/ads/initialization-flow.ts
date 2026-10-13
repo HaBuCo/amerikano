@@ -1,17 +1,27 @@
-type ConsentInfo = { canRequestAds: boolean };
+export type ConsentInfo = {
+  canRequestAds: boolean;
+  status: 'UNKNOWN' | 'REQUIRED' | 'NOT_REQUIRED' | 'OBTAINED';
+};
+
+export type TrackingStatus = 'granted' | 'denied' | 'undetermined';
 
 type InitializationSteps = {
-  requestTrackingPermission: () => Promise<void>;
+  ios: boolean;
+  getTrackingStatus: () => Promise<TrackingStatus>;
+  requestTrackingPermission: () => Promise<TrackingStatus>;
   gatherConsent: () => Promise<ConsentInfo>;
   getConsentInfo: () => Promise<ConsentInfo>;
+  hasPersonalisedAdsConsent: () => Promise<boolean>;
   initializeSdk: () => Promise<void>;
   onError: (error: unknown, context: string) => void;
 };
 
-// ATT must finish independently of UMP's network request, before starting ads.
+/** UMP explains advertising first. An iOS refusal stops ads without another prompt. */
 export async function runAdsInitialization(steps: InitializationSteps): Promise<boolean> {
   try {
-    await steps.requestTrackingPermission();
+    const tracking = steps.ios ? await steps.getTrackingStatus() : 'granted';
+    // An existing ATT refusal must not lead to a later UMP tracking message.
+    if (steps.ios && tracking === 'denied') return false;
     let consent: ConsentInfo;
     try {
       consent = await steps.gatherConsent();
@@ -21,8 +31,16 @@ export async function runAdsInitialization(steps: InitializationSteps): Promise<
       consent = await steps.getConsentInfo();
     }
     if (!consent.canRequestAds) {
-      steps.onError(new Error('UMP canRequestAds=false; ad requests are blocked by consent eligibility.'), 'ads-consent-blocked');
       return false;
+    }
+    if (steps.ios) {
+      // UMP canRequestAds also permits limited ads after a refusal. Do not
+      // interpret that as permission for personalised ads or ATT prompting.
+      const personalised = consent.status === 'NOT_REQUIRED' || await steps.hasPersonalisedAdsConsent();
+      if (!personalised) return false;
+      const resolvedTracking = tracking === 'undetermined'
+        ? await steps.requestTrackingPermission() : tracking;
+      if (resolvedTracking !== 'granted') return false;
     }
     await steps.initializeSdk();
     return true;

@@ -6,14 +6,16 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { palette as p } from '@/constants/palette';
 import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
-import { AVATAR_OPTIONS, AvatarKey, PlayerProfile, profileLevel, refreshPlayerProfile, savePlayerProfile, usePlayerProfile } from '@/network/profile';
+import { AVATAR_OPTIONS, AvatarKey, PlayerProfile, refreshPlayerProfile, savePlayerProfile, usePlayerProfile } from '@/network/profile';
+import { refreshWallet, useWallet } from '@/network/wallet';
 import { normalizeUsername, usernameError } from '@/network/usernames';
 
 export default function ProfileScreen() {
   const { t } = useTranslations();
   const { isTablet } = useResponsiveLayout();
   const state = usePlayerProfile();
-  useEffect(() => { void refreshPlayerProfile(); }, []);
+  const wallet = useWallet();
+  useEffect(() => { void refreshPlayerProfile(); void refreshWallet(); }, []);
   const profile = state.profile;
   return <SafeAreaView style={s.page}>
     <Stack.Screen options={{ headerShown: false }} />
@@ -23,13 +25,13 @@ export default function ProfileScreen() {
       <Text style={s.title}>{t("Masadaki sen.")}</Text>
       <Text style={s.body}>{t("Kullanıcı adın ve avatarın bütün çevrim içi masalarda görünür.")}</Text>
 
-      {profile ? <ProfileForm key={`${profile.userId}:${profile.username}:${profile.avatarKey}`} profile={profile} loading={state.loading} saving={state.saving} error={state.error} tablet={isTablet} />
+      {profile ? <ProfileForm key={`${profile.userId}:${profile.username}:${profile.avatarKey}`} profile={profile} coinBalance={wallet.balance} loading={state.loading} saving={state.saving} error={state.error} tablet={isTablet} />
         : <Text style={state.error ? s.error : s.body}>{state.error || t("Profil hazırlanıyor…")}</Text>}
     </KeyboardAwareScrollView>
   </SafeAreaView>;
 }
 
-function ProfileForm({ profile, loading, saving, error, tablet = false }: { profile: PlayerProfile; loading: boolean; saving: boolean; error: string; tablet?: boolean }) {
+function ProfileForm({ profile, coinBalance, loading, saving, error, tablet = false }: { profile: PlayerProfile; coinBalance: number | null; loading: boolean; saving: boolean; error: string; tablet?: boolean }) {
   const { t, localizeMessage } = useTranslations();
   const [username, setUsername] = useState(profile.username || '');
   const [avatar, setAvatar] = useState<AvatarKey>(profile.avatarKey);
@@ -43,7 +45,7 @@ function ProfileForm({ profile, loading, saving, error, tablet = false }: { prof
   };
   return <View style={s.form}>
       <View style={s.stats}>
-        <View style={s.stat}><Text style={s.statValue}>{profileLevel(profile?.experience ?? 0)}</Text><Text style={s.statLabel}>{t("SEVİYE")}</Text></View>
+        <View style={s.stat}><Text style={s.statValue}>{coinBalance === null ? '—' : coinBalance.toLocaleString()}</Text><Text style={s.statLabel}>{t("COIN")}</Text></View>
         <View style={s.stat}><Text style={s.statValue}>{profile?.gamesPlayed ?? 0}</Text><Text style={s.statLabel}>{t("MAÇ")}</Text></View>
         <View style={s.stat}><Text style={s.statValue}>{profile?.wins ?? 0}</Text><Text style={s.statLabel}>{t("GALİBİYET")}</Text></View>
       </View>

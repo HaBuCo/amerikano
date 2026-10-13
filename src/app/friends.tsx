@@ -89,7 +89,7 @@ export default function FriendsScreen() {
       {social.searching && <Text style={s.searchHint}>{t("Oyuncular aranıyor…")}</Text>}
       {query.length >= 3 && !social.searching && social.searchResults.length === 0 && !social.error && <Text style={s.searchHint}>{t("Bu kullanıcı adıyla eşleşen oyuncu bulunamadı.")}</Text>}
       {social.searchResults.length > 0 && <Section title={t("ARAMA SONUÇLARI")}>{social.searchResults.map((player) => <PlayerRow key={player.userId} player={player}
-        detail={`@${player.username} · Sv. ${player.level}`}
+        detail={`@${player.username}`}
         actions={player.relationship === 'friend'
           ? <SmallButton label={t("Arkadaşın")} disabled onPress={() => {}} />
           : player.relationship === 'outgoing'
@@ -115,7 +115,7 @@ export default function FriendsScreen() {
       <Section title={t("ARKADAŞLAR · {0}", [social.friends.length])}>
         {social.friends.length === 0 && !social.loading ? <Text style={s.empty}>{t("Henüz arkadaşın yok. Kullanıcı adıyla arayarak ilk arkadaşını ekleyebilirsin.")}</Text> : null}
         {social.friends.map((player) => <PlayerRow key={player.userId} player={player}
-          detail={`@${player.username} · ${player.online ? t("● Çevrim içi") : t("○ Çevrim dışı")} · Sv. ${player.level} · ${player.wins}/${player.gamesPlayed} galibiyet`}
+          detail={`@${player.username} · ${player.online ? t("● Çevrim içi") : t("○ Çevrim dışı")} · ${player.wins}/${player.gamesPlayed} ${t("galibiyet")}`}
           actions={<>
             {roomCode
               ? <SmallButton label={t("Davet et")} filled disabled={social.busy} onPress={() => void inviteFriend(player.userId, roomCode)} />

@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 type Command =
+  | { type: 'presence' }
   | { type: 'list' }
   | { type: 'search'; query: string }
   | { type: 'request'; userId?: string; friendCode?: string }
@@ -45,7 +46,19 @@ Deno.serve(async (request) => {
     const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
     const command = await request.json() as Command;
     if (!command || typeof command.type !== 'string') throw new Error('Geçersiz istek.');
-    await admin.from('profiles').update({ last_active_at: new Date().toISOString() }).eq('user_id', user.id);
+    const presenceUpdate = await admin.from('profiles').update({ last_active_at: new Date().toISOString() }).eq('user_id', user.id);
+
+    if (command.type === 'presence') {
+      if (presenceUpdate.error) throw presenceUpdate.error;
+      // A short grace period absorbs mobile network jitter without counting
+      // accounts that merely exist or have left the app for a long time.
+      const activeSince = new Date(Date.now() - 60_000).toISOString();
+      const { count, error } = await admin.from('profiles')
+        .select('user_id', { count: 'exact', head: true })
+        .gte('last_active_at', activeSince);
+      if (error || count === null) throw error ?? new Error('Çevrim içi sayısı alınamadı.');
+      return json({ onlineCount: count });
+    }
 
     const list = async () => {
       const now = new Date();

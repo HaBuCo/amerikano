@@ -256,18 +256,20 @@ export function actingPlayerId(state: Pick<GameState, 'claim' | 'phase' | 'playe
   return state.phase === 'claim' ? state.claim!.playerIds[0] : state.players[state.currentPlayerIndex].id;
 }
 
+function refillStock(stock: Card[], discard: Card[], random: () => number): boolean {
+  if (stock.length || discard.length < 2) return false;
+  const top = discard.pop()!;
+  stock.push(...shuffle(discard, random));
+  discard.splice(0, discard.length, top);
+  return true;
+}
+
 export function drawCard(state: GameState, source: 'stock' | 'discard', random = Math.random, now = Date.now()): GameState {
   if (state.phase !== 'draw') return state;
   const stock = [...state.stock];
   const discard = [...state.discard];
   let stockRecycleCount = state.stockRecycleCount ?? 0;
-  if (stock.length === 0 && stockRecycleCount >= 1) return finishStalemateRound(state);
-  if (stock.length < 2 && discard.length > 1 && stockRecycleCount === 0) {
-    const top = discard.pop()!;
-    stock.push(...shuffle(discard, random));
-    discard.splice(0, discard.length, top);
-    stockRecycleCount += 1;
-  }
+  if (refillStock(stock, discard, random)) stockRecycleCount += 1;
   // Resolve requests in counterclockwise turn order before drawing the active player's card.
   if (source === 'stock' && rulesForGame(state).claimsEnabled && state.players.length > 2 && discard.length && stock.length >= 2) {
     const lastDiscarderId = state.lastDiscarderId ?? (state.turnCount > 0
@@ -282,6 +284,7 @@ export function drawCard(state: GameState, source: 'stock' | 'discard', random =
   }
   const card = source === 'stock' ? stock.pop() : discard.pop();
   if (!card) return state;
+  if (refillStock(stock, discard, random)) stockRecycleCount += 1;
   const players = state.players.map((player, index) =>
     index === state.currentPlayerIndex
       ? { ...player, hand: sortHand([...player.hand, card]) }
@@ -290,9 +293,10 @@ export function drawCard(state: GameState, source: 'stock' | 'discard', random =
   return { ...state, stock, stockRecycleCount, discard, players, phase: 'play' };
 }
 
-export function resolveClaim(state: GameState, actorId: string, take: boolean, now = Date.now()): GameState {
+export function resolveClaim(state: GameState, actorId: string, take: boolean, now = Date.now(), random = Math.random): GameState {
   if (state.phase !== 'claim' || !state.claim || state.claim.playerIds[0] !== actorId || typeof take !== 'boolean') return state;
   const stock = [...state.stock], discard = [...state.discard];
+  let stockRecycleCount = state.stockRecycleCount ?? 0;
   let players = state.players;
   if (take) {
     if (stock.length < 2 || !discard.length) return state;
@@ -303,14 +307,15 @@ export function resolveClaim(state: GameState, actorId: string, take: boolean, n
   }
   const drawn = stock.pop();
   if (!drawn) return state;
+  if (refillStock(stock, discard, random)) stockRecycleCount += 1;
   players = players.map((p, i) => i === state.currentPlayerIndex ? { ...p, hand: sortHand([...p.hand, drawn]) } : p);
-  return { ...state, stock, discard, players, phase: 'play', claim: undefined };
+  return { ...state, stock, stockRecycleCount, discard, players, phase: 'play', claim: undefined };
 }
 
 // Only the host runtime invokes timeouts, never a client-supplied timeout command.
-export function expireClaim(state: GameState, now = Date.now()): GameState {
+export function expireClaim(state: GameState, now = Date.now(), random = Math.random): GameState {
   return state.phase === 'claim' && state.claim && now >= state.claim.deadline
-    ? resolveClaim(state, state.claim.playerIds[0], false, now) : state;
+    ? resolveClaim(state, state.claim.playerIds[0], false, now, random) : state;
 }
 
 export const TURN_TIMEOUT_MS = 45_000;
@@ -331,7 +336,7 @@ export function armTurnTimer(state: GameState, now = Date.now()): GameState {
 /** Advances an overdue online turn without trusting a client-supplied action. */
 export function expireTurn(state: GameState, now = Date.now(), random = Math.random): GameState {
   if (state.phase === 'claim') {
-    const expired = expireClaim(state, now);
+    const expired = expireClaim(state, now, random);
     return expired === state ? state : armTurnTimer(expired, now);
   }
   if ((state.phase !== 'draw' && state.phase !== 'play') || !state.turnDeadline || now < state.turnDeadline) return state;
@@ -342,7 +347,7 @@ export function expireTurn(state: GameState, now = Date.now(), random = Math.ran
   } else {
     const card = player.hand.reduce<Card | undefined>((lowest, candidate) =>
       !lowest || cardPoints(candidate) < cardPoints(lowest) ? candidate : lowest, undefined);
-    advanced = card ? discardCard(state, card.id) : state;
+    advanced = card ? discardCard(state, card.id, random) : state;
   }
   if (advanced === state) return state;
   const missedTurns = { ...state.missedTurns, [player.id]: (state.missedTurns?.[player.id] ?? 0) + 1 };
@@ -375,7 +380,7 @@ export function cedeSeatToBot(state: GameState, playerId: string, now = Date.now
   return actingPlayerId(next) === playerId ? armTurnTimer(next, now) : next;
 }
 
-export function discardCard(state: GameState, cardId: string): GameState {
+export function discardCard(state: GameState, cardId: string, random = Math.random): GameState {
   if (state.phase !== 'play') return state;
   const current = state.players[state.currentPlayerIndex];
   if (current.hand.length === 1 && !current.hasOpened) return state;
@@ -396,20 +401,23 @@ export function discardCard(state: GameState, cardId: string): GameState {
   if (players[state.currentPlayerIndex].hand.length === 0) {
     return finishRound({ ...state, players, roundPenalties, lastPenalty, lastDiscarderId: current.id, discard: [...state.discard, discarded], discardFaceDown: true });
   }
+  const stock = [...state.stock];
+  const discard = [...state.discard, discarded];
+  const stockRecycleCount = (state.stockRecycleCount ?? 0) + Number(refillStock(stock, discard, random));
   const next: GameState = {
     ...state,
     players,
     roundPenalties,
     lastPenalty,
-    discard: [...state.discard, discarded],
+    stock,
+    stockRecycleCount,
+    discard,
     lastDiscarderId: current.id,
     currentPlayerIndex: nextSeat(state.currentPlayerIndex, state.players.length),
     phase: 'draw',
     turnCount: state.turnCount + 1,
   };
-  return next.stock.length === 0 && (next.stockRecycleCount ?? 0) >= 1
-    ? finishStalemateRound(next)
-    : next;
+  return next;
 }
 
 export function openMelds(state: GameState, melds: Meld[], finalDiscardId?: string): GameState {
@@ -528,11 +536,11 @@ export function replaceJoker(state: GameState, meldId: string, jokerId: string, 
 
 export function applyAction(state: GameState, actorId: string, action: GameAction, random = Math.random): GameState {
   if (action.type === 'next') return nextRound(state, random);
-  if (action.type === 'claim') return resolveClaim(state, actorId, action.take);
+  if (action.type === 'claim') return resolveClaim(state, actorId, action.take, Date.now(), random);
   if (state.players[state.currentPlayerIndex].id !== actorId) return state;
   switch (action.type) {
     case 'draw': return action.source === 'stock' || action.source === 'discard' ? drawCard(state, action.source, random) : state;
-    case 'discard': return discardCard(state, action.cardId);
+    case 'discard': return discardCard(state, action.cardId, random);
     case 'layoff': return layoffCard(state, action.meldId, action.cardId);
     case 'replaceJoker': return replaceJoker(state, action.meldId, action.jokerId, action.cardId);
     case 'finish':
@@ -567,7 +575,7 @@ export function explainInvalidAction(state: GameState, actorId: string, action: 
   if (action.type === 'draw') {
     if (state.phase !== 'draw') return 'Kart çekme aşaması tamamlandı; şimdi elinden bir kart oyna veya at.';
     if (action.source === 'discard' && !state.discard.length) return 'Ortada alınabilecek açık kart yok.';
-    if (action.source === 'stock' && !state.stock.length) return 'Kapalı destede kart kalmadı.';
+    if (action.source === 'stock' && !state.stock.length && state.discard.length <= 1) return 'Kapalı destede kart kalmadı.';
     return '';
   }
   if (state.phase !== 'play') return 'Önce desteden veya açık karttan bir kart çekmelisin.';
@@ -677,35 +685,6 @@ function finishRound(state: GameState): GameState {
     roundWinnerId: winner.id,
     roundResult: { winnerId: winner.id, entries },
     scoreHistory: recordRound(state, entries),
-  };
-}
-
-function finishStalemateRound(state: GameState): GameState {
-  const entries = state.players.map((player) => {
-    const penalty = handPoints(player.hand);
-    const playableDiscardPenalty = state.roundPenalties?.[player.id] ?? 0;
-    return {
-      playerId: player.id,
-      penalty,
-      playableDiscardPenalty,
-      totalBefore: player.score - playableDiscardPenalty,
-      totalAfter: player.score + penalty,
-      cards: [...player.hand],
-    };
-  });
-  const players = state.players.map((player) => ({
-    ...player,
-    score: entries.find((entry) => entry.playerId === player.id)!.totalAfter,
-  }));
-  return {
-    ...state,
-    players,
-    phase: 'round-over',
-    roundWinnerId: null,
-    roundResult: { winnerId: null, reason: 'stalemate', entries },
-    scoreHistory: recordRound(state, entries),
-    claim: undefined,
-    turnDeadline: undefined,
   };
 }
 

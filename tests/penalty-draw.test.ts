@@ -129,6 +129,22 @@ test('exactly two stock cards permit a claim; one stock card suppresses it witho
   }
 });
 
+test('a penalty claim that empties the stock refills from older discards', () => {
+  const game = afterFirstDiscard(4);
+  const older = game.stock.slice(0, -2);
+  const top = game.discard.at(-1)!;
+  game.stock = game.stock.slice(-2);
+  game.discard = [...older, top];
+  const offered = applyAction(game, actingPlayerId(game), { type: 'draw', source: 'stock' }, () => 0);
+  assert.equal(offered.phase, 'claim');
+  const claimed = applyAction(offered, actingPlayerId(offered), { type: 'claim', take: true }, () => 0);
+  assert.equal(claimed.phase, 'play');
+  assert.equal(claimed.stockRecycleCount, 1);
+  assert.equal(claimed.stock.length, older.length - 1);
+  assert.deepEqual(claimed.discard, [older.at(-1)]);
+  assertCardsConserved(game, claimed);
+});
+
 test('single-player relaxed and fast profiles intentionally disable penalty draws; classic permits them', () => {
   for (const profile of Object.values(SINGLE_GAME_PROFILES)) {
     const game = createGame(['You', 'Bot A', 'Bot B', 'Bot C'], () => 0, rulesFromSingleOptions(profile));

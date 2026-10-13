@@ -20,7 +20,6 @@ import type { SingleGameOptions } from '@/game/single-game-options';
 import { pickOpponentNames } from '@/game/opponent-names';
 import { recordSinglePlayerResult } from '@/game/single-stats';
 import { registerRoundOver, showMatchEndInterstitial } from '@/ads/interstitial';
-import { recordSinglePlayerXp } from '@/network/client';
 import { maybeRequestReview } from '@/review/store-review';
 
 function createSingleGame(options: SingleGameOptions) {
@@ -88,7 +87,6 @@ export default function GameScreen() {
           // Let the final score settle on screen before the store sheet appears.
           setTimeout(() => { void maybeRequestReview(won, stats.gamesPlayed); }, 1_500);
         }).catch(() => undefined);
-        void recordSinglePlayerXp(won);
       }
     } else void saveSingleGame(game);
   }, [game, loadState, single]);

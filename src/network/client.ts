@@ -7,9 +7,10 @@ import { localRoomDeadline } from '../game/quick-room';
 import { cooldownPassed, reactionById } from '../game/reactions';
 import { isSupabaseConfigured, supabase } from './supabase';
 import { ClientMessage, RoomView } from './types';
+import { recordRoomLatency } from './latency';
 
-type State = { status: 'offline' | 'connecting' | 'online'; room: RoomView | null; error: string; busy: boolean };
-type FunctionResult = { roomId?: string; room?: RoomView; left?: boolean; experience?: number; error?: string };
+type State = { status: 'offline' | 'connecting' | 'online'; room: RoomView | null; error: string; busy: boolean; pendingDraw?: 'stock' | 'discard' };
+type FunctionResult = { roomId?: string; room?: RoomView; left?: boolean; error?: string; serverMs?: number };
 
 let snapshot: State = { status: 'offline', room: null, error: '', busy: false };
 let roomId: string | null = null;
@@ -57,7 +58,20 @@ async function functionError(error: unknown) {
 
 async function invoke(body: Record<string, unknown>): Promise<FunctionResult> {
   if (!supabase) throw new Error('Supabase bağlantısı yapılandırılmadı.');
-  const { data, error } = await supabase.functions.invoke<FunctionResult>('room', { body });
+  const startedAt = performance.now();
+  const command = body.type === 'action' ? `action:${(body.action as GameAction)?.type}` : String(body.type);
+  let result: { data: FunctionResult | null; error: unknown };
+  try {
+    result = await supabase.functions.invoke<FunctionResult>('room', { body });
+  } catch (error) {
+    recordRoomLatency({ command, totalMs: Math.round(performance.now() - startedAt), ok: false });
+    throw error;
+  }
+  const { data, error } = result;
+  const timing = { command, totalMs: Math.round(performance.now() - startedAt),
+    serverMs: typeof data?.serverMs === 'number' ? data.serverMs : undefined, ok: !error && !data?.error };
+  recordRoomLatency(timing);
+  if (__DEV__ && body.type === 'action') console.info('[room latency]', timing);
   if (error) throw new Error(await functionError(error));
   if (data?.error) throw new Error(data.error);
   if (data?.room) {
@@ -77,13 +91,16 @@ async function persistRoom() {
 
 async function refreshRoom() {
   if (!roomId) return;
+  const requestedRoomId = roomId;
   try {
-    const result = await invoke({ type: 'fetch', roomId });
+    const result = await invoke({ type: 'fetch', roomId: requestedRoomId });
+    if (roomId !== requestedRoomId) return;
     if (result.room && (!snapshot.room || result.room.code !== snapshot.room.code || result.room.revision >= snapshot.room.revision)) {
       update({ room: result.room, error: '', status: 'online' });
       scheduleDeadlineRefresh(result.room);
     }
   } catch (error) {
+    if (roomId !== requestedRoomId) return;
     const message = error instanceof Error ? error.message : 'Masa yenilenemedi.';
     if (/odada değilsin|oda bulunamadı|süresi doldu/i.test(message)) forgetRoom();
     else update({ status: 'connecting', error: 'Bağlantı yenileniyor… Elin güvende.' });
@@ -119,9 +136,10 @@ function scheduleDeadlineRefresh(room: RoomView) {
   deadlineTimer = null;
   const turnDeadline = room.game?.phase === 'round-over' || room.game?.phase === 'game-over' ? undefined : room.game?.turnDeadline;
   const botChoiceDeadline = room.botFillAvailableAt && room.botFillAvailableAt > Date.now() ? room.botFillAvailableAt : undefined;
-  const deadline = [turnDeadline, room.startsAt, botChoiceDeadline].filter((value): value is number => typeof value === 'number').sort((a, b) => a - b)[0];
+  const coinSettlementDeadline = room.entryFee > 0 && room.game?.phase === 'game-over' && !room.coinSettled ? Date.now() + 2000 : undefined;
+  const deadline = [turnDeadline, room.startsAt, botChoiceDeadline, coinSettlementDeadline].filter((value): value is number => typeof value === 'number').sort((a, b) => a - b)[0];
   if (!deadline) return;
-  deadlineTimer = setTimeout(() => { void refreshRoom(); }, Math.max(100, deadline - Date.now() + 150));
+  deadlineTimer = setTimeout(requestRefresh, Math.max(100, deadline - Date.now() + 150));
 }
 
 function receiveReaction(payload: unknown) {
@@ -149,15 +167,16 @@ function listenToRoom(nextRoomId: string) {
   if (!supabase) return;
   if (roomChannel) void supabase.removeChannel(roomChannel);
   clearRoomTimers();
-  heartbeatTimer = setInterval(() => { if (roomId) void refreshRoom(); }, 20_000);
+  heartbeatTimer = setInterval(() => { if (roomId) requestRefresh(); }, 20_000);
   roomChannel = supabase
     .channel(`room:${nextRoomId}`, { config: { private: true } })
     .on('broadcast', { event: 'room_changed' }, requestRefresh)
     .on('broadcast', { event: 'reaction' }, ({ payload }) => receiveReaction(payload))
     .subscribe((status) => {
+      if (nextRoomId !== roomId) return;
       if (status === 'SUBSCRIBED') {
         update({ status: 'online', error: '' });
-        void refreshRoom();
+        requestRefresh();
       }
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         update({ status: 'connecting', error: 'Masa bağlantısı yenileniyor… Elin güvende.' });
@@ -229,23 +248,44 @@ export async function sendRoom(message: ClientMessage) {
     update({ error: 'Önce bir odaya katıl.' });
     return false;
   }
-  update({ busy: true, error: '' });
+  update({ busy: true, error: '', pendingDraw: message.type === 'action' && message.action.type === 'draw' ? message.action.source : undefined });
   const body = message.type === 'create' || message.type === 'join' || message.type === 'matchmake' ? message : { ...message, roomId };
+  const requestedRoomId = roomId;
+  const actionRevision = message.type === 'action' ? message.revision : null;
   try {
-    await accept(await invoke(body));
+    const result = await invoke(body);
+    if (requestedRoomId !== roomId) return false;
+    await accept(result);
     return true;
   } catch (error) {
-    update({ busy: false, error: error instanceof Error ? error.message : 'İşlem tamamlanamadı.' });
+    if (requestedRoomId !== roomId) return false;
+    const message = error instanceof Error ? error.message : 'İşlem tamamlanamadı.';
+    // A lost response can follow a successful server commit. Re-read the room
+    // before the next move, so it cannot use an obsolete revision or hand.
+    if (requestedRoomId && actionRevision !== null) {
+      update({ error: message });
+      await refreshRoom();
+      if (roomId === requestedRoomId) {
+        update({
+          busy: false,
+          error: snapshot.room?.revision === actionRevision && snapshot.status === 'online' ? message : snapshot.error,
+        });
+      }
+    } else {
+      update({ busy: false, error: message });
+    }
     return false;
+  } finally {
+    update({ pendingDraw: undefined });
   }
 }
 
-export function enterRoom(name: string, code?: string) {
-  return sendRoom(code ? { type: 'join', name, code: code.toUpperCase() } : { type: 'create', name });
+export function enterRoom(name: string, code?: string, entryFee = 100) {
+  return sendRoom(code ? { type: 'join', name, code: code.toUpperCase(), economyVersion: 1 } : { type: 'create', name, entryFee, economyVersion: 1 });
 }
 
-export function enterQuickRoom(name: string) {
-  return sendRoom({ type: 'matchmake', name });
+export function enterQuickRoom(name: string, entryFee = 100) {
+  return sendRoom({ type: 'matchmake', name, entryFee, economyVersion: 1 });
 }
 
 export async function leaveWaitingRoom() {
@@ -281,7 +321,7 @@ export function suspendRoom() {
   if (supabase && roomChannel) void supabase.removeChannel(roomChannel);
   roomChannel = null;
   clearRoomTimers();
-  update({ status: 'connecting', busy: false, error: '' });
+  update({ status: 'connecting', busy: false, pendingDraw: undefined, error: '' });
 }
 
 export function sendAction(action: GameAction) {
@@ -290,14 +330,6 @@ export function sendAction(action: GameAction) {
     type: 'action', requestId: `${Date.now()}-${++sequence}`,
     revision: snapshot.room.revision, action,
   });
-}
-
-/** Tek oyunculu (bot'a karşı) bir maç bittiğinde çağrılır; sunucu tarafında sabit bir XP kazancı işler. Ağ yoksa veya oturum yoksa sessizce yok sayılır. */
-export async function recordSinglePlayerXp(won: boolean) {
-  if (!isSupabaseConfigured || !supabase) return;
-  try {
-    await invoke({ type: 'single-result', won });
-  } catch { /* Tek oyunculu deneyimi ağdan bağımsız çalışmaya devam eder. */ }
 }
 
 export function clearRoomError() { update({ error: '' }); }
@@ -309,9 +341,9 @@ export function forgetRoom() {
   setReactions({});
   roomId = null;
   void persistRoom();
-  update({ room: null, status: isSupabaseConfigured ? 'online' : 'offline', error: '', busy: false });
+  update({ room: null, status: isSupabaseConfigured ? 'online' : 'offline', error: '', busy: false, pendingDraw: undefined });
 }
 
 AppState.addEventListener('change', (state) => {
-  if (state === 'active' && roomId) void refreshRoom();
+  if (state === 'active' && roomId) requestRefresh();
 });

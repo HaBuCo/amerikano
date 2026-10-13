@@ -7,12 +7,17 @@
     "icon": "./assets/images/icon.png",
     "scheme": "amerikano",
     "userInterfaceStyle": "dark",
+    "locales": {
+      "en": "./locales/en.json",
+      "tr": "./locales/tr.json"
+    },
     "ios": {
       "icon": "./assets/images/icon.png",
       "supportsTablet": true,
       "bundleIdentifier": "com.hegionsoft.amerikano",
       "usesAppleSignIn": true,
       "infoPlist": {
+        "CFBundleDisplayName": "Amerikano",
         "CFBundleAllowMixedLocalizations": true,
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -88,12 +93,7 @@
           "skAdNetworkItems": ["cstr6suwn9.skadnetwork"]
         }
       ],
-      [
-        "expo-tracking-transparency",
-        {
-          "userTrackingPermission": "Bu izin, sana kişiselleştirilmiş reklamlar göstermek için diğer şirketlerin uygulama ve web sitelerindeki etkinliklerinle bağlantı kurulmasına olanak tanır."
-        }
-      ]
+      "expo-tracking-transparency"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -425,29 +425,61 @@ test('no penalty offer without enough stock; exhausted stock is recycled without
   assert.equal(result.stockRecycleCount, 1);
 });
 
-test('round ends as a stalemate when the recycled stock is exhausted again', () => {
-  const state = { ...fixedGame(['a', 'b', 'c']), phase: 'draw' as const, stockRecycleCount: 1 };
-  const lastStockCard = state.stock[0];
-  state.stock = [lastStockCard];
-  const afterDraw = applyAction(state, 'player-1', { type: 'draw', source: 'stock' });
-  assert.equal(afterDraw.phase, 'play');
-  assert.equal(afterDraw.stock.length, 0);
+test('the stock refills repeatedly, preserves the top discard and never ends the round', () => {
+  const initial = fixedGame(['a', 'b', 'c']);
+  const top = initial.stock.at(-1)!;
+  const state = { ...initial, phase: 'draw' as const,
+    stock: [], discard: [...initial.stock.slice(0, -1), top],
+    rules: { ...initial.rules!, claimsEnabled: false } };
+  const assertConserved = (game: GameState) => {
+    const cards = [...game.stock, ...game.discard, ...game.players.flatMap(player => player.hand), ...game.melds.flatMap(meld => meld.cards)];
+    assert.equal(cards.length, 106);
+    assert.equal(new Set(cards.map(card => card.id)).size, 106);
+  };
 
-  const discardedId = afterDraw.players[0].hand[0].id;
-  const expectedHands = afterDraw.players.map((player, index) =>
-    index === 0 ? player.hand.filter((card) => card.id !== discardedId) : player.hand,
-  );
-  const ended = applyAction(afterDraw, 'player-1', { type: 'discard', cardId: discardedId });
-  assert.equal(ended.phase, 'round-over');
-  assert.equal(ended.roundWinnerId, null);
-  assert.equal(ended.roundResult?.winnerId, null);
-  assert.equal(ended.roundResult?.reason, 'stalemate');
-  for (const [index, player] of ended.players.entries()) {
-    assert.equal(
-      ended.roundResult?.entries.find((entry) => entry.playerId === player.id)?.penalty,
-      handPoints(expectedHands[index]),
-    );
-  }
+  const first = applyAction(state, 'player-1', { type: 'draw', source: 'stock' }, () => 0);
+  assert.equal(first.phase, 'play');
+  assert.equal(first.stockRecycleCount, 1);
+  assert.deepEqual(first.discard, [top]);
+  assertConserved(first);
+
+  const secondState = { ...first, phase: 'draw' as const, stock: [], discard: [...first.stock, top] };
+  const second = applyAction(secondState, 'player-1', { type: 'draw', source: 'stock' }, () => 0);
+  assert.equal(second.phase, 'play');
+  assert.equal(second.stockRecycleCount, 2);
+  assert.deepEqual(second.discard, [top]);
+  assertConserved(second);
+
+  const discardedId = second.players[0].hand[0].id;
+  const continued = applyAction(second, 'player-1', { type: 'discard', cardId: discardedId }, () => 0);
+  assert.equal(continued.phase, 'draw');
+  assert.equal(continued.roundResult, undefined);
+  assertConserved(continued);
+});
+
+test('drawing the last stock card immediately shuffles older discards but leaves the newest face up', () => {
+  const initial = fixedGame(['a', 'b']);
+  const [lastStockCard, ...olderDiscards] = initial.stock;
+  const top = olderDiscards.pop()!;
+  const state = { ...initial, phase: 'draw' as const, stock: [lastStockCard],
+    discard: [...olderDiscards, top] };
+  const result = applyAction(state, 'player-1', { type: 'draw', source: 'stock' }, () => 0);
+  assert.equal(result.phase, 'play');
+  assert.equal(result.stock.length, olderDiscards.length);
+  assert.deepEqual(result.discard, [top]);
+  assert.equal(result.stockRecycleCount, 1);
+  assert.ok(result.players[0].hand.some(card => card.id === lastStockCard.id));
+});
+
+test('discarding with an empty stock refills from old discards and keeps the new top card', () => {
+  const initial = fixedGame(['a', 'b']);
+  const discarded = initial.players[0].hand[0];
+  const state = { ...initial, stock: [], discard: [...initial.stock] };
+  const result = applyAction(state, 'player-1', { type: 'discard', cardId: discarded.id }, () => 0);
+  assert.equal(result.phase, 'draw');
+  assert.equal(result.stock.length, initial.stock.length);
+  assert.deepEqual(result.discard, [discarded]);
+  assert.equal(result.stockRecycleCount, 1);
 });
 
 test('final is atomic and face-down discard is hidden; no extra unopened penalty', () => {

@@ -1,0 +1,6 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "Amerikano",
+    "NSUserTrackingUsageDescription": "Takibe izin verirsen, diğer şirketlerin uygulama ve web sitelerindeki etkinliğin sana daha uygun reklamlar göstermek ve reklamların etkisini ölçmek için kullanılabilir."
+  }
+}

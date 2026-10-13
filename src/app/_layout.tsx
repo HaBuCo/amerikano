@@ -2,6 +2,7 @@ import { useTranslations } from '@/i18n/language';
 import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { AppState } from 'react-native';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 
@@ -14,6 +15,8 @@ import { initializeAds } from '@/ads/mobile-ads';
 import { preloadInterstitial } from '@/ads/interstitial';
 import { hasRemovedAds, initializePurchases } from '@/purchases/purchases';
 import { preloadCardArt } from '@/constants/preload-card-art';
+import { useAuth } from '@/network/auth';
+import { refreshOnlinePlayerCount, resetOnlinePlayerCount } from '@/network/presence';
 
 installGlobalErrorHandler();
 
@@ -39,6 +42,7 @@ function safeWindowMetrics() {
 
 export default function RootLayout() {
   const { t } = useTranslations();
+  const auth = useAuth();
   useEffect(() => {
     preloadCardArt();
     void initializePurchases().then(() => {
@@ -46,6 +50,22 @@ export default function RootLayout() {
       void initializeAds().then(() => preloadInterstitial());
     });
   }, []);
+
+  useEffect(() => {
+    resetOnlinePlayerCount();
+    if (auth.status !== 'anonymous' && auth.status !== 'signed-in') return;
+    const refresh = () => {
+      if (AppState.currentState !== 'background' && AppState.currentState !== 'inactive') {
+        void refreshOnlinePlayerCount();
+      }
+    };
+    refresh();
+    const timer = setInterval(refresh, 30_000);
+    const appState = AppState.addEventListener('change', state => {
+      if (state === 'active') refresh();
+    });
+    return () => { clearInterval(timer); appState.remove(); };
+  }, [auth.status, auth.user?.id]);
 
   return (
     <SafeAreaProvider initialMetrics={safeWindowMetrics()}>

@@ -2,7 +2,7 @@ import { useTranslations } from '@/i18n/language';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import type { LayoutChangeEvent } from 'react-native';
-import { Animated, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Animated, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { palette as p } from '@/constants/palette';
 import { CARD_HEIGHT, CARD_WIDTH, PlayingCard, SMALL_CARD_HEIGHT, SMALL_CARD_WIDTH, TABLET_CARD_HEIGHT, TABLET_CARD_WIDTH, TABLET_SMALL_CARD_HEIGHT, TABLET_SMALL_CARD_WIDTH } from './playing-card';
@@ -30,7 +30,9 @@ import { LanguagePicker } from './language-picker';
 
 type Props = {
   game: PrivateGameView; viewerId: string; modeLabel: string; blocked?: boolean;
+  pendingDraw?: 'stock' | 'discard';
   canAdvance?: boolean; canRematch?: boolean; error?: string;
+  coinResult?: { entryFee: number; payout: number | null };
   debugText?: string;
   playerMeta?: Record<string, { avatarColor: string; avatarSymbol: string; level: number; connected: boolean; missedTurns: number; botControlled: boolean }>;
   botControlled?: boolean; onReclaim?: () => void;
@@ -127,6 +129,21 @@ function DraggableHandCard({ card, index, step, cardsPerRow, cardWidth, cardHeig
 
 const ROUND_ADVANCE_DELAY_MS = 6_000;
 
+function PendingDrawCard({ small, tablet, marginLeft = 0 }: { small: boolean; tablet: boolean; marginLeft?: number }) {
+  const { t } = useTranslations();
+  const [arrival] = useState(() => new Animated.Value(0));
+  useEffect(() => {
+    const animation = Animated.timing(arrival, { toValue: 1, duration: 160, useNativeDriver: true });
+    animation.start();
+    return () => animation.stop();
+  }, [arrival]);
+  return <Animated.View pointerEvents="none" accessibilityLabel={t("Kart çekiliyor…")} accessibilityLiveRegion="polite"
+    style={{ marginLeft, opacity: arrival, transform: [{ translateY: arrival.interpolate({ inputRange: [0, 1], outputRange: [-24, 0] }) }] }}>
+    <PlayingCard hidden small={small} tablet={tablet} />
+    <View style={StyleSheet.absoluteFill}><ActivityIndicator color={p.gold} style={{ flex: 1 }} /></View>
+  </Animated.View>;
+}
+
 function TurnCountdown({ deadline, warningEnabled, tickEnabled, onUrgent, onTick }: { deadline?: number; warningEnabled: boolean; tickEnabled: boolean; onUrgent: () => void; onTick: () => void }) {
   const { t } = useTranslations();
   const [seconds, setSeconds] = useState(() => deadline ? Math.max(0, Math.ceil((deadline - Date.now()) / 1000)) : 0);
@@ -179,7 +196,7 @@ function SettingRow({ label, value, onPress }: { label: string; value: boolean; 
   </Pressable>;
 }
 
-export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = true, canRematch = false, error, debugText, playerMeta, botControlled = false, connectionState, onReclaim, onOpenTutorial, onReact, reactions, canUndo = false, onUndo, onAction, onRematch, onForfeit, onExit }: Props) {
+export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, canAdvance = true, canRematch = false, error, coinResult, debugText, playerMeta, botControlled = false, connectionState, onReclaim, onOpenTutorial, onReact, reactions, canUndo = false, onUndo, onAction, onRematch, onForfeit, onExit }: Props) {
   const { t, localizeMessage, language } = useTranslations();
   const [pendingState, setPendingState] = useState<{ key: string; groups: Pending[] }>({ key: '', groups: [] });
   const [notice, setNotice] = useState('');
@@ -213,6 +230,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
   const [handOrder, setHandOrder] = useState(() => me.hand.map((card) => card.id));
   const loadedOrderKey = useRef('');
   const current = game.players[game.currentPlayerIndex];
+  const drawPending = Boolean(pendingDraw && blocked && game.phase === 'draw' && current.id === viewerId);
   const pendingKey = `${game.roundIndex}:${game.turnCount}:${current.id}:${game.phase}`;
   const pending = pendingState.key === pendingKey ? pendingState.groups : [];
   const myTurn = current.id === viewerId && !blocked && !botControlled;
@@ -251,7 +269,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
     ));
   const nextContractIndex = gameRules.contractSequence[game.roundIndex + 1];
   const nextContract = nextContractIndex === undefined ? null : ROUND_CONTRACTS[nextContractIndex];
-  const handGrid = getHandGrid(cards.length, width, settings.compactCards);
+  const handGrid = getHandGrid(cards.length + (drawPending ? 1 : 0), width, settings.compactCards);
   const autoCompactHand = handGrid.compact;
   // Penalty draws can make a hand unusually large. Increase overlap instead of
   // adding a visually awkward third row that pushes the table out of view.
@@ -825,8 +843,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
       <View style={s.feltOval}>
         <View style={s.piles}>
           <View style={[s.pile, drawing && s.pileReady]}>
-            <DragSurface active={drawing && Boolean(game.stockCount || game.discard.length)} onDragStart={() => beginDrag('stock')} onDrop={(point) => dropPile('stock', point)}>
-              <View style={[s.pile, s.tablePileTouch, tabletLandscape && s.tablePileTouchTablet]}><View style={[s.stackShadow, tabletLandscape && s.stackShadowTablet]} /><PlayingCard hidden small tablet={tabletLandscape} /><Text style={s.pileLabel}>{t("DESTE ·")}{game.stockCount}</Text></View>
+            <DragSurface active={drawing && game.stockCount > 0} onDragStart={() => beginDrag('stock')} onDrop={(point) => dropPile('stock', point)}>
+              <View style={[s.pile, s.tablePileTouch, tabletLandscape && s.tablePileTouchTablet]}><View style={[s.stackShadow, tabletLandscape && s.stackShadowTablet]} />{game.stockCount ? <PlayingCard hidden small tablet={tabletLandscape} /> : <View style={[s.empty, tabletLandscape && s.emptyTablet]} />}<Text style={s.pileLabel}>{t("DESTE ·")}{game.stockCount}</Text></View>
             </DragSurface>
           </View>
           <View style={s.tableMark}><Text style={s.tableA}>A</Text><Text style={s.tableBrand}>{t("AMERİKANO")}</Text></View>
@@ -838,7 +856,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
           </DropZoneView>
         </View>
       </View>
-      <View style={s.turnRow}><Text style={s.turn}>{blocked ? t("Bekleniyor…") : game.phase === 'claim' ? claiming ? t("Karar sende") : t("{0} düşünüyor…", [claimPlayer?.name ?? t("Oyuncu")]) : myTurn ? drawing ? t("Sıra sende · Çek") : t("Sıra sende · Oyna") : t("{0} oynuyor…", [current.name])}</Text><TurnCountdown deadline={game.turnDeadline} warningEnabled={settings.criticalTimer} tickEnabled={myTurn || claiming} onUrgent={() => { if (myTurn || claiming) feedback('warning'); }} onTick={() => playSound('tick')} /></View>
+      <View style={s.turnRow}><Text style={s.turn}>{drawPending ? t("Kart çekiliyor…") : blocked ? t("Bekleniyor…") : game.phase === 'claim' ? claiming ? t("Karar sende") : t("{0} düşünüyor…", [claimPlayer?.name ?? t("Oyuncu")]) : myTurn ? drawing ? t("Sıra sende · Çek") : t("Sıra sende · Oyna") : t("{0} oynuyor…", [current.name])}</Text><TurnCountdown deadline={game.turnDeadline} warningEnabled={settings.criticalTimer} tickEnabled={myTurn || claiming} onUrgent={() => { if (myTurn || claiming) feedback('warning'); }} onTick={() => playSound('tick')} /></View>
       {game.lastPenalty?.reason === 'playable-discard' && <View style={s.playablePenaltyBanner}><Text style={s.playablePenaltyText}>{penalizedPlayer?.name ?? t("Oyuncu")} {' '}{t("işlek kart attı · +")}{game.lastPenalty.points} {t("ceza")}</Text></View>}
       {botControlled && <View style={s.botNotice}><Text style={s.botNoticeText}>{t("Üç süre kaçırdığın için oyun koltuğunu otomatik yönetiyor.")}</Text><Pressable accessibilityRole="button" disabled={blocked} onPress={onReclaim} style={[s.reclaimButton, blocked && s.disabled]}><Text style={s.reclaimText}>{t("Koltuğu geri al")}</Text></Pressable></View>}
       {claiming && <View style={s.actions}>
@@ -897,13 +915,16 @@ export function GameTable({ game, viewerId, modeLabel, blocked, canAdvance = tru
         <View style={s.rows}>{rows.map((row, index) => <View key={index} style={s.cardRow}>
           {row.map((c, i) => <DraggableHandCard key={c.id} card={c} index={index * cardsPerRow + i} step={step} cardsPerRow={cardsPerRow}
             cardWidth={handCardWidth} cardHeight={handCardHeight} compactCard={autoCompactHand} tabletCards={tabletLandscape} arranging={arranging} gameplayEnabled={playing} onDragStart={() => beginDrag(arranging ? 'arranging' : 'hand', c.id)} onReorder={reorderCard} onGameplayDrop={dropHandCard} />)}
+          {drawPending && index === rows.length - 1 && row.length < cardsPerRow && <PendingDrawCard small={autoCompactHand} tablet={tabletLandscape} marginLeft={row.length ? step - handCardWidth : 0} />}
         </View>)}</View>
+        {drawPending && cards.length % cardsPerRow === 0 && <View style={s.cardRow}><PendingDrawCard small={autoCompactHand} tablet={tabletLandscape} /></View>}
       </ScrollView>
     </DropZoneView>
     <Modal visible={over || scoresOpen} transparent animationType="fade" onRequestClose={() => setScoresOpen(false)}>
       <View style={s.backdrop}><View style={s.sheet}>
         <Text style={s.resultTitle}>{game.phase === 'game-over' ? winners.length === 1 && winners[0].id === viewerId ? t("Sen kazandın!") : winners.map(w => w.id === viewerId ? t("Sen") : w.name).join(' & ') + (winners.some(w => w.id === viewerId) ? t(" kazandınız!") : t(" kazandı!")) : game.phase === 'round-over' ? game.roundResult?.reason === 'stalemate' ? t("El çıkmaz bitti") : game.roundWinnerId === viewerId ? t("Sen bitirdin!") : game.players.find(pl => pl.id === game.roundWinnerId)?.name + t(" bitirdi!") : t("Puan tablosu")}</Text>
-        <Text style={s.resultCaption}>{game.phase === 'round-over' && game.roundResult?.reason === 'stalemate' ? t("Deste ikinci kez tükendi; elde kalan kartlar ceza yazıldı.{0}", [nextContract ? t(" Sıradaki el: {0}", [t(nextContract.title)]) : '']) : game.phase === 'round-over' && nextContract ? t("Sıradaki el: {0}", [t(nextContract.title)]) : game.phase === 'game-over' ? t("{0} el tamamlandı. En düşük toplam puan kazandı.", [roundCount]) : t("En düşük toplam puan kazanır.")}</Text>
+        <Text style={s.resultCaption}>{game.phase === 'round-over' && game.roundResult?.reason === 'stalemate' ? t("Bu kayıtlı elde çekilebilecek kart kalmadı; elde kalanlar ceza yazıldı.{0}", [nextContract ? t(" Sıradaki el: {0}", [t(nextContract.title)]) : '']) : game.phase === 'round-over' && nextContract ? t("Sıradaki el: {0}", [t(nextContract.title)]) : game.phase === 'game-over' ? t("{0} el tamamlandı. En düşük toplam puan kazandı.", [roundCount]) : t("En düşük toplam puan kazanır.")}</Text>
+        {game.phase === 'game-over' && coinResult && <Text style={s.resultCaption}>{coinResult.payout === null ? t("Coin ödülü hesaplanıyor…") : t("Giriş: {0} coin · Kazancın: {1} coin", [coinResult.entryFee, coinResult.payout])}</Text>}
         <ScrollView style={s.resultList} contentContainerStyle={s.resultListContent} showsVerticalScrollIndicator={false}>
           {scoreHistory.length > 0 && <View accessibilityLabel={t("El el puan geçmişi")} style={s.historyTable}>
             <View style={s.historyRow}>

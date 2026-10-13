@@ -8,6 +8,10 @@ export type RoomView = {
   visibility: 'private' | 'public';
   you: string;
   revision: number;
+  entryFee: number;
+  coinPot: number;
+  myPrize: number;
+  coinSettled: boolean;
   startsAt?: number;
   botFillAvailableAt?: number;
   serverNow?: number;
@@ -19,9 +23,9 @@ export type RoomView = {
   game: PrivateGameView | null;
 };
 export type ClientMessage =
-  | { type: 'create'; name: string }
-  | { type: 'join'; code: string; name: string }
-  | { type: 'matchmake'; name: string }
+  | { type: 'create'; name: string; entryFee?: number; economyVersion?: 1 }
+  | { type: 'join'; code: string; name: string; economyVersion?: 1 }
+  | { type: 'matchmake'; name: string; entryFee?: number; economyVersion?: 1 }
   // Kept while the legacy self-hosted server remains available as a fallback.
   | { type: 'resume'; code: string; token: string }
   | { type: 'ready'; ready: boolean }

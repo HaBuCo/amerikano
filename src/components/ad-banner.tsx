@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
 import { BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
 import { ADS_ENABLED, BANNER_AD_UNIT_ID } from '@/ads/config';
-import { initializeAds } from '@/ads/mobile-ads';
+import { initializeAds, subscribeAdsAllowed } from '@/ads/mobile-ads';
 import { preloadInterstitial } from '@/ads/interstitial';
 import { reportAdError } from '@/ads/diagnostics';
 import { hasRemovedAds, subscribeRemoveAds } from '@/purchases/purchases';
@@ -14,6 +14,13 @@ export function AdBanner() {
   const failures = useRef(0);
   const [removedAds, setRemovedAds] = useState(hasRemovedAds());
   useEffect(() => subscribeRemoveAds(() => setRemovedAds(hasRemovedAds())), []);
+  useEffect(() => subscribeAdsAllowed((allowed) => {
+    setReady(allowed);
+    if (allowed) {
+      setFailed(false);
+      preloadInterstitial();
+    }
+  }), []);
   useEffect(() => {
     if (!ADS_ENABLED || removedAds) return;
     let active = true;

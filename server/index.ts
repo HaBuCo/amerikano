@@ -58,7 +58,7 @@ function publish(room: Room) {
     send(ws, { type: 'state', room: {
       code: room.code, hostId: room.hostId, you: s.id, revision: room.revision,
       status: !room.game ? 'waiting' : room.game.phase === 'game-over' ? 'finished' : 'playing',
-      visibility: 'private',
+      visibility: 'private', entryFee: 0, coinPot: 0, myPrize: 0, coinSettled: false,
       members: room.members.map(m => ({ id: m.id, name: m.name, ready: m.ready, connected: !!m.bot || connected(room.code, m.id), avatarKey: m.bot ? 'gold' : 'emerald', level: 1, gamesPlayed: 0, wins: 0, missedTurns: room.game?.missedTurns?.[m.id] ?? 0, botControlled: !!m.bot || (room.game?.botControlledPlayerIds?.includes(m.id) ?? false), isBot: !!m.bot })),
       game: room.game ? projectGame(room.game, s.id) : null,
     } });

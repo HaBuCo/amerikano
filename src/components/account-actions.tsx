@@ -32,7 +32,7 @@ export function AccountActions() {
       <Text style={s.dangerText}>{anonymous ? t("Misafir hesabımı ve verilerimi sil") : t("Hesabımı sil")}</Text>
     </Pressable> : <View style={s.dangerPanel}>
       <Text style={s.dangerTitle}>{anonymous ? t("Misafir hesabını kalıcı olarak sil") : t("Hesabı kalıcı olarak sil")}</Text>
-      <Text style={s.body}>{t("Profilin, kullanıcı adın, seviyen, oyun kayıtların ve arkadaşlıkların silinir. Bu işlem geri alınamaz. Onaylamak için SİL yaz.")}</Text>
+      <Text style={s.body}>{t("Profilin, kullanıcı adın, coin bakiyen, oyun kayıtların ve arkadaşlıkların silinir. Bu işlem geri alınamaz. Onaylamak için SİL yaz.")}</Text>
       <TextInput accessibilityLabel={t("Hesap silme onayı")} autoCapitalize="characters" autoCorrect={false}
         editable={!auth.busy} value={confirmation} onChangeText={setConfirmation} placeholder={t("SİL")} placeholderTextColor={p.muted} style={s.input} />
       <Pressable accessibilityRole="button" disabled={!canDelete} style={[s.deleteButton, !canDelete && s.disabled]}

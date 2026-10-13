@@ -16,6 +16,8 @@ import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
 import { useAuth } from '@/network/auth';
 import { connectRoom } from '@/network/client';
 import { refreshSocial, useSocial } from '@/network/social';
+import { useOnlinePlayerCount } from '@/network/presence';
+import { claimDailyCoins, refreshWallet, useWallet } from '@/network/wallet';
 import { openStoreReviewPage, storeReviewSupported } from '@/review/store-review';
 
 const sampleCards: Card[] = [
@@ -32,18 +34,20 @@ function greetingFor(hour: number, t: Translator) {
 }
 
 export default function HomeScreen() {
-  const { t } = useTranslations();
+  const { t, localizeMessage } = useTranslations();
   const auth = useAuth();
   const { isTablet, isWideTablet } = useResponsiveLayout();
   const [accountOpenFor, setAccountOpenFor] = useState<'anonymous' | 'signed-in' | null>(null);
   const social = useSocial();
+  const onlinePlayers = useOnlinePlayerCount();
+  const wallet = useWallet();
 
   useEffect(() => {
     if (auth.status !== 'anonymous' && auth.status !== 'signed-in') return;
-    void connectRoom().then(() => refreshSocial(true));
+    void connectRoom().then(() => { void refreshSocial(true); void refreshWallet(); });
     const timer = setInterval(() => { void refreshSocial(true); }, 30_000);
     return () => clearInterval(timer);
-  }, [auth.status]);
+  }, [auth.status, auth.user?.id]);
 
   if (auth.status === 'loading') return <LoadingScreen />;
   if (auth.status === 'signed-out' || auth.recovery) return <EntryScreen />;
@@ -68,11 +72,26 @@ export default function HomeScreen() {
       <View style={[s.dashboard, isWideTablet && s.dashboardWide]}>
         <View style={s.dashboardColumn}>
           <RemoveAdsCard compact />
+          <View style={s.coinCard}>
+            <View><Text style={s.coinLabel}>{t("COIN BAKİYEN")}</Text><Text style={s.coinValue}>{wallet.balance === null ? '—' : wallet.balance.toLocaleString()}{' '}🪙</Text></View>
+            <Pressable accessibilityRole="button" disabled={wallet.claiming || wallet.balance === null || wallet.dailyClaimedOn === new Date().toISOString().slice(0, 10)}
+              onPress={() => void claimDailyCoins()} style={[s.coinGift, (wallet.claiming || wallet.balance === null || wallet.dailyClaimedOn === new Date().toISOString().slice(0, 10)) && s.coinGiftDisabled]}>
+              <Text style={s.coinGiftText}>{wallet.dailyClaimedOn === new Date().toISOString().slice(0, 10) ? t("Yarın tekrar al") : t("Günlük +500 al")}</Text>
+            </Pressable>
+          </View>
+          {!!wallet.error && <Text style={s.coinError}>{localizeMessage(wallet.error)}</Text>}
           <Text style={s.sectionLabel}>{t("NASIL OYNAMAK İSTERSİN?")}</Text>
           <Pressable accessibilityRole="button" onPress={() => router.push('/game?mode=single' as Href)} style={({ pressed }) => [s.featureButton, pressed && s.pressed]}>
             <View style={s.buttonCopy}><View style={s.titleLine}><Text style={s.featureTitle}>{t("Tek oyunculu")}</Text><View style={s.offlineBadge}><Text style={s.offlineText}>{t("ÇEVRİMDIŞI")}</Text></View></View><Text style={s.featureCaption}>{t("Kaldığın oyuna devam et veya yeni masa kur")}</Text></View>
           </Pressable>
 
+          <View style={s.onlineCountRow}>
+            <View style={[s.onlineCountDot, onlinePlayers.count === null && s.onlineCountDotUnavailable]} />
+            <Text style={s.onlineCountText}>{onlinePlayers.count === null
+              ? onlinePlayers.loading ? t("Çevrim içi oyuncular yükleniyor…") : t("Çevrim içi sayısı alınamadı")
+              : onlinePlayers.count === 1 ? t("1 oyuncu çevrim içi") : t("{0} oyuncu çevrim içi", [onlinePlayers.count])}</Text>
+            {onlinePlayers.count !== null && <Text style={s.onlineCountHint}>{t("Son 60 saniyede aktif")}</Text>}
+          </View>
           <View style={s.playGrid}>
             <Pressable accessibilityRole="button" onPress={() => router.push('/online?quick=1')} style={({ pressed }) => [s.playCard, s.quickCard, pressed && s.pressed]}>
               <Text style={s.playEyebrowDark}>{t("HIZLI EŞLEŞME")}</Text>
@@ -206,6 +225,13 @@ const s = StyleSheet.create({
   cardFanCompact: { position: 'absolute', width: 145, height: 130, right: -2, bottom: 18, opacity: 0.94 },
   fanCard: { position: 'absolute' },
   sectionLabel: { color: p.muted, fontSize: 9, letterSpacing: 1.9, fontWeight: '900', marginTop: 5 },
+  coinCard: { borderRadius: 17, backgroundColor: '#d9a44118', borderWidth: 1, borderColor: '#d9a44155', padding: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  coinLabel: { color: p.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1.4 },
+  coinValue: { color: p.cream, fontSize: 23, fontWeight: '900', marginTop: 5 },
+  coinGift: { borderRadius: 12, backgroundColor: p.gold, paddingHorizontal: 13, paddingVertical: 11 },
+  coinGiftDisabled: { opacity: 0.45 },
+  coinGiftText: { color: p.ink, fontWeight: '900', fontSize: 11 },
+  coinError: { color: '#f0aaa4', fontSize: 11 },
   featureButton: { minHeight: 78, borderRadius: 18, backgroundColor: p.cream, flexDirection: 'row', alignItems: 'center', padding: 15, gap: 14 },
   buttonCopy: { flex: 1 },
   titleLine: { flexDirection: 'row', alignItems: 'center', gap: 9 },
@@ -213,6 +239,11 @@ const s = StyleSheet.create({
   featureCaption: { color: '#657069', fontSize: 11, marginTop: 5 },
   offlineBadge: { borderRadius: 999, backgroundColor: '#d9a4412c', paddingHorizontal: 7, paddingVertical: 4 },
   offlineText: { color: '#8a621e', fontSize: 7, letterSpacing: 0.7, fontWeight: '900' },
+  onlineCountRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 7, marginTop: 2 },
+  onlineCountDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#7be4a5' },
+  onlineCountDotUnavailable: { backgroundColor: p.muted },
+  onlineCountText: { color: p.cream, fontSize: 11, fontWeight: '800' },
+  onlineCountHint: { color: p.muted, fontSize: 9 },
   inviteBadge: { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: p.gold, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
   inviteBadgeText: { color: p.ink, fontSize: 11, fontWeight: '900' },
   playGrid: { flexDirection: 'row', gap: 11 },

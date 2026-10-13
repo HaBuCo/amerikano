@@ -1,5 +1,5 @@
 import { useTranslations } from '@/i18n/language';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Href, router, useLocalSearchParams } from 'expo-router';
 import { Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
@@ -9,11 +9,13 @@ import { GameTable } from '@/components/game-table';
 import { WaitingTable } from '@/components/waiting-table';
 import { RoundIntro } from '@/components/round-intro';
 import { palette as p } from '@/constants/palette';
-import { avatarFor, profileLevel, refreshPlayerProfile, usePlayerProfile } from '@/network/profile';
+import { avatarFor, refreshPlayerProfile, usePlayerProfile } from '@/network/profile';
+import { refreshWallet, useWallet } from '@/network/wallet';
 import { MIN_GAME_PLAYERS } from '@/game/engine';
 import { QUICK_ROOM_TARGET } from '@/game/quick-room';
 import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
 import { GameAction } from '@/game/types';
+import { ROOM_ENTRY_FEES } from '@/game/coin-economy';
 
 export default function OnlineScreen() {
   const { t, localizeMessage } = useTranslations();
@@ -22,14 +24,15 @@ export default function OnlineScreen() {
   const state = useRoom();
   const reactions = useReactions();
   const profileState = usePlayerProfile();
+  const wallet = useWallet();
   const name = profileState.profile?.username || '';
   const [code, setCode] = useState('');
+  const [selectedFee, setSelectedFee] = useState<number>(100);
   const [initialized, setInitialized] = useState(false);
   const [clock, setClock] = useState(() => Date.now());
   const [continuedRoomCode, setContinuedRoomCode] = useState<string | null>(null);
-  const quickAttempted = useRef(false);
   useEffect(() => {
-    void connectRoom().then(() => refreshPlayerProfile()).finally(() => setInitialized(true));
+    void connectRoom().then(() => { void refreshWallet(); return refreshPlayerProfile(); }).finally(() => setInitialized(true));
   }, []);
   const room = state.room;
   useEffect(() => {
@@ -43,10 +46,8 @@ export default function OnlineScreen() {
   const longWait = room?.visibility === 'public' && room.status === 'waiting' && Boolean(room.botFillAvailableAt && room.botFillAvailableAt <= clock);
   const connectedPlayers = room?.members.filter(member => member.connected).length ?? 0;
   useEffect(() => {
-    if (quick !== '1' || !initialized || !name || room || state.busy || state.status !== 'online' || quickAttempted.current) return;
-    quickAttempted.current = true;
-    void enterQuickRoom(name);
-  }, [initialized, name, quick, room, state.busy, state.status]);
+    if (room?.status === 'finished') void refreshWallet();
+  }, [room?.status, room?.revision]);
   const goBack = () => {
     if (!room) {
       router.back();
@@ -63,10 +64,12 @@ export default function OnlineScreen() {
   }));
   if (room?.game) return <View style={s.gameRoot}>
     <GameTable key={room.code + ':' + room.game.roundIndex} game={room.game} viewerId={room.you}
-      modeLabel={`ÇEVRİM İÇİ · ${room.code}`} canAdvance={room.hostId === room.you || hostIsBot} canRematch={room.hostId === room.you || hostIsBot}
-      playerMeta={playerMeta} reactions={reactions} onReact={sendReaction} onRematch={() => sendRoom({ type: 'rematch' })}
+      modeLabel={`ÇEVRİM İÇİ · ${room.code}`} canAdvance={room.hostId === room.you || hostIsBot} canRematch={room.entryFee === 0 && (room.hostId === room.you || hostIsBot)}
+      coinResult={room.entryFee > 0 ? { entryFee: room.entryFee, payout: room.coinSettled ? room.myPrize : null } : undefined}
+      playerMeta={playerMeta} reactions={reactions} onReact={sendReaction} onRematch={room.entryFee === 0 ? () => sendRoom({ type: 'rematch' }) : undefined}
       botControlled={me?.botControlled} onReclaim={() => sendRoom({ type: 'reclaim' })}
       blocked={state.status !== 'online' || state.busy} onAction={(action: GameAction) => sendAction(action)}
+      pendingDraw={state.pendingDraw}
       connectionState={state.status === 'online' ? 'online' : state.status === 'connecting' ? 'reconnecting' : 'offline'}
       error={state.error || (state.status !== 'online' ? t("Yeniden bağlanılıyor… Elin korunuyor.") : '')}
       onForfeit={() => { void forfeitRoom().then((left) => { if (left) router.replace('/'); }); }}
@@ -77,22 +80,28 @@ export default function OnlineScreen() {
     <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={[s.content, isTablet && s.contentTablet]} keyboardShouldPersistTaps="handled">
       <Pressable accessibilityRole="button" disabled={state.busy} onPress={goBack}><Text style={s.back}>{t("← Ana menü")}</Text></Pressable>
       <Pressable accessibilityRole="button" onPress={() => router.push('/profile')} style={s.profileLink}>
-        <Text style={s.profileLinkText}>{t("Profilim · Sv.")}{profileLevel(profileState.profile?.experience ?? 0)} →</Text>
+        <Text style={s.profileLinkText}>{t("Profilim · {0} coin", [wallet.balance === null ? '—' : wallet.balance.toLocaleString()])} →</Text>
       </Pressable>
       <Text style={s.eyebrow}>{room?.visibility === 'public' || (!room && quick === '1') ? t("HIZLI MASA") : t("ARKADAŞ MASASI")}</Text>
-      <Text style={s.title}>{room ? t("Masana oturdun.") : quick === '1' ? t("Sana bir masa buluyoruz.") : t("Aynı masa.\nNerede olursan.")}</Text>
-      <Text style={s.body}>{room?.visibility === 'public' ? t("Yerini tuttun. Sistem yeni oyuncuları bu masaya yerleştirirken sen bekle.") : room ? t("Kodunu veya arkadaş davetini paylaş. Herkes hazır olduğunda başlayın.") : quick === '1' ? t("Oyuncuların toplandığı bir masaya katılıyorsun.") : t("Arkadaşların için oda oluştur veya gelen kodla masalarına katıl.")}</Text>
+      <Text style={s.title}>{room ? t("Masana oturdun.") : quick === '1' ? t("Masanı seç.") : t("Aynı masa.\nNerede olursan.")}</Text>
+      <Text style={s.body}>{room?.visibility === 'public' ? t("Yerini tuttun. Sistem yeni oyuncuları bu masaya yerleştirirken sen bekle.") : room ? t("Kodunu veya arkadaş davetini paylaş. Herkes hazır olduğunda başlayın.") : quick === '1' ? t("Giriş ücretini seç, sonra uygun masaya katıl.") : t("Arkadaşların için oda oluştur veya gelen kodla masalarına katıl.")}</Text>
       <Text style={s.status}>{state.status === 'online' ? t("● Sunucuya bağlı") : t("○ Bağlantı bekleniyor")}</Text>
       {!!state.error && <View style={s.error}><Text style={s.body}>{localizeMessage(state.error)}</Text><Pressable onPress={forgetRoom}><Text style={s.link}>{t("Oturumu sıfırla ve yeniden dene")}</Text></Pressable></View>}
-      {!room ? quick === '1' ? <Text style={s.roomHint}>{state.status === 'online' ? t("Masa aranıyor…") : t("Sunucuya bağlanılıyor…")}</Text> : <>
+      {!room ? <>
         <Text style={s.label}>{t("KULLANICI ADIN")}</Text>
         <Text style={s.body}>{name ? `@${name}` : t("Profil hazırlanıyor…")}</Text>
+        <Text style={s.label}>{t("MASA GİRİŞ ÜCRETİ")}</Text>
+        <View style={s.feeRow}>{ROOM_ENTRY_FEES.map(fee => <Pressable key={fee} accessibilityRole="button" accessibilityState={{ selected: selectedFee === fee }} onPress={() => setSelectedFee(fee)} style={[s.feeChip, selectedFee === fee && s.feeChipSelected]}><Text style={selectedFee === fee ? s.feeSelectedText : s.white}>{fee.toLocaleString()} coin</Text></Pressable>)}</View>
+        <Text style={s.roomHint}>{t("Coinler oyun başlayınca düşer. Botlar coin kazanmaz.")}</Text>
+        {wallet.balance !== null && wallet.balance < selectedFee && <Text style={s.feeNotice}>{t("Bu masa için yeterli coinin yok. Ana menüden günlük hediyeni alabilir veya daha ucuz masa seçebilirsin.")}</Text>}
+        {quick === '1' ? <Pressable accessibilityRole="button" disabled={!initialized || !name.trim() || state.busy || state.status !== 'online' || wallet.balance === null || wallet.balance < selectedFee} style={[s.primary, (!initialized || !name.trim() || state.busy || state.status !== 'online' || wallet.balance === null || wallet.balance < selectedFee) && s.disabled]} onPress={() => enterQuickRoom(name, selectedFee)}><Text style={s.primaryText}>{t("{0} coinlik masa ara", [selectedFee])}</Text></Pressable> : <>
         <Text style={s.label}>{t("ÖZEL ARKADAŞ MASASI")}</Text>
-        <Pressable accessibilityRole="button" disabled={!name.trim() || state.busy || state.status !== 'online'} style={[s.primary, (!name.trim() || state.busy || state.status !== 'online') && s.disabled]} onPress={() => enterRoom(name)}><Text style={s.primaryText}>{t("Yeni oda oluştur →")}</Text></Pressable>
+        <Pressable accessibilityRole="button" disabled={!name.trim() || state.busy || state.status !== 'online' || wallet.balance === null || wallet.balance < selectedFee} style={[s.primary, (!name.trim() || state.busy || state.status !== 'online' || wallet.balance === null || wallet.balance < selectedFee) && s.disabled]} onPress={() => enterRoom(name, undefined, selectedFee)}><Text style={s.primaryText}>{t("Yeni oda oluştur →")}</Text></Pressable>
         <View style={s.divider} />
         <Text style={s.label}>{t("ARKADAŞINDAN GELEN KOD")}</Text>
         <TextInput accessibilityLabel={t("Oda kodu")} autoCapitalize="characters" autoCorrect={false} style={[s.input, s.codeInput]} placeholder="ABC123" placeholderTextColor={p.muted} maxLength={6} value={code} onChangeText={v => setCode(v.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
         <Pressable accessibilityRole="button" disabled={!name.trim() || code.length !== 6 || state.busy || state.status !== 'online'} style={[s.secondary, (!name.trim() || code.length !== 6 || state.busy || state.status !== 'online') && s.disabled]} onPress={() => enterRoom(name, code)}><Text style={s.white}>{t("Odaya katıl")}</Text></Pressable>
+        </>}
       </> : <>
         <View style={s.codePanel}><Text style={s.label}>{t("ODA KODU")}</Text><Text selectable style={s.code}>{room.code}</Text><Pressable accessibilityRole="button" onPress={() => void Share.share({ message: t("Amerikano masama katıl! Oda kodu: {0}", [room.code]) })}><Text style={s.link}>{t("Kodu paylaş ↗")}</Text></Pressable></View>
         <Pressable accessibilityRole="button" style={s.inviteButton} onPress={() => router.push(`/friends?roomCode=${room.code}` as Href)}>
@@ -100,6 +109,7 @@ export default function OnlineScreen() {
         </Pressable>
         <WaitingTable room={room} tableWidth={isTablet ? 780 : 560} searching={room.visibility === 'public'}
           onInviteEmptySeat={room.visibility === 'private' ? () => router.push(`/friends?roomCode=${room.code}` as Href) : undefined} />
+        {room.entryFee > 0 && <Text style={s.feeNotice}>{t("Bu maçın giriş ücreti: {0} coin. Oyun başlayınca bakiyenden düşer.", [room.entryFee])}</Text>}
         {room.visibility === 'private' ? <>
           {room.hostId === room.you && <View style={s.botPanel}>
             <View style={s.botCopy}><Text style={s.white}>{t("Yapay oyuncular")}</Text><Text style={s.botHint}>{botCount ? t("{0} yapay oyuncu masada", [botCount]) : t("Boş koltukları botlarla doldur.")}</Text></View>
@@ -109,13 +119,13 @@ export default function OnlineScreen() {
             </View>
           </View>}
           <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online'} onPress={() => sendRoom({ type: 'ready', ready: !me?.ready })} style={s.secondary}><Text style={s.white}>{me?.ready ? t("Hazır değilim") : t("Hazırım ✓")}</Text></Pressable>
-          {room.hostId === room.you && <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online' || room.members.length < MIN_GAME_PLAYERS || room.members.some(m => !m.ready || !m.connected)} style={[s.primary, (room.members.length < MIN_GAME_PLAYERS || room.members.some(m => !m.ready || !m.connected)) && s.disabled]} onPress={() => sendRoom({ type: 'start' })}><Text style={s.primaryText}>{t("Kartları dağıt")}</Text></Pressable>}
+          {room.hostId === room.you && <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online' || room.members.length < MIN_GAME_PLAYERS || (room.entryFee > 0 && room.members.filter(m => !m.isBot).length < 2) || room.members.some(m => !m.ready || !m.connected)} style={[s.primary, (room.members.length < MIN_GAME_PLAYERS || (room.entryFee > 0 && room.members.filter(m => !m.isBot).length < 2) || room.members.some(m => !m.ready || !m.connected)) && s.disabled]} onPress={() => sendRoom({ type: 'start' })}><Text style={s.primaryText}>{t("Kartları dağıt")}</Text></Pressable>}
           <Text style={s.roomHint}>{t("Herkes hazır olduğunda oda sahibi kartları dağıtır.")}</Text>
         </> : <View style={s.matchPanel}>
           <Text style={s.matchTitle}>{quickSeconds === null ? t("{0}/{1} oyuncu bulundu", [connectedPlayers, QUICK_ROOM_TARGET]) : connectedPlayers >= QUICK_ROOM_TARGET ? t("Masa hazır · {0} saniye içinde başlıyor", [quickSeconds]) : t("4. oyuncu aranıyor · {0} saniye içinde başlıyor", [quickSeconds])}</Text>
           <Text style={s.roomHint}>{quickSeconds === null ? t("{0} oyuncu aranıyor. Hızlı masa en az 3 kişiyle başlar.", [Math.max(0, QUICK_ROOM_TARGET - connectedPlayers)]) : connectedPlayers < QUICK_ROOM_TARGET ? t("Dördüncü oyuncu gelmezse 3 kişiyle başlayacaksınız.") : t("Masadan ayrılma; oyun otomatik başlayacak.")}</Text>
           {botCount > 0 && <Text style={s.roomHint}>{botCount}{t("bot masaya katıldı. Botlar koltuklarında işaretli.")}</Text>}
-          {longWait && <>
+          {longWait && (room.entryFee === 0 || room.members.filter(m => !m.isBot && m.connected).length >= 2) && <>
             {continuedRoomCode !== room.code && <Text style={s.waitNotice}>{t("Bekleme uzadı. Masayı botlarla 4 kişiye tamamlayabilir veya gerçek oyuncuları bekleyebilirsin.")}</Text>}
             <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online'} onPress={() => sendRoom({ type: 'fill-bots' })} style={[s.primary, (state.busy || state.status !== 'online') && s.disabled]}><Text style={s.primaryText}>{t("Botlarla 4 kişiye tamamla")}</Text></Pressable>
             {continuedRoomCode !== room.code && <Pressable accessibilityRole="button" onPress={() => setContinuedRoomCode(room.code)} style={s.secondary}><Text style={s.white}>{t("Aramaya devam et")}</Text></Pressable>}
@@ -150,4 +160,5 @@ const s = StyleSheet.create({
   botActions: { flexDirection: 'row', flexShrink: 0, marginLeft: 'auto', gap: 8 }, botButton: { minHeight: 44, minWidth: 44, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: p.gold, alignItems: 'center', justifyContent: 'center' }, botAddText: { color: p.gold, fontSize: 13, fontWeight: '800' },
   matchPanel: { gap: 10, padding: 16, borderRadius: 14, backgroundColor: '#ffffff0a', borderWidth: 1, borderColor: p.line },
   matchTitle: { color: p.cream, fontSize: 17, fontWeight: '800', textAlign: 'center' }, waitNotice: { color: p.gold, fontSize: 12, lineHeight: 18, textAlign: 'center' },
+  feeRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' }, feeChip: { paddingVertical: 12, paddingHorizontal: 15, borderRadius: 11, borderWidth: 1, borderColor: p.line }, feeChipSelected: { backgroundColor: p.gold, borderColor: p.gold }, feeSelectedText: { color: p.ink, fontWeight: '800' }, feeNotice: { color: p.gold, fontSize: 14, fontWeight: '700', textAlign: 'center' },
 });

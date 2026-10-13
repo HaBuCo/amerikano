@@ -1,6 +1,6 @@
 import { AdEventType, InterstitialAd } from 'react-native-google-mobile-ads';
 import { ADS_ENABLED, INTERSTITIAL_AD_UNIT_ID } from './config';
-import { areAdsAllowed } from './mobile-ads';
+import { areAdsAllowed, subscribeAdsAllowed } from './mobile-ads';
 import { hasRemovedAds } from '@/purchases/purchases';
 import { reportAdError } from './diagnostics';
 import { AppState } from 'react-native';
@@ -17,6 +17,13 @@ let roundsSinceAd = 0;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let failures = 0;
 let disposeCurrent: (() => void) | null = null;
+
+subscribeAdsAllowed((allowed) => {
+  if (allowed) return;
+  if (retryTimer) clearTimeout(retryTimer);
+  retryTimer = null;
+  disposeCurrent?.();
+});
 
 function scheduleRetry() {
   if (retryTimer) return;

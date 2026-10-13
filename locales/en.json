@@ -1,0 +1,6 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "Amerikano",
+    "NSUserTrackingUsageDescription": "If you allow tracking, your activity across other companies' apps and websites may be used to show more relevant ads and measure their effectiveness."
+  }
+}
