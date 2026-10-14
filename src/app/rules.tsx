@@ -15,12 +15,12 @@ export default function RulesScreen() {
         <Text style={styles.intro}>{t("12 el boyunca görevleri tamamla, elini bitir ve en az ceza puanını topla.")}</Text>
 
         <View style={[styles.ruleGrid, isTablet && styles.ruleGridTablet]}>
-          <Rule tablet={isTablet} title={t("Dağıtım ve yön")} symbol="↶" text={t("2 deste + 2 joker: 106 kart. Başlayan oyuncu 14, diğerleri 13 kart alır. Başlayan kart çekmeden oynar. Oyun saat yönünün tersine, dağıtıcının sağından ilerler.")} />
+          <Rule tablet={isTablet} title={t("Dağıtım ve yön")} symbol="♣" text={t("2 deste + 2 joker: 106 kart. Başlayan oyuncu 14, diğerleri 13 kart alır. Başlayan kart çekmeden oynar. Oyun saat yönünün tersine, dağıtıcının sağından ilerler.")} />
           <Rule tablet={isTablet} title={t("Küt")} symbol="777" text={t("Aynı değerde, farklı türlerden en az üç kart. Örnek: ♥7 ♣7 ♠7")} />
           <Rule tablet={isTablet} title={t("Seri")} symbol="456" text={t("Aynı türden ardışık en az üç kart. As yalnızca yüksek karttır: Q-K-A olur; A-2-3 ve K-A-2 olmaz.")} />
           <Rule tablet={isTablet} title={t("Joker")} symbol="★" text={t("İstenen kartın yerine geçer. İlk beş elin açılış görevinde kullanılamaz. Elini açtıktan sonra yerdeki jokerin tam karşılık kartını koyup jokeri eline alabilirsin. Seride aynı sembol ve eksik değer gerekir; kütte aynı değerin eksik sembollerinden biri gerekir.")} />
           <Rule tablet={isTablet} title={t("Çekme ve ceza kartı")} symbol="+1" text={t("Sıranda açık kartı doğrudan alabilirsin. 3 veya daha fazla oyunculu masada desteyi seçersen diğer oyunculara sırayla açık kartı alma hakkı sunulur. Alan kişi açık kartla birlikte desteden 1 ceza kartı alır; sonra senin kapalı kartın çekilir. Birden fazla isteyen varsa oyun yönündeki sıra önceliklidir. Çevrim içi odada her karar için 8 saniye vardır; yanıt yoksa pas geçilir. İki kişilik oyunda bu teklif aşaması atlanır. Kapalı deste tükendiğinde en üstteki açık kart yerde kalır; altındaki ıskartalar karıştırılıp yeni kapalı deste yapılır. Bu işlem gerektiği kadar tekrarlanır ve el devam eder.")} />
-          <Rule tablet={isTablet} title={t("Açılış ve işleme")} symbol="↓" text={t("İlk açılış yalnızca o elin görevinden oluşur. Aynı turda ek grup açamaz veya masaya kart işleyemezsin. Sonraki sıralarında kendi veya diğer oyuncuların gruplarına uygun kart işleyebilir, ek grup açabilirsin.")} />
+          <Rule tablet={isTablet} title={t("Açılış ve işleme")} symbol="♠" text={t("İlk açılış yalnızca o elin görevinden oluşur. Aynı turda ek grup açamaz veya masaya kart işleyemezsin. Sonraki sıralarında kendi veya diğer oyuncuların gruplarına uygun kart işleyebilir, ek grup açabilirsin.")} />
           <Rule tablet={isTablet} title={t("Bitiş ve final")} symbol="12" text={t("Son kartını kapalı atarak bitersin. 12. elde önceden açmak yok: bütün elini gruplara ayır, bir bitiş kartı bırak ve Elden bit düğmesine bas. Açma ve bitiş tek hamlede gerçekleşir.")} />
         </View>
 
@@ -66,14 +66,14 @@ function Point({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: palette.felt },
+  safeArea: { flex: 1, backgroundColor: palette.canvas },
   content: { width: '100%', maxWidth: 720, alignSelf: 'center', padding: 24, paddingBottom: 44 },
   contentTablet: { maxWidth: 1120, paddingHorizontal: 34, paddingTop: 30 },
   intro: { color: palette.cream, fontSize: 20, lineHeight: 29, fontWeight: '700', marginBottom: 24 },
   ruleGrid: {},
   ruleGridTablet: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
   rule: { flexDirection: 'row', gap: 14, paddingVertical: 15, borderTopWidth: 1, borderTopColor: palette.line },
-  ruleTablet: { width: '48%', flexGrow: 1, alignSelf: 'stretch', borderWidth: 1, borderColor: palette.line, borderRadius: 16, padding: 16, backgroundColor: '#ffffff05' },
+  ruleTablet: { width: '48%', flexGrow: 1, alignSelf: 'stretch' },
   ruleSymbol: { width: 52, height: 52, borderRadius: 12, backgroundColor: palette.cream, alignItems: 'center', justifyContent: 'center' },
   ruleSymbolText: { color: palette.red, fontSize: 18, fontWeight: '900' },
   ruleCopy: { flex: 1 },
@@ -81,11 +81,11 @@ const styles = StyleSheet.create({
   ruleText: { color: palette.muted, fontSize: 14, lineHeight: 20, marginTop: 4 },
   sectionTitle: { color: palette.gold, fontSize: 11, fontWeight: '900', letterSpacing: 2.2, marginTop: 31, marginBottom: 10 },
   referenceGrid: {}, referenceGridTablet: { flexDirection: 'row', gap: 22, alignItems: 'flex-start' }, referenceColumn: { flex: 1, minWidth: 0 },
-  roundList: { borderWidth: 1, borderColor: palette.line, borderRadius: 16, overflow: 'hidden' },
-  roundRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: palette.line },
+  roundList: { borderTopWidth: 1, borderTopColor: palette.line },
+  roundRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: palette.line },
   roundNumber: { color: palette.gold, width: 37, fontSize: 12, fontWeight: '900' },
   roundTitle: { color: palette.cream, fontSize: 14, fontWeight: '700' },
-  points: { borderRadius: 16, backgroundColor: palette.feltLight, paddingHorizontal: 16 },
+  points: { borderTopWidth: 1, borderTopColor: palette.line },
   pointRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: palette.line },
   pointLabel: { color: palette.cream, fontWeight: '800' },
   pointValue: { color: palette.gold, fontWeight: '800' },

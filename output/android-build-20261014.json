@@ -1,0 +1,12 @@
+{
+  "id": "6b196d00-1114-451f-82b8-6a695e81d61d",
+  "status": "FINISHED",
+  "phase": "UPLOAD_BUILD_ARTIFACTS",
+  "detail": "End phase: UPLOAD_BUILD_ARTIFACTS",
+  "appVersion": "1.1.2",
+  "versionCode": "11",
+  "artifacts": {
+    "buildUrl": "https://expo.dev/artifacts/eas/ZJ3xEc1mi5-vwN7nDxzV6nfLWbIbVsWj8bc7A38Io_k.aab",
+    "applicationArchiveUrl": "https://expo.dev/artifacts/eas/ZJ3xEc1mi5-vwN7nDxzV6nfLWbIbVsWj8bc7A38Io_k.aab"
+  }
+}

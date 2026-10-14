@@ -9,6 +9,7 @@ import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
 import { AVATAR_OPTIONS, AvatarKey, PlayerProfile, refreshPlayerProfile, savePlayerProfile, usePlayerProfile } from '@/network/profile';
 import { refreshWallet, useWallet } from '@/network/wallet';
 import { normalizeUsername, usernameError } from '@/network/usernames';
+import { PlayerAvatar } from '@/components/player-avatar';
 
 export default function ProfileScreen() {
   const { t } = useTranslations();
@@ -20,7 +21,7 @@ export default function ProfileScreen() {
   return <SafeAreaView style={s.page}>
     <Stack.Screen options={{ headerShown: false }} />
     <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={[s.content, isTablet && s.contentTablet]} keyboardShouldPersistTaps="handled">
-      <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>{t("← Geri")}</Text></Pressable>
+      <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>{t("Geri")}</Text></Pressable>
       <Text style={s.eyebrow}>{t("OYUNCU PROFİLİ")}</Text>
       <Text style={s.title}>{t("Masadaki sen.")}</Text>
       <Text style={s.body}>{t("Kullanıcı adın ve avatarın bütün çevrim içi masalarda görünür.")}</Text>
@@ -36,6 +37,11 @@ function ProfileForm({ profile, coinBalance, loading, saving, error, tablet = fa
   const [username, setUsername] = useState(profile.username || '');
   const [avatar, setAvatar] = useState<AvatarKey>(profile.avatarKey);
   const [saved, setSaved] = useState('');
+  const avatarChoice = (option: (typeof AVATAR_OPTIONS)[number]) => <Pressable key={option.key} accessibilityRole="button"
+    accessibilityLabel={t("{0} avatarı", [t(option.label)])} accessibilityState={{ selected: avatar === option.key }}
+    onPress={() => setAvatar(option.key)} style={[s.avatarRing, avatar === option.key && s.avatarSelected]}>
+    <PlayerAvatar avatarKey={option.key} size={54} />
+  </Pressable>;
   const save = async () => {
     setSaved('');
     try {
@@ -50,22 +56,22 @@ function ProfileForm({ profile, coinBalance, loading, saving, error, tablet = fa
         <View style={s.stat}><Text style={s.statValue}>{profile?.wins ?? 0}</Text><Text style={s.statLabel}>{t("GALİBİYET")}</Text></View>
       </View>
       <Pressable accessibilityRole="button" onPress={() => router.push('/stats' as Href)} style={s.statsLink}>
-        <Text style={s.statsLinkText}>{t("Tüm istatistiklerimi gör")}</Text><Text style={s.statsLinkArrow}>→</Text>
+        <Text style={s.statsLinkText}>{t("Tüm istatistiklerimi gör")}</Text>
       </Pressable>
 
       <View style={s.friendCodePanel}>
         <View><Text style={s.label}>{t("KULLANICI ADIN")}</Text><Text selectable style={s.friendCode}>@{profile.username || t("hazırlanıyor")}</Text></View>
-        <Pressable accessibilityRole="button" onPress={() => router.push('/friends' as Href)}><Text style={s.friendLink}>{t("Arkadaşlar →")}</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/friends' as Href)}><Text style={s.friendLink}>{t("Arkadaşlar")}</Text></Pressable>
       </View>
 
       <View style={[s.editor, tablet && s.editorTablet]}>
         <View style={s.editorColumn}>
           <Text style={s.label}>{t("AVATAR")}</Text>
-          <View style={s.avatars}>{AVATAR_OPTIONS.map((option) => <Pressable key={option.key} accessibilityRole="button"
-            accessibilityLabel={t("{0} avatarı", [option.key])} accessibilityState={{ selected: avatar === option.key }}
-            onPress={() => setAvatar(option.key)} style={[s.avatarRing, avatar === option.key && s.avatarSelected]}>
-            <View style={[s.avatar, { backgroundColor: option.color }]}><Text style={s.avatarText}>{option.symbol}</Text></View>
-          </Pressable>)}</View>
+          <Text style={s.avatarGroupLabel}>{t('KARAKTERLER')}</Text>
+          <View style={s.avatars}>{AVATAR_OPTIONS.filter(option => option.image).map(avatarChoice)}</View>
+          <Text style={s.avatarGroupLabel}>{t('KLASİK AVATARLAR')}</Text>
+          <View style={s.avatars}>{AVATAR_OPTIONS.filter(option => !option.image).map(avatarChoice)}</View>
+          <Text style={s.avatarSelectedName}>{t('Seçili avatar: {0}', [t(AVATAR_OPTIONS.find(option => option.key === avatar)?.label ?? '')])}</Text>
         </View>
         <View style={s.editorColumn}>
           <Text style={s.label}>{t("KULLANICI ADI")}</Text>
@@ -84,22 +90,23 @@ function ProfileForm({ profile, coinBalance, loading, saving, error, tablet = fa
 }
 
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: p.felt }, content: { padding: 26, gap: 15, width: '100%', maxWidth: 620, alignSelf: 'center' },
+  page: { flex: 1, backgroundColor: p.canvas }, content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40, gap: 15, width: '100%', maxWidth: 620, alignSelf: 'center' },
   contentTablet: { maxWidth: 960, paddingHorizontal: 34, paddingTop: 30 },
   form: { gap: 15 }, editor: { gap: 15 }, editorTablet: { flexDirection: 'row', gap: 24, alignItems: 'flex-start' }, editorColumn: { flex: 1, minWidth: 0, gap: 10 },
   back: { color: p.cream, fontSize: 15, paddingVertical: 10 }, eyebrow: { color: p.gold, letterSpacing: 3, fontSize: 11, marginTop: 12, fontWeight: '800' },
   title: { color: p.cream, fontSize: 34, fontWeight: '800' }, body: { color: p.muted, fontSize: 15, lineHeight: 22 },
-  stats: { flexDirection: 'row', borderWidth: 1, borderColor: p.line, borderRadius: 16, paddingVertical: 16, marginVertical: 5 },
+  stats: { flexDirection: 'row', borderTopWidth: 1, borderBottomWidth: 1, borderColor: p.line, paddingVertical: 16, marginVertical: 5 },
   stat: { flex: 1, alignItems: 'center', gap: 3 }, statValue: { color: p.cream, fontSize: 22, fontWeight: '900' }, statLabel: { color: p.muted, fontSize: 9, letterSpacing: 1.5 },
-  statsLink: { minHeight: 48, borderRadius: 13, backgroundColor: '#d9a44112', borderWidth: 1, borderColor: '#d9a44142', paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  statsLinkText: { color: p.gold, fontSize: 13, fontWeight: '800' }, statsLinkArrow: { color: p.gold, fontSize: 18 },
+  statsLink: { minHeight: 48, borderRadius: 13, backgroundColor: '#d9a44112', borderWidth: 1, borderColor: '#d9a44142', paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  statsLinkText: { color: p.gold, fontSize: 13, fontWeight: '800' },
   label: { color: p.gold, fontSize: 10, letterSpacing: 2, fontWeight: '800', marginTop: 5 }, avatars: { flexDirection: 'row', flexWrap: 'wrap', gap: 11 },
-  avatarRing: { padding: 3, borderWidth: 2, borderColor: 'transparent', borderRadius: 30 }, avatarSelected: { borderColor: p.gold },
-  avatar: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' }, avatarText: { color: '#fff', fontSize: 20, fontWeight: '900' },
+  avatarGroupLabel: { color: p.muted, fontSize: 9, letterSpacing: 1.5, fontWeight: '800', marginTop: 4 },
+  avatarSelectedName: { color: p.cream, fontSize: 12, fontWeight: '700' },
+  avatarRing: { padding: 3, borderWidth: 2, borderColor: 'transparent', borderRadius: 34 }, avatarSelected: { borderColor: p.gold },
   input: { padding: 17, minHeight: 55, borderRadius: 12, borderWidth: 1, borderColor: p.line, color: p.cream, backgroundColor: '#ffffff08', fontSize: 17 },
   usernameHint: { color: p.muted, fontSize: 12, lineHeight: 18 },
   primary: { borderRadius: 13, minHeight: 54, alignItems: 'center', justifyContent: 'center', backgroundColor: p.gold }, primaryText: { color: p.ink, fontWeight: '800', fontSize: 16 },
   disabled: { opacity: 0.4 }, success: { color: '#9bd5b5', textAlign: 'center' }, error: { color: '#f0aaa4', textAlign: 'center' },
-  friendCodePanel: { borderWidth: 1, borderColor: p.line, borderRadius: 14, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  friendCodePanel: { borderBottomWidth: 1, borderColor: p.line, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   friendCode: { color: p.cream, fontSize: 22, fontWeight: '900', letterSpacing: 3, marginTop: 7 }, friendLink: { color: p.gold, fontWeight: '700' },
 });

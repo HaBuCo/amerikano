@@ -60,6 +60,17 @@ try {
   await invoke(0, { type: 'claim-daily' });
   assert.equal(await balance(0), 1500);
   await rejects(0, { type: 'create', name: 'Coin test', entryFee: 2000, economyVersion: 1 }, 'yeterli coinin yok');
+  for (const fee of [50, 250, 500, 1000]) {
+    const trial = await invoke(0, { type: 'create', name: 'Coin test', entryFee: fee, economyVersion: 1 });
+    roomIds[0] = trial.roomId;
+    assert.equal(trial.room.entryFee, fee);
+    await forfeitOrLeave(0);
+  }
+  const queued = await invoke(0, { type: 'matchmake', name: 'Coin test', entryFee: 250, economyVersion: 1 });
+  roomIds[0] = queued.roomId;
+  assert.equal(queued.room.entryFee, 250);
+  await forfeitOrLeave(0);
+  assert.equal(await balance(0), 1500, 'waiting rooms must not charge coins');
 
   const created = await invoke(0, { type: 'create', name: 'Coin test', entryFee: 100, economyVersion: 1 });
   roomIds[0] = created.roomId;
@@ -85,7 +96,7 @@ try {
   await forfeitOrLeave(0);
   assert.equal(await balance(0), 1500);
   assert.equal(await balance(1), 1000);
-  console.log(JSON.stringify({ opening: 1000, dailyGift: 500, entryFee: 100,
+  console.log(JSON.stringify({ opening: 1000, dailyGift: 500, supportedFees: [50, 100, 250, 500, 1000, 2000], entryFee: 100,
     pot: 200, directWalletWriteBlocked: true, abandonedRoomRefunded: true }));
 } finally {
   await forfeitOrLeave(1);

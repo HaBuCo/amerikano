@@ -27,6 +27,7 @@ import type { TableSnapshot } from '@/game/table-sounds';
 import { REACTIONS, REACTION_VISIBLE_MS, reactionById } from '@/game/reactions';
 import { deleteAccountUrl, privacyPolicyUrl, TERMS_LABEL, termsUrl } from '@/constants/legal';
 import { LanguagePicker } from './language-picker';
+import { PlayerAvatar } from './player-avatar';
 
 type Props = {
   game: PrivateGameView; viewerId: string; modeLabel: string; blocked?: boolean;
@@ -34,10 +35,10 @@ type Props = {
   canAdvance?: boolean; canRematch?: boolean; error?: string;
   coinResult?: { entryFee: number; payout: number | null };
   debugText?: string;
-  playerMeta?: Record<string, { avatarColor: string; avatarSymbol: string; level: number; connected: boolean; missedTurns: number; botControlled: boolean }>;
+  playerMeta?: Record<string, { avatarKey: string; level: number; connected: boolean; missedTurns: number; botControlled: boolean }>;
   botControlled?: boolean; onReclaim?: () => void;
   onOpenTutorial?: () => void;
-  onReact?: (reactionId: string) => void; reactions?: Record<string, { id: string; at: number }>;
+  onReact?: (reactionId: string) => void; reactions?: Record<string, { id: string; at: number }>; reactionsReady?: boolean;
   canUndo?: boolean; onUndo?: () => void;
   connectionState?: 'online' | 'reconnecting' | 'offline';
   onAction: (a: GameAction) => void; onRematch?: () => void; onForfeit?: () => void; onExit: () => void;
@@ -196,7 +197,7 @@ function SettingRow({ label, value, onPress }: { label: string; value: boolean; 
   </Pressable>;
 }
 
-export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, canAdvance = true, canRematch = false, error, coinResult, debugText, playerMeta, botControlled = false, connectionState, onReclaim, onOpenTutorial, onReact, reactions, canUndo = false, onUndo, onAction, onRematch, onForfeit, onExit }: Props) {
+export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, canAdvance = true, canRematch = false, error, coinResult, debugText, playerMeta, botControlled = false, connectionState, onReclaim, onOpenTutorial, onReact, reactions, reactionsReady = true, canUndo = false, onUndo, onAction, onRematch, onForfeit, onExit }: Props) {
   const { t, localizeMessage, language } = useTranslations();
   const [pendingState, setPendingState] = useState<{ key: string; groups: Pending[] }>({ key: '', groups: [] });
   const [notice, setNotice] = useState('');
@@ -807,7 +808,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
       <Pressable accessibilityRole="button" accessibilityLabel={t("Masadan çık")} onPress={() => setExitOpen(true)} style={s.headerMenuButton}><Text style={s.headerMenuText}>{t("Çık")}</Text></Pressable>
       <View style={s.center}><Text style={s.eyebrow}>{localizeMessage(modeLabel)}</Text><Text style={s.round}>{t("EL")} {game.roundIndex + 1} / {roundCount} · {t(contract.shortTitle)}</Text></View>
       <View style={s.headerActions}>
-        {onReact && <Pressable accessibilityRole="button" accessibilityLabel={t("Tepki gönder")} style={s.headerMenuButton} onPress={() => { feedback(); setReactionsOpen(true); }}><Text style={s.headerMenuText}>{t("Tepki")}</Text></Pressable>}
+        {onReact && <Pressable accessibilityRole="button" accessibilityLabel={reactionsReady ? t("Tepki gönder") : t("Tepkiler bağlanıyor")} disabled={!reactionsReady} style={[s.headerMenuButton, !reactionsReady && s.disabled]} onPress={() => { feedback(); setReactionsOpen(true); }}><Text style={s.headerMenuText}>{t("Tepki")}</Text></Pressable>}
         <Pressable accessibilityRole="button" accessibilityLabel={t("Hızlı kural yardımı")} style={s.headerMenuButton} onPress={() => { feedback(); setHelpOpen(true); }}><Text style={s.headerMenuText}>{t("Kural")}</Text></Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={t("Oyun ayarları")} style={s.headerMenuButton} onPress={() => { feedback(); setSettingsOpen(true); }}><Text style={s.headerMenuText}>{t("Ayar")}</Text></Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={t("Puan tablosu")} style={s.headerMenuButton} onPress={() => { playSound('tap'); setScoresOpen(true); }}><Text style={s.headerMenuText}>{t("Puan")}</Text></Pressable>
@@ -828,7 +829,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
             accessibilityLabel={t("{0}, {1} kart, {2} puan{3}", [pl.name, game.handCounts[pl.id], pl.score, isCurrent ? t(", sıra bu oyuncuda") : ''])}
             style={[s.playerTile, { width: playerTileWidth }, isViewer && s.viewerTile, isCurrent && s.activePlayerTile]}
           >
-            <View style={[s.avatar, playerMeta?.[pl.id] && { backgroundColor: playerMeta[pl.id].avatarColor }]}><Text style={s.avatarText}>{playerMeta?.[pl.id]?.avatarSymbol ?? pl.name.charAt(0)}</Text></View>
+            <PlayerAvatar avatarKey={playerMeta?.[pl.id]?.avatarKey ?? 'emerald'} size={25} />
             <View style={s.playerInfo}>
               <Text numberOfLines={1} style={s.playerName}>{pl.name}{isViewer ? t(" · SEN") : isBotControlled ? t(" · bot yönetiyor") : isOffline ? t(" · çevrim dışı") : ''}</Text>
               <Text numberOfLines={1} style={s.playerStats}>{game.handCounts[pl.id]} {' '}{t("kart ·")}{pl.score}p{pl.hasOpened ? t(" · Açtı") : ''}{playerMeta?.[pl.id]?.missedTurns ? ` · ${playerMeta[pl.id].missedTurns}/3` : ''}</Text>
@@ -868,7 +869,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
           const draggingHere = activeDrag === 'hand';
           const accepted = draggingHere && fitsMeld(m.id);
           const rejected = (draggingHere && !accepted) || (rejectedMeld?.key === pendingKey && rejectedMeld.id === m.id);
-          return <DropZoneView key={m.id} dropKey={`meld:${m.id}`} onNode={registerDropZone} style={[s.meld, accepted && s.dropSlotValid, rejected && s.dropSlotInvalid]}>
+          return <DropZoneView key={m.id} dropKey={`meld:${m.id}`} onNode={registerDropZone}
+            style={[s.meld, accepted && s.dropSlotValid, rejected && s.dropSlotInvalid]}>
             <Text style={s.small}>{game.players.find(pl => pl.id === m.ownerId)?.name} · {m.type === 'set' ? t("Küt") : t("Seri")}</Text>
             <View style={s.meldCards}>{m.cards.map((c, i) => <View key={c.id} style={[s.meldCard, { marginLeft: i ? -16 : 0 }]}>
               <PlayingCard card={c} compact tablet={tabletLandscape} />
@@ -993,8 +995,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
     </View></View></Modal>
     {onReact && <Modal visible={reactionsOpen} transparent animationType="fade" onRequestClose={() => setReactionsOpen(false)}><Pressable style={s.backdrop} onPress={() => setReactionsOpen(false)}><Pressable style={s.sheet}>
       <Text style={s.resultTitle}>{t("Tepki gönder")}</Text>
-      <View style={s.reactionGrid}>{REACTIONS.filter(item => item.kind === 'emoji').map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.id} onPress={() => { onReact(item.id); setReactionsOpen(false); }} style={s.reactionEmojiButton}><Text style={s.reactionEmojiLarge}>{t(item.text)}</Text></Pressable>)}</View>
-      <View style={s.reactionGrid}>{REACTIONS.filter(item => item.kind === 'phrase').map(item => <Pressable key={item.id} accessibilityRole="button" onPress={() => { onReact(item.id); setReactionsOpen(false); }} style={s.reactionPhraseButton}><Text style={s.reactionPhraseText}>{t(item.text)}</Text></Pressable>)}</View>
+      <View style={s.reactionGrid}>{REACTIONS.filter(item => item.kind === 'emoji').map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.id} onPress={() => { if (!settings.showReactions) updateSettings({ showReactions: true }); onReact(item.id); setReactionsOpen(false); }} style={s.reactionEmojiButton}><Text style={s.reactionEmojiLarge}>{t(item.text)}</Text></Pressable>)}</View>
+      <View style={s.reactionGrid}>{REACTIONS.filter(item => item.kind === 'phrase').map(item => <Pressable key={item.id} accessibilityRole="button" onPress={() => { if (!settings.showReactions) updateSettings({ showReactions: true }); onReact(item.id); setReactionsOpen(false); }} style={s.reactionPhraseButton}><Text style={s.reactionPhraseText}>{t(item.text)}</Text></Pressable>)}</View>
       <Text style={s.resultCaption}>{t("Tepkiler masadaki herkese birkaç saniye görünür.")}</Text>
     </Pressable></Pressable></Modal>}
     <Modal visible={settingsOpen} transparent animationType="fade" onRequestClose={() => setSettingsOpen(false)}><View style={s.backdrop}><View style={s.sheet}>
@@ -1024,7 +1026,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
       <View style={s.helpTask}><Text style={s.helpTaskLabel}>{t("EL")} {game.roundIndex + 1} / {roundCount} {' '}{t("GÖREVİ")}</Text><Text style={s.helpTaskTitle}>{t(contract.title)}</Text></View>
       <ScrollView style={s.helpScroll} contentContainerStyle={s.helpContent}>
         <Text style={s.helpLine}><Text style={s.helpStrong}>{t("1. Kart çek:")}</Text>{' '}{t("Deste veya açık kartı eline sürükle.")}</Text>
-        <Text style={s.helpLine}><Text style={s.helpStrong}>{t("2. Aç / işle:")}</Text>{' '}{t("Görev tepsilerini doldur. Elini açtıktan sonra 3 veya daha fazla kartı yeni küt ya da seri tepsisinde hazırlayıp tek seferde masaya açabilirsin.")}</Text>
+        <Text style={s.helpLine}><Text style={s.helpStrong}>{t("2. Aç / işle:")}</Text>{' '}{t("Karta dokunarak yeni küt veya seri tepsisine ekle. Masadaki gruba işlemek için kartı grubun üzerine sürükle.")}</Text>
         <Text style={s.helpLine}><Text style={s.helpStrong}>{t("3. Kart at:")}</Text>{' '}{t("Bir kartı açık kart alanına sürükleyerek sıranı bitir.")}</Text>
         <Text style={s.helpLine}><Text style={s.helpStrong}>{t("Küt:")}</Text>{' '}{t("Aynı sayı, farklı semboller.")}<Text style={s.helpStrong}>{t("Seri:")}</Text>{' '}{t("Aynı sembolde ardışık kartlar; As yalnızca Q-K-A sonunda kullanılır.")}</Text>
         <Text style={s.helpLine}><Text style={s.helpStrong}>{t("Joker:")}</Text> {gameRules.jokerOpeningRestrictionRounds ? t("İlk {0} elin ilk açılışında kullanılamaz.", [gameRules.jokerOpeningRestrictionRounds]) : t("Açılış görevlerinde kullanılabilir.")}{t("Kütte jokerin temsil ettiği sembol açılırken seçilir; joker yalnızca ilan edilen tam kartla değiştirilebilir.")}</Text>
@@ -1054,8 +1056,7 @@ const s = StyleSheet.create({
   playerTile: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 6, paddingVertical: 5, borderRadius: 10, borderWidth: 1, borderColor: '#ffffff12', backgroundColor: '#ffffff06', position: 'relative' },
   viewerTile: { backgroundColor: '#3b9b6917', borderColor: '#79c99a42' }, activePlayerTile: { borderColor: p.gold, backgroundColor: '#d9a44120' },
   playerInfo: { flex: 1, minWidth: 0 }, turnDot: { position: 'absolute', width: 7, height: 7, borderRadius: 4, backgroundColor: p.gold, right: 5, top: 5 },
-  avatar: { width: 25, height: 25, borderRadius: 13, backgroundColor: '#dcc48e', justifyContent: 'center', alignItems: 'center' },
-  avatarText: { fontWeight: '800', color: p.felt, fontSize: 12 }, playerName: { color: p.cream, fontSize: 10, fontWeight: '800', paddingRight: 4 }, playerStats: { fontSize: 9, color: '#adc4b6', lineHeight: 13 }, small: { fontSize: 10, color: '#adc4b6', lineHeight: 16 },
+  playerName: { color: p.cream, fontSize: 10, fontWeight: '800', paddingRight: 4 }, playerStats: { fontSize: 9, color: '#adc4b6', lineHeight: 13 }, small: { fontSize: 10, color: '#adc4b6', lineHeight: 16 },
   tableScroll: { flex: 1 }, table: { padding: 8, gap: 6, flexGrow: 1 },
   feltOval: { borderRadius: 54, backgroundColor: '#155a40', borderWidth: 2, borderColor: '#775935', paddingVertical: 4, elevation: 2 },
   piles: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }, pile: { alignItems: 'center', gap: 2, borderRadius: 8, padding: 2 }, tablePileTouch: { minWidth: 78, minHeight: 92, justifyContent: 'center' }, pileReady: { backgroundColor: '#ffe1a410' },

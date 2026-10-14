@@ -1,0 +1,85 @@
+{
+  "measuredAt": "2026-10-14T05:24:11.389Z",
+  "target": "currently deployed backend; local fixes not deployed",
+  "elapsedSeconds": 486,
+  "moves": 164,
+  "consistencyChecks": 27,
+  "broadcastChecks": 159,
+  "broadcasts": [
+    165,
+    165
+  ],
+  "reconnects": 4,
+  "lostResponses": 5,
+  "failures": [],
+  "cleanupErrors": [],
+  "timing": {
+    "create": {
+      "count": 1,
+      "p50Ms": 1147,
+      "p95Ms": 1147,
+      "maxMs": 1147
+    },
+    "join": {
+      "count": 1,
+      "p50Ms": 925,
+      "p95Ms": 925,
+      "maxMs": 925
+    },
+    "add-bot": {
+      "count": 2,
+      "p50Ms": 581,
+      "p95Ms": 656,
+      "maxMs": 656
+    },
+    "ready": {
+      "count": 2,
+      "p50Ms": 720,
+      "p95Ms": 728,
+      "maxMs": 728
+    },
+    "start": {
+      "count": 1,
+      "p50Ms": 831,
+      "p95Ms": 831,
+      "maxMs": 831
+    },
+    "fetch": {
+      "count": 213,
+      "p50Ms": 514,
+      "p95Ms": 656,
+      "maxMs": 921
+    },
+    "action:discard": {
+      "count": 42,
+      "p50Ms": 708,
+      "p95Ms": 813,
+      "maxMs": 917
+    },
+    "action:claim": {
+      "count": 74,
+      "p50Ms": 718,
+      "p95Ms": 855,
+      "maxMs": 939
+    },
+    "action:draw": {
+      "count": 42,
+      "p50Ms": 716,
+      "p95Ms": 813,
+      "maxMs": 858
+    },
+    "action:next": {
+      "count": 1,
+      "p50Ms": 709,
+      "p95Ms": 709,
+      "maxMs": 709
+    },
+    "forfeit": {
+      "count": 2,
+      "p50Ms": 757,
+      "p95Ms": 794,
+      "maxMs": 794
+    }
+  },
+  "privacyChecks": "validated on every game response"
+}

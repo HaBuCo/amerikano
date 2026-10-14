@@ -8,7 +8,7 @@ import { armTurnTimer } from '../src/game/engine.ts';
 import { createSeatedRoomGame } from '../src/game/room-game.ts';
 import { recordRoomLatency, roomLatencySummary } from '../src/network/latency.ts';
 
-function fixture(options: { outsider?: boolean; stateError?: boolean; conflict?: boolean; waiting?: boolean } = {}) {
+function fixture(options: { outsider?: boolean; stateError?: boolean; conflict?: boolean; waiting?: boolean; concurrentRead?: boolean } = {}) {
   const game = createSeatedRoomGame([
     { id: 'one', name: 'One', isBot: false }, { id: 'two', name: 'Two', isBot: false },
   ], () => 0.4);
@@ -41,8 +41,18 @@ function fixture(options: { outsider?: boolean; stateError?: boolean; conflict?:
       if (!this.writing) {
         if (this.table === 'room_members') data = this.singleRow
           ? members.find(member => member.user_id === this.filters.user_id) ?? null : members;
-        if (this.table === 'rooms') data = { id: 'room', code: 'ABC123', host_id: 'one', revision,
-          status: options.waiting ? 'waiting' : 'playing', visibility: options.waiting ? 'public' : 'private', updated_at: new Date().toISOString() };
+        if (this.table === 'rooms') {
+          data = { id: 'room', code: 'ABC123', host_id: 'one', revision,
+            status: options.waiting ? 'waiting' : 'playing', visibility: options.waiting ? 'public' : 'private', updated_at: new Date().toISOString(),
+            room_states: options.waiting ? null : { state: structuredClone(stored) } };
+          if (options.stateError) error = { message: 'database unavailable' };
+          if (options.concurrentRead) {
+            // Another transaction commits after this snapshot and before any
+            // subsequent reads. An independent state read would see a new hand.
+            stored.players.find(player => player.id === viewer)!.hand.push(stored.stock.pop()!);
+            revision++;
+          }
+        }
         if (this.table === 'room_states') {
           data = options.waiting ? null : { state: structuredClone(stored) };
           if (options.stateError) error = { message: 'database unavailable' };
@@ -60,6 +70,7 @@ function fixture(options: { outsider?: boolean; stateError?: boolean; conflict?:
       calls.push(name);
       if (name === 'touch_online_room_member') return { data: !options.outsider, error: null };
       if (name === 'refresh_quick_room_timer') { revision++; return { data: null, error: null }; }
+      if (name === 'claim_waiting_table_push') return { data: [], error: null };
       if (name === 'commit_room_state') {
         if (requests.has(String(args.command_id))) return { data: revision, error: null };
         if (options.conflict || args.expected_revision !== revision) return { data: null, error: null };
@@ -95,7 +106,7 @@ function fixture(options: { outsider?: boolean; stateError?: boolean; conflict?:
   return { invoke, calls, viewer, handCount: stored.players.find(player => player.id === viewer)?.hand.length };
 }
 
-test('draw reads state once before and once after commit, keeps hands private and avoids lobby locks', async () => {
+test('draw reads atomic room snapshots before and after commit, keeps hands private and avoids lobby locks', async () => {
   const f = fixture();
   const response = await f.invoke({ type: 'action', revision: 10, requestId: 'draw-1', action: { type: 'draw', source: 'stock' } });
   assert.equal(response.status, 200);
@@ -104,8 +115,12 @@ test('draw reads state once before and once after commit, keeps hands private an
   assert.ok(response.body.room.game.players.filter((player: { id: string }) => player.id !== f.viewer).every((player: { hand: unknown[] }) => player.hand.length === 0));
   assert.equal('stock' in response.body.room.game, false);
   assert.equal('loadedStates' in response.body, false);
-  assert.equal(f.calls.filter(call => call === 'room_states:read').length, 2);
+  assert.equal(f.calls.filter(call => call === 'rooms:read').length, 2);
+  assert.equal(f.calls.includes('room_states:read'), false);
+  assert.equal('room_states' in response.body.room, false);
   assert.equal(f.calls.filter(call => call === 'touch_online_room_member').length, 1);
+  assert.equal(f.calls.filter(call => call === 'room_members:read').length, 2);
+  assert.equal(f.calls.includes('profiles:write'), false);
   assert.equal(f.calls.filter(call => call === 'profiles:read').length, 1);
   assert.equal(f.calls.includes('refresh_quick_room_timer'), false);
   assert.equal(typeof response.body.serverMs, 'number');
@@ -114,7 +129,19 @@ test('draw reads state once before and once after commit, keeps hands private an
 test('unchanged fetch reuses the private state already read for the view', async () => {
   const f = fixture();
   assert.equal((await f.invoke({ type: 'fetch' })).status, 200);
-  assert.equal(f.calls.filter(call => call === 'room_states:read').length, 1);
+  assert.equal(f.calls.filter(call => call === 'rooms:read').length, 1);
+  assert.equal(f.calls.includes('room_states:read'), false);
+  assert.equal(f.calls.filter(call => call === 'room_members:read').length, 1);
+  assert.equal(f.calls.includes('profiles:write'), false);
+});
+
+test('a concurrent commit cannot pair an older room revision with the newer hand', async () => {
+  const f = fixture({ concurrentRead: true });
+  const response = await f.invoke({ type: 'fetch' });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.room.revision, 10);
+  assert.equal(response.body.room.game.players.find((player: { id: string }) => player.id === f.viewer).hand.length, f.handCount);
+  assert.equal('room_states' in response.body.room, false);
 });
 
 test('public waiting rooms still refresh their timer and return the revision after the refresh', async () => {
@@ -124,6 +151,7 @@ test('public waiting rooms still refresh their timer and return the revision aft
   assert.equal(response.body.room.revision, 11);
   assert.equal(response.body.room.game, null);
   assert.equal(f.calls.filter(call => call === 'refresh_quick_room_timer').length, 1);
+  assert.equal(f.calls.filter(call => call === 'claim_waiting_table_push').length, 1);
 });
 
 test('outsiders cannot read private state; database failures and revision conflicts reject draws', async () => {

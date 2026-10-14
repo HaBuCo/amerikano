@@ -1,4 +1,6 @@
 export const palette = {
+  canvas: '#0B2D21',
+  surface: '#173E2E',
   ink: '#17211C',
   felt: '#123D2B',
   feltLight: '#1B573D',

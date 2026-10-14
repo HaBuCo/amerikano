@@ -6,6 +6,12 @@ import { botAction } from '../../../src/game/bot.ts';
 import { projectGame } from '../../../src/game/view.ts';
 import type { GameAction, GameState } from '../../../src/game/types.ts';
 import { enforceRateLimit, publicErrorMessage } from '../_shared/guard.ts';
+import { sendPush } from '../_shared/push.ts';
+import { ROOM_TIERS } from '../../../src/game/coin-economy.ts';
+
+const ENGLISH_TIER_NAMES: Record<string, string> = {
+  'Başlangıç': 'Starter', Bronz: 'Bronze', 'Gümüş': 'Silver', 'Altın': 'Gold', 'Zümrüt': 'Emerald', Kraliyet: 'Royal',
+};
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,6 +20,7 @@ const corsHeaders = {
 
 type Command =
   | { type: 'claim-daily' }
+  | { type: 'activity' }
   | { type: 'create'; name: string; entryFee?: number; economyVersion?: number }
   | { type: 'join'; code: string; name: string; economyVersion?: number }
   | { type: 'matchmake'; name: string; entryFee?: number; economyVersion?: number }
@@ -45,7 +52,7 @@ function playerName(value: unknown) {
 
 function entryFee(value: unknown, version: unknown) {
   if (version !== 1) return 0;
-  if (value === 100 || value === 500 || value === 2000) return value;
+  if (value === 50 || value === 100 || value === 250 || value === 500 || value === 1000 || value === 2000) return value;
   throw new Error('Geçersiz masa ücreti.');
 }
 
@@ -85,8 +92,8 @@ Deno.serve(async (request) => {
   const startedAt = performance.now();
   let profileTouch: Promise<unknown> | undefined;
   const reply = async (body: Record<string, unknown>, status = 200) => {
-    // Presence for the friends list is independent of the room command.
-    // Let it overlap the game reads/writes while still finishing before reply.
+    // Commands without a room still update presence here. Room commands update
+    // it through touch_online_room_member along with the room heartbeat.
     if (profileTouch) await profileTouch;
     return json({ ...body, serverMs: Math.round(performance.now() - startedAt) }, status);
   };
@@ -108,8 +115,10 @@ Deno.serve(async (request) => {
     const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
     const command = await request.json() as Command;
     if (!command || typeof command.type !== 'string') throw new Error('Geçersiz istek.');
-    profileTouch = Promise.resolve(admin.from('profiles').update({ last_active_at: new Date().toISOString() }).eq('user_id', user.id))
-      .catch((error) => { console.error('Could not update profile presence', error); });
+    if (command.type === 'activity' || command.type === 'claim-daily') {
+      profileTouch = Promise.resolve(admin.from('profiles').update({ last_active_at: new Date().toISOString() }).eq('user_id', user.id))
+        .catch((error) => { console.error('Could not update profile presence', error); });
+    }
     // Request-local only: never attach authoritative hands to a response.
     const loadedStates = new Map<string, GameState | undefined>();
     const touchedRooms = new Set<string>();
@@ -125,13 +134,12 @@ Deno.serve(async (request) => {
     };
 
     const roomView = async (roomId: string) => {
-      const { data: membership, error: membershipError } = await admin.from('room_members').select('room_id')
-        .eq('room_id', roomId).eq('user_id', user.id).maybeSingle();
-      if (membershipError) throw membershipError;
-      if (!membership) throw new Error('Bu odada değilsin.');
       const now = new Date().toISOString();
       const readRoom = () => admin.from('rooms')
-        .select('id, code, host_id, revision, status, visibility, updated_at, quick_three_since, quick_four_since, entry_fee, coin_pot, coin_match_no, result_recorded')
+        // The FK is one-to-one: PostgREST reads revision and private state in a
+        // single database snapshot. Separate reads can pair an old revision with
+        // a newly committed hand, causing rejected moves and apparent freezes.
+        .select('id, code, host_id, revision, status, visibility, updated_at, quick_three_since, quick_four_since, entry_fee, coin_pot, coin_match_no, result_recorded, room_states(state)')
         .eq('id', roomId)
         .gt('expires_at', now)
         .maybeSingle();
@@ -163,15 +171,17 @@ Deno.serve(async (request) => {
         await admin.from('room_members').update({ ready: true }).eq('room_id', roomId).eq('ready', false);
       }
 
-      const [roomResult, membersResult, stateResult, botsResult] = await Promise.all([
+      const [roomResult, membersResult, botsResult] = await Promise.all([
         Promise.resolve({ data: activeRoom, error: null }),
         admin.from('room_members').select('user_id, display_name, ready, seat, last_seen_at, joined_at').eq('room_id', roomId).order('seat'),
-        admin.from('room_states').select('state').eq('room_id', roomId).maybeSingle(),
         admin.from('room_bots').select('id, display_name, created_at').eq('room_id', roomId).order('created_at'),
       ]);
-      if (roomResult.error || membersResult.error || stateResult.error || botsResult.error) throw new Error('Oda bilgisi alınamadı.');
-      let roomRecord = roomResult.data;
-      const state = stateResult.data?.state as GameState | undefined;
+      if (roomResult.error || membersResult.error || botsResult.error) throw new Error('Oda bilgisi alınamadı.');
+      const { room_states: privateState, ...roomFields } = roomResult.data;
+      let roomRecord = roomFields;
+      // The database PK/FK makes this an object; the untyped client cannot infer
+      // relationship cardinality from the select string alone.
+      const state = (privateState as unknown as { state: GameState } | null)?.state;
       loadedStates.set(roomId, state);
       const memberIds = membersResult.data.map((member) => member.user_id);
       const profileKey = JSON.stringify(memberIds);
@@ -305,6 +315,31 @@ Deno.serve(async (request) => {
       return !commit.error && commit.data !== null;
     };
 
+    // Invites recently active players to a quick table that has been waiting
+    // for a while. The database claims each room once and rate-limits players.
+    const announceWaitingTable = async (targetRoomId: string) => {
+      const { data, error } = await Promise.resolve(admin.rpc('claim_waiting_table_push', { p_room_id: targetRoomId }))
+        .catch((failure: unknown) => ({ data: null, error: failure instanceof Error ? failure : new Error(String(failure)) }));
+      if (error) {
+        console.error('Could not claim waiting table push', error.message);
+        return;
+      }
+      const rows = (data ?? []) as { token: string; language: string; entry_fee: number; waiting_players: number }[];
+      if (!rows.length) return;
+      const tier = ROOM_TIERS.find(item => item.fee === rows[0].entry_fee)?.name ?? 'Hızlı';
+      const waiting = Number(rows[0].waiting_players);
+      await sendPush(admin, rows, language => language === 'en'
+        ? { title: `${ENGLISH_TIER_NAMES[tier] ?? 'Quick'} table is waiting`, body: `${waiting} ${waiting === 1 ? 'player is' : 'players are'} waiting for opponents. Take a seat and start.` }
+        : { title: `${tier} masası seni bekliyor`, body: `${waiting} oyuncu rakip bekliyor. Otur, oyun hemen başlasın.` }, '/online?quick=1');
+    };
+
+    if (command.type === 'activity') {
+      await enforceRateLimit(admin, user.id, 'room-activity', 60, 600);
+      const { data, error } = await admin.rpc('quick_room_activity', { p_ruleset: RULESET_ID });
+      if (error) throw error;
+      return reply({ activity: data ?? [] });
+    }
+
     if (command.type === 'claim-daily') {
       const result = await admin.rpc('claim_daily_coins', { p_user_id: user.id });
       if (result.error) throw result.error;
@@ -379,6 +414,9 @@ Deno.serve(async (request) => {
 
     if (command.type === 'fetch') {
       const currentView = await roomView(command.roomId);
+      if (currentView.status === 'waiting' && currentView.visibility === 'public') {
+        await announceWaitingTable(command.roomId);
+      }
       if (currentView.status === 'waiting' &&
           currentView.startsAt && currentView.startsAt <= Date.now()) {
         await autoStartWaitingRoom(command.roomId, currentView);

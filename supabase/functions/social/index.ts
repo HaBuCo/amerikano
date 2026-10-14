@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { enforceRateLimit, publicErrorMessage } from '../_shared/guard.ts';
+import { sendPush, tokensFor } from '../_shared/push.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -8,13 +9,16 @@ const corsHeaders = {
 
 type Command =
   | { type: 'presence' }
+  | { type: 'leaderboard'; period: 'week' | 'all' }
   | { type: 'list' }
   | { type: 'search'; query: string }
   | { type: 'request'; userId?: string; friendCode?: string }
   | { type: 'respond'; userId: string; accept: boolean }
   | { type: 'remove'; userId: string }
   | { type: 'invite'; userId: string; roomCode: string }
-  | { type: 'dismiss-invite'; inviteId: string };
+  | { type: 'dismiss-invite'; inviteId: string }
+  | { type: 'push-token'; token: string; platform: string; language: string }
+  | { type: 'push-token-remove'; token: string };
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -47,6 +51,10 @@ Deno.serve(async (request) => {
     const command = await request.json() as Command;
     if (!command || typeof command.type !== 'string') throw new Error('Geçersiz istek.');
     const presenceUpdate = await admin.from('profiles').update({ last_active_at: new Date().toISOString() }).eq('user_id', user.id);
+    const senderName = async () => {
+      const { data } = await admin.from('profiles').select('username').eq('user_id', user.id).maybeSingle();
+      return String(data?.username || 'Bir oyuncu');
+    };
 
     if (command.type === 'presence') {
       if (presenceUpdate.error) throw presenceUpdate.error;
@@ -58,6 +66,17 @@ Deno.serve(async (request) => {
         .gte('last_active_at', activeSince);
       if (error || count === null) throw error ?? new Error('Çevrim içi sayısı alınamadı.');
       return json({ onlineCount: count });
+    }
+
+    if (command.type === 'leaderboard') {
+      await enforceRateLimit(admin, user.id, 'social-leaderboard', 120, 600);
+      if (command.period !== 'week' && command.period !== 'all') throw new Error('Geçersiz sıralama dönemi.');
+      const { data, error } = await admin.rpc('coin_leaderboard', {
+        p_period: command.period,
+        p_viewer: user.id,
+      });
+      if (error) throw error;
+      return json(data);
     }
 
     const list = async () => {
@@ -219,6 +238,10 @@ Deno.serve(async (request) => {
       if ((pendingCount ?? 0) >= 50) throw new Error('Çok fazla bekleyen arkadaşlık isteğin var. Bazıları yanıtlanınca tekrar dene.');
       const { error } = await admin.from('friendships').insert({ user_low: userLow, user_high: userHigh, requested_by: user.id });
       if (error) throw error;
+      const sender = await senderName();
+      await sendPush(admin, await tokensFor(admin, [target.user_id]), language => language === 'en'
+        ? { title: 'New friend request', body: `${sender} wants to be your friend.` }
+        : { title: 'Yeni arkadaşlık isteği', body: `${sender} seni arkadaş olarak eklemek istiyor.` }, '/friends');
       return json({ ok: true, social: await list() });
     }
 
@@ -261,6 +284,10 @@ Deno.serve(async (request) => {
         expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
       }, { onConflict: 'room_id,recipient_id' });
       if (error) throw error;
+      const sender = await senderName();
+      await sendPush(admin, await tokensFor(admin, [targetId]), language => language === 'en'
+        ? { title: 'Table invitation', body: `${sender} is waiting for you at the table. Tap to join.` }
+        : { title: 'Masa daveti', body: `${sender} seni masasına çağırıyor. Katılmak için dokun.` }, '/friends');
       return json({ ok: true });
     }
 
@@ -268,6 +295,26 @@ Deno.serve(async (request) => {
       const { error } = await admin.from('room_invites').delete().eq('id', String(command.inviteId ?? '')).eq('recipient_id', user.id);
       if (error) throw error;
       return json({ ok: true, social: await list() });
+    }
+
+    if (command.type === 'push-token') {
+      await enforceRateLimit(admin, user.id, 'push-token', 20, 3600);
+      const token = String(command.token ?? '');
+      if (!/^(Exponent|Expo)PushToken\[[A-Za-z0-9_-]{10,}\]$/.test(token)) throw new Error('Bildirim kaydı geçersiz.');
+      const platform = command.platform === 'ios' ? 'ios' : command.platform === 'android' ? 'android' : null;
+      if (!platform) throw new Error('Bildirim kaydı geçersiz.');
+      // A device token moves to whoever signed in on that phone last.
+      const { error } = await admin.from('push_tokens').upsert({
+        token, user_id: user.id, platform, language: command.language === 'en' ? 'en' : 'tr', updated_at: new Date().toISOString(),
+      }, { onConflict: 'token' });
+      if (error) throw error;
+      return json({ ok: true });
+    }
+
+    if (command.type === 'push-token-remove') {
+      const { error } = await admin.from('push_tokens').delete().eq('token', String(command.token ?? '')).eq('user_id', user.id);
+      if (error) throw error;
+      return json({ ok: true });
     }
 
     throw new Error('Bilinmeyen işlem.');

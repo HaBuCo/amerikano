@@ -4,10 +4,12 @@ import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native
 import { palette as p } from '@/constants/palette';
 import { ROUND_CONTRACTS } from '@/game/contracts';
 
-export function RoundIntro({ roundIndex, contractIndex = roundIndex, roundCount = 12, starterName, jokerRestricted = contractIndex < 5, mode = 'detailed', enabled = true }: { roundIndex: number; contractIndex?: number; roundCount?: number; starterName: string; jokerRestricted?: boolean; mode?: 'short' | 'detailed' | 'off'; enabled?: boolean }) {
+export function RoundIntro({ roundIndex, contractIndex = roundIndex, roundCount = 12, starterName, jokerRestricted = contractIndex < 5, mode = 'detailed', enabled = true, onComplete }: { roundIndex: number; contractIndex?: number; roundCount?: number; starterName: string; jokerRestricted?: boolean; mode?: 'short' | 'detailed' | 'off'; enabled?: boolean; onComplete?: (roundIndex: number) => void }) {
   const { t } = useTranslations();
   const [progress] = useState(() => new Animated.Value(0));
   const lastShownRound = useRef<number | null>(null);
+  const completeRef = useRef(onComplete);
+  useEffect(() => { completeRef.current = onComplete; }, [onComplete]);
   const contract = ROUND_CONTRACTS[contractIndex];
   const useNativeDriver = Platform.OS !== 'web';
 
@@ -18,7 +20,11 @@ export function RoundIntro({ roundIndex, contractIndex = roundIndex, roundCount 
       return;
     }
     if (lastShownRound.current === roundIndex) return;
-    lastShownRound.current = roundIndex;
+    if (mode === 'off') {
+      lastShownRound.current = roundIndex;
+      completeRef.current?.(roundIndex);
+      return;
+    }
     progress.setValue(0);
     const animation = Animated.sequence([
       Animated.delay(250),
@@ -26,9 +32,13 @@ export function RoundIntro({ roundIndex, contractIndex = roundIndex, roundCount 
       Animated.delay(1750),
       Animated.timing(progress, { toValue: 0, duration: 420, easing: Easing.in(Easing.cubic), useNativeDriver }),
     ]);
-    animation.start();
+    animation.start(({ finished }) => {
+      if (!finished) return;
+      lastShownRound.current = roundIndex;
+      completeRef.current?.(roundIndex);
+    });
     return () => animation.stop();
-  }, [enabled, progress, roundIndex, useNativeDriver]);
+  }, [enabled, mode, progress, roundIndex, useNativeDriver]);
 
   if (!contract) return null;
   if (mode === 'off') return null;

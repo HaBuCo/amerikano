@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import { palette as p } from '@/constants/palette';
 import { PlayingCard } from './playing-card';
-import { avatarFor } from '@/network/profile';
+import { PlayerAvatar } from './player-avatar';
 import { RoomView } from '@/network/types';
 
 const MIN_SEATS = 4;
@@ -26,10 +26,9 @@ type Seat = RoomView['members'][number];
 
 function SeatTile({ seat, isYou, isHost, tileWidth }: { seat: Seat; isYou: boolean; isHost: boolean; tileWidth: number }) {
   const { t } = useTranslations();
-  const avatar = avatarFor(seat.avatarKey);
   const statusLabel = !seat.connected ? t("Yeniden bağlanıyor") : seat.ready ? t("✓ Hazır") : t("Bekleniyor");
   return <View style={[s.seat, s.seatFilled, { width: tileWidth }, isYou && s.seatYou]}>
-    <View style={[s.seatAvatar, { backgroundColor: avatar.color }]}><Text style={s.seatAvatarText}>{avatar.symbol}</Text></View>
+    <PlayerAvatar avatarKey={seat.avatarKey} size={36} />
     <Text numberOfLines={1} style={s.seatName}>{seat.name}{seat.isBot ? t(" · BOT") : isHost ? ' ♛' : ''}</Text>
     <Text numberOfLines={1} style={[s.seatStatus, seat.ready && seat.connected && s.seatStatusReady]}>{isYou ? t("SEN") : statusLabel}</Text>
   </View>;
@@ -74,8 +73,6 @@ const s = StyleSheet.create({
   seatFilled: { backgroundColor: '#ffffff0d', borderWidth: 1, borderColor: p.line },
   seatYou: { borderColor: p.gold, backgroundColor: '#d9a44120' },
   seatEmpty: { borderWidth: 1.5, borderColor: p.line, borderStyle: 'dashed' },
-  seatAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  seatAvatarText: { color: '#fff', fontSize: 15, fontWeight: '900' },
   seatAvatarEmpty: { width: 36, height: 36, borderRadius: 18, borderWidth: 1.5, borderColor: p.line, borderStyle: 'dashed' },
   seatName: { color: p.cream, fontSize: 13, fontWeight: '700', maxWidth: '100%' },
   seatStatus: { color: p.muted, fontSize: 10, fontWeight: '700' },

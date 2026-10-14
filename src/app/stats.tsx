@@ -50,7 +50,7 @@ export default function StatsScreen() {
   return <SafeAreaView style={s.page}>
     <Stack.Screen options={{ headerShown: false }} />
     <ScrollView contentContainerStyle={[s.content, isTablet && s.contentTablet]} showsVerticalScrollIndicator={false}>
-      <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>{t("← Geri")}</Text></Pressable>
+      <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>{t("Geri")}</Text></Pressable>
 
       <View style={s.heading}>
         <Text style={s.eyebrow}>{t("İSTATİSTİKLERİM")}</Text>
@@ -129,7 +129,7 @@ function formatDate(value: string, language: Language) {
 }
 
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: p.felt },
+  page: { flex: 1, backgroundColor: p.canvas },
   content: { width: '100%', maxWidth: 680, alignSelf: 'center', padding: 24, paddingBottom: 42, gap: 18 },
   contentTablet: { maxWidth: 1060, paddingHorizontal: 36, paddingTop: 30 },
   back: { color: p.cream, fontSize: 15, paddingVertical: 10 },
@@ -139,17 +139,17 @@ const s = StyleSheet.create({
   body: { color: p.muted, fontSize: 15, lineHeight: 22, maxWidth: 620 },
   columns: { gap: 18 },
   columnsWide: { flexDirection: 'row', alignItems: 'stretch' },
-  section: { flex: 1, minWidth: 0, borderWidth: 1, borderColor: p.line, borderRadius: 20, backgroundColor: '#071e154d', padding: 18, gap: 12 },
+  section: { flex: 1, minWidth: 0, borderTopWidth: 1, borderTopColor: p.line, paddingTop: 18, gap: 12 },
   sectionTitle: { color: p.gold, fontSize: 10, letterSpacing: 1.8, fontWeight: '900' },
   sectionSubtitle: { color: p.muted, fontSize: 11, lineHeight: 16, marginTop: -7 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', borderWidth: 1, borderColor: p.line, borderRadius: 15, overflow: 'hidden' },
-  metric: { width: '50%', minHeight: 86, alignItems: 'center', justifyContent: 'center', gap: 4, borderWidth: 0.5, borderColor: p.line },
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  metric: { width: '50%', minHeight: 86, alignItems: 'center', justifyContent: 'center', gap: 4, borderBottomWidth: 1, borderBottomColor: p.line },
   metricValue: { color: p.cream, fontSize: 25, fontWeight: '900' },
   metricHighlight: { color: p.gold },
   metricLabel: { color: p.muted, fontSize: 8, letterSpacing: 1.2, fontWeight: '800', textAlign: 'center' },
   recordGrid: { gap: 10 },
   recordGridTablet: { flexDirection: 'row' },
-  record: { flex: 1, minWidth: 0, minHeight: 126, borderRadius: 15, backgroundColor: '#ffffff08', padding: 14, justifyContent: 'space-between' },
+  record: { flex: 1, minWidth: 0, minHeight: 112, borderBottomWidth: 1, borderBottomColor: p.line, paddingVertical: 14, justifyContent: 'space-between' },
   recordLabel: { color: p.muted, fontSize: 8, lineHeight: 12, letterSpacing: 1, fontWeight: '900' },
   recordValue: { color: p.cream, fontSize: 30, fontWeight: '900' },
   recordNote: { color: '#819c8c', fontSize: 9, lineHeight: 13 },

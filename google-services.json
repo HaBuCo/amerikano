@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "1074609726759",
+    "project_id": "amerikano-kut",
+    "storage_bucket": "amerikano-kut.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1074609726759:android:846566875873767620b502",
+        "android_client_info": {
+          "package_name": "com.hegionsoft.amerikano"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1074609726759-2eqq65lt2p8slgoudv1mdm8dla4tnqt0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA2_RbVhb4hSoMWxbxLfLOqXaojeYgyl04"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1074609726759-2eqq65lt2p8slgoudv1mdm8dla4tnqt0.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1074609726759-ed515t8nndsjg8vdn3kpjk6eus7nbgme.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.hegionsoft.amerikano",
+                "app_store_id": "6811185692"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

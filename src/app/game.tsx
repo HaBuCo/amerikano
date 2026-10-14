@@ -40,6 +40,7 @@ export default function GameScreen() {
   const [loadState, setLoadState] = useState<'loading' | 'choice' | 'ready'>(single ? 'loading' : 'ready');
   const [tutorialChecked, setTutorialChecked] = useState(!single);
   const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [introFinishedRound, setIntroFinishedRound] = useState<number | null>(null);
   const [debugEvents, setDebugEvents] = useState<string[]>([]);
   const [undoGame, setUndoGame] = useState<typeof game | null>(null);
   const resultRecorded = useRef(false);
@@ -91,7 +92,7 @@ export default function GameScreen() {
     } else void saveSingleGame(game);
   }, [game, loadState, single]);
   useEffect(() => {
-    if (!single || loadState !== 'ready' || tutorialOpen || current.id === viewerId || !['draw', 'claim', 'play'].includes(game.phase)) return;
+    if (!single || loadState !== 'ready' || !tutorialChecked || tutorialOpen || introFinishedRound !== game.roundIndex || current.id === viewerId || !['draw', 'claim', 'play'].includes(game.phase)) return;
     const timer = setTimeout(() => {
       setUndoGame(null);
       let next = game;
@@ -112,12 +113,14 @@ export default function GameScreen() {
       if (next !== game) setGame(next);
     }, (() => {
       const speed = rulesForGame(game).botSpeed;
-      if (speed === 'fast') return game.phase === 'claim' ? 40 : game.phase === 'draw' ? 170 : 130;
-      if (speed === 'relaxed') return game.phase === 'claim' ? 350 : game.phase === 'draw' ? 950 : 760;
-      return game.phase === 'claim' ? 60 : game.phase === 'draw' ? 320 : 240;
+      // Keep actual card moves readable. Claim-only decisions still resolve
+      // together so drawing does not wait separately for every opponent.
+      if (speed === 'fast') return game.phase === 'claim' ? 120 : game.phase === 'draw' ? 500 : 550;
+      if (speed === 'relaxed') return game.phase === 'claim' ? 450 : game.phase === 'draw' ? 1600 : 1800;
+      return game.phase === 'claim' ? 220 : game.phase === 'draw' ? 1000 : 1100;
     })());
     return () => clearTimeout(timer);
-  }, [appendDebugEvent, game, single, current.id, viewerId, loadState, tutorialOpen, t]);
+  }, [appendDebugEvent, game, single, current.id, viewerId, loadState, tutorialChecked, tutorialOpen, introFinishedRound, t]);
   useEffect(() => {
     if (single && loadState === 'ready' && __DEV__) console.info(`[AMERİKANO CANLI DURUM]\n${debugText}`);
   }, [debugText, loadState, single]);
@@ -181,8 +184,8 @@ export default function GameScreen() {
   const view = projectGame(game, viewerId);
   if (single) view.players = view.players.map(player => player.id === viewerId ? { ...player, name: t('Sen') } : player);
   return <View style={s.gameRoot}>
-    <GameTable key={game.roundIndex + ':' + viewerId} game={view} viewerId={viewerId} modeLabel={single ? "TEK OYUNCULU" : "AYNI CİHAZDA"} onAction={act} error={error} debugText={single ? debugText : undefined} onOpenTutorial={single ? () => setTutorialOpen(true) : undefined} canUndo={Boolean(undoGame)} onUndo={single && rulesForGame(game).undoEnabled ? () => { if (undoGame) { setGame(undoGame); setUndoGame(null); setError(''); appendDebugEvent(t("Son hamle geri alındı.")); } } : undefined} onExit={() => { if (game.phase === 'game-over') void showMatchEndInterstitial().then(() => router.replace('/')); else router.replace('/'); }} />
-    <RoundIntro roundIndex={game.roundIndex} contractIndex={contractIndexForRound(game)} roundCount={roundCountForGame(game)} starterName={view.players[game.startingPlayerIndex]?.name ?? t("Oyuncu")} jokerRestricted={openingJokerRestricted(game)} mode={rulesForGame(game).roundIntro} enabled={single ? !tutorialOpen : visible} />
+    <GameTable key={game.roundIndex + ':' + viewerId} game={view} viewerId={viewerId} modeLabel={single ? "TEK OYUNCULU" : "AYNI CİHAZDA"} blocked={single && (tutorialOpen || introFinishedRound !== game.roundIndex)} onAction={act} error={error} debugText={single ? debugText : undefined} onOpenTutorial={single ? () => setTutorialOpen(true) : undefined} canUndo={Boolean(undoGame)} onUndo={single && rulesForGame(game).undoEnabled ? () => { if (undoGame) { setGame(undoGame); setUndoGame(null); setError(''); appendDebugEvent(t("Son hamle geri alındı.")); } } : undefined} onExit={() => { if (game.phase === 'game-over') void showMatchEndInterstitial().then(() => router.replace('/')); else router.replace('/'); }} />
+    <RoundIntro roundIndex={game.roundIndex} contractIndex={contractIndexForRound(game)} roundCount={roundCountForGame(game)} starterName={view.players[game.startingPlayerIndex]?.name ?? t("Oyuncu")} jokerRestricted={openingJokerRestricted(game)} mode={rulesForGame(game).roundIntro} enabled={single ? tutorialChecked && !tutorialOpen : visible} onComplete={single ? setIntroFinishedRound : undefined} />
     {single && <GameTutorial visible={tutorialOpen} onDone={finishTutorial} roundCount={roundCountForGame(game)} claimsEnabled={rulesForGame(game).claimsEnabled && game.players.length > 2} claimSeconds={rulesForGame(game).claimTimeoutMs / 1000} jokerRestrictionRounds={rulesForGame(game).jokerOpeningRestrictionRounds} playableDiscardPenalty={rulesForGame(game).playableDiscardPenalty} />}
     <Modal visible={!single && !visible && !['round-over', 'game-over'].includes(game.phase)} animationType="none" onRequestClose={() => router.replace('/')}>
       <View style={s.curtain}><Text style={s.eyebrow}>{t("TELEFONU VER")}</Text><Text style={s.name}>{current.name}</Text><Text style={s.copy}>{t("Hazır olduğunda kartlarını göster.")}</Text><Pressable accessibilityRole="button" onPress={() => setVisible(true)} style={s.button}><Text style={s.buttonText}>{t("Elimi göster")}</Text></Pressable></View>

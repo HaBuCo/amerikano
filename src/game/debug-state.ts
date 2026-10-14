@@ -54,7 +54,7 @@ export function formatSingleGameDebug(state: GameState, events: string[] = []): 
   ];
 
   for (const player of state.players) {
-    const marker = player.id === current.id ? '→' : ' ';
+    const marker = player.id === current.id ? '●' : ' ';
     lines.push(`${marker} ${player.name} · ${player.hand.length} kart · ${player.score} puan · ${player.hasOpened ? 'açtı' : 'açmadı'}`);
     lines.push(`  ${player.hand.map(debugCard).join(' ') || 'El boş'}`);
   }

@@ -34,8 +34,8 @@ Never add a service-role key to an Expo environment variable. It belongs only in
 Supabase's server environment.
 
 Coin economy: each profile starts with 1,000 virtual coins. The authenticated
-`room` function can grant 500 once per UTC day. New clients choose a 100, 500
-or 2,000 coin entry fee; legacy clients use free rooms. Matching only groups
+`room` function can grant 500 once per UTC day. New clients choose a 50, 100,
+250, 500, 1,000 or 2,000 coin entry fee; legacy clients use free rooms. Matching only groups
 players at the same fee. The database charges human seats atomically when a
 match starts and rejects a negative balance. Bots pay and receive nothing.
 For four human seats, the 400-coin pot pays 300/60/30/10 by final score;
@@ -48,6 +48,15 @@ is deleted. The private ledger and wallet writes are service-only; any future
 coin purchase must verify the store transaction server-side before crediting.
 `node scripts/check-coin-economy.mjs` checks a live temporary two-player room,
 wallet permissions, daily idempotence, debit and abandoned-match refund.
+
+The leaderboard records each settled paid match in `coin_match_outcomes`, which
+survives room cleanup. Weekly (Monday 00:00 UTC) and all-time rankings order
+players by net coins won (prize minus entry fees), then completed paid matches.
+Only positive totals appear in the top 50. Daily gifts, wallet balances,
+single-player games and future purchases are excluded. The authenticated
+`social` function exposes public usernames and avatars plus aggregate scores;
+the underlying aggregate RPC is service-only. `node scripts/check-leaderboard.mjs`
+checks both periods and the access boundary with a temporary guest.
 
 Room responses include `serverMs`, measured from Edge Function entry to response
 construction. The mobile client keeps the latest 100 request timings locally;
@@ -66,3 +75,17 @@ separate from the measured HTTP request time.
 which cascades to the profile and room membership tables. Apple accounts are freshly
 reauthenticated and their Apple grant is revoked before deletion; keep the Apple `.p8`
 private key only in Edge Function secrets.
+
+Notifications: the app schedules local reminders itself (daily gift at the first
+19:00 after the UTC reset, comeback reminders 2 and 5 days after the last open;
+every foreground pushes them forward). Push tokens live in the service-only
+`push_tokens` table and are registered through the `social` function; turning
+notifications off in Settings deletes the device's token. `social` pushes friend
+requests and table invitations; `room` announces a quick table that has waited
+20 seconds, once per room, to at most 30 recently active players who can afford
+it, each at most once every 12 hours (`claim_waiting_table_push`). Sends are best
+effort through the Expo push service and never fail the triggering request;
+tokens Expo reports as `DeviceNotRegistered` are deleted. Android push needs
+`google-services.json` in the project root and an FCM V1 key in EAS credentials;
+iOS needs an APNs key in EAS credentials. Set `EXPO_ACCESS_TOKEN` as a function
+secret only if enhanced push security is enabled for the Expo project.

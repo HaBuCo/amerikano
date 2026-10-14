@@ -2,14 +2,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 import { supabase } from './supabase';
 import { normalizeUsername, RESERVED_USERNAME_MESSAGE, usernameError } from './usernames';
+import { avatarPortraits } from '@/constants/avatar-portraits';
 
 export const AVATAR_OPTIONS = [
-  { key: 'emerald', color: '#2d8b65', symbol: 'A' },
-  { key: 'gold', color: '#d9a441', symbol: '♛' },
-  { key: 'ruby', color: '#a64048', symbol: '♥' },
-  { key: 'sapphire', color: '#376b9a', symbol: '♠' },
-  { key: 'plum', color: '#795083', symbol: '♦' },
-  { key: 'ocean', color: '#247b83', symbol: '♣' },
+  { key: 'character-lara', label: 'Lara', color: '#2d8b65', symbol: '', image: avatarPortraits.lara },
+  { key: 'character-kemal', label: 'Kemal', color: '#a77b39', symbol: '', image: avatarPortraits.kemal },
+  { key: 'character-emir', label: 'Emir', color: '#a75b37', symbol: '', image: avatarPortraits.emir },
+  { key: 'character-ada', label: 'Ada', color: '#795083', symbol: '', image: avatarPortraits.ada },
+  { key: 'emerald', label: 'Zümrüt', color: '#2d8b65', symbol: 'A', image: null },
+  { key: 'gold', label: 'Altın', color: '#d9a441', symbol: '♛', image: null },
+  { key: 'ruby', label: 'Yakut', color: '#a64048', symbol: '♥', image: null },
+  { key: 'sapphire', label: 'Safir', color: '#376b9a', symbol: '♠', image: null },
+  { key: 'plum', label: 'Mürdüm', color: '#795083', symbol: '♦', image: null },
+  { key: 'ocean', label: 'Okyanus', color: '#247b83', symbol: '♣', image: null },
 ] as const;
 
 export type AvatarKey = (typeof AVATAR_OPTIONS)[number]['key'];
@@ -127,5 +132,5 @@ export function profileLevel(experience: number) {
 }
 
 export function avatarFor(key: AvatarKey | string) {
-  return AVATAR_OPTIONS.find((avatar) => avatar.key === key) ?? AVATAR_OPTIONS[0];
+  return AVATAR_OPTIONS.find((avatar) => avatar.key === key) ?? AVATAR_OPTIONS.find((avatar) => avatar.key === 'emerald')!;
 }

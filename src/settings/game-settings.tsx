@@ -12,6 +12,7 @@ type Settings = {
   compactCards: boolean;
   dragHints: boolean;
   showReactions: boolean;
+  notifications: boolean;
 };
 
 type Feedback = 'selection' | 'impact' | 'success' | 'warning' | 'error' | 'turn';
@@ -21,7 +22,7 @@ type SettingsContextValue = {
   feedback: (kind?: Feedback) => void;
 };
 
-const defaults: Settings = { language: getLanguage(), haptics: true, criticalTimer: true, compactCards: false, dragHints: true, showReactions: true };
+const defaults: Settings = { language: getLanguage(), haptics: true, criticalTimer: true, compactCards: false, dragHints: true, showReactions: true, notifications: true };
 const storageKey = 'amerikano:game-settings:v1';
 const SettingsContext = createContext<SettingsContextValue | null>(null);
 

@@ -198,7 +198,7 @@ function orderRun(cards: Card[]) {
   return Array.from({ length }, (_, offset) => byValue.get(start + offset) ?? jokers[jokerIndex++]);
 }
 
-function orderGroup(group: Group) {
+function orderGroup(group: Pick<Group, 'type' | 'cards'>) {
   if (group.type === 'run') return isValidMeld(group.cards, 'run')
     ? orderRun(group.cards)
     : [...group.cards].sort((a, b) => Number(a.isJoker) - Number(b.isJoker) || rankValue(a) - rankValue(b));
@@ -226,32 +226,96 @@ export function suggestFinalGroups(cards: Card[], discardId: string): SuggestedC
   return groups.map(group => ({ type: group.type, cardIds: orderGroup(group).map(card => card.id) }));
 }
 
-function nearPairs(cards: Card[], preferredType?: MeldType) {
-  const pairs: { type: MeldType; cards: Card[]; score: number }[] = [];
-  const natural = cards.filter(card => !card.isJoker);
-  for (let first = 0; first < natural.length; first += 1) {
-    for (let second = first + 1; second < natural.length; second += 1) {
-      const a = natural[first];
-      const b = natural[second];
-      if (a.rank === b.rank && a.suit !== b.suit) pairs.push({ type: 'set', cards: [a, b], score: 12 });
-      if (a.suit === b.suit) {
-        const gap = Math.abs(rankValue(a) - rankValue(b));
-        if (gap === 1 || gap === 2) pairs.push({ type: 'run', cards: [a, b].sort((x, y) => rankValue(x) - rankValue(y)), score: gap === 1 ? 14 : 10 });
-      }
+type Block = { type: MeldType; cards: Card[]; jokersAllowed: boolean };
+
+const naturalCards = (cards: Card[]) => cards.filter(card => !card.isJoker);
+
+// A draft is not yet a legal meld but is worth keeping together: a partial set
+// (same rank, distinct suits) or a same-suit run whose gaps are at most one card.
+function fitsDraft(cards: Card[], card: Card, type: MeldType) {
+  if (card.isJoker) return false;
+  const natural = naturalCards(cards);
+  if (!natural.length) return false;
+  if (type === 'set') return cards.length < 4 && natural.every(item => item.rank === card.rank && item.suit !== card.suit);
+  if (cards.length >= 13 || natural.some(item => item.suit !== card.suit || rankValue(item) === rankValue(card))) return false;
+  const values = [...natural, card].map(rankValue).sort((a, b) => a - b);
+  return values.every((value, index) => index === 0 || value - values[index - 1] <= 2);
+}
+
+// Cards that extend a group stay beside it even when the opening needs an exact
+// length (3-4-5 keeps the 6 next to it for later). Strict mode accepts only
+// legal extensions; loose mode also keeps near cards (4-5-6 with an 8).
+function attachTo(blocks: Block[], cards: Card[], strict: boolean) {
+  let left = cards;
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const block of blocks) {
+      const valid = isValidMeld(block.cards, block.type);
+      const fit = left.find(card => !card.isJoker && (strict
+        ? valid && isValidMeld([...block.cards, card], block.type)
+        : (!valid || block.type === 'run') && fitsDraft(block.cards, card, block.type)));
+      if (!fit) continue;
+      block.cards = [...block.cards, fit];
+      left = left.filter(card => card.id !== fit.id);
+      changed = true;
     }
   }
-  pairs.sort((a, b) => (b.type === preferredType ? 8 : 0) + b.score - ((a.type === preferredType ? 8 : 0) + a.score));
-  const used = new Set<string>();
-  const selected: Card[][] = [];
-  for (const pair of pairs) {
-    if (pair.cards.some(card => used.has(card.id))) continue;
-    selected.push(pair.cards);
-    pair.cards.forEach(card => used.add(card.id));
+  return left;
+}
+
+function bestDraft(cards: Card[], preferredType?: MeldType): Block | null {
+  const drafts: Block[] = [];
+  for (const rank of RANKS) {
+    const natural = SUITS.map(suit => cards.find(card => card.rank === rank && card.suit === suit)).filter((card): card is Card => Boolean(card));
+    if (natural.length >= 2) drafts.push({ type: 'set', cards: natural, jokersAllowed: true });
   }
-  const loose = natural.filter(card => !used.has(card.id)).sort((a, b) =>
-    SUITS.indexOf(a.suit!) - SUITS.indexOf(b.suit!) || rankValue(a) - rankValue(b),
-  );
-  return { clusters: selected, loose };
+  for (const suit of SUITS) {
+    const byValue = new Map<number, Card>();
+    for (const card of cards) if (card.suit === suit && !byValue.has(rankValue(card))) byValue.set(rankValue(card), card);
+    let chain: Card[] = [];
+    for (const value of [...byValue.keys()].sort((a, b) => a - b)) {
+      const card = byValue.get(value)!;
+      if (chain.length && value - rankValue(chain[chain.length - 1]) > 2) {
+        if (chain.length >= 2) drafts.push({ type: 'run', cards: chain, jokersAllowed: true });
+        chain = [];
+      }
+      chain.push(card);
+    }
+    if (chain.length >= 2) drafts.push({ type: 'run', cards: chain, jokersAllowed: true });
+  }
+  const missing = (draft: Block) => draft.type === 'set' ? 0
+    : rankValue(draft.cards[draft.cards.length - 1]) - rankValue(draft.cards[0]) + 1 - draft.cards.length;
+  const score = (draft: Block) => draft.cards.length * 10 + (draft.type === preferredType ? 5 : 0) - missing(draft) * 3;
+  return drafts.sort((a, b) => score(b) - score(a))[0] ?? null;
+}
+
+function orderBlock(block: Block) {
+  const natural = naturalCards(block.cards);
+  const jokers = block.cards.filter(card => card.isJoker);
+  if (block.type === 'set' || !natural.length) return orderGroup(block);
+  if (isValidMeld(block.cards, 'run')) return orderRun(block.cards);
+  // A run draft: put jokers into the gaps they would fill, extras at the end.
+  const sorted = [...natural].sort((a, b) => rankValue(a) - rankValue(b));
+  const result: Card[] = [];
+  sorted.forEach((card, index) => {
+    if (index) for (let value = rankValue(sorted[index - 1]) + 1; value < rankValue(card) && jokers.length; value += 1) result.push(jokers.shift()!);
+    result.push(card);
+  });
+  return [...result, ...jokers];
+}
+
+// A leftover joker goes where it helps most: completing a draft first, then the
+// longest draft, then extending a finished group. It never joins an opening
+// group the current round forbids it in.
+function placeJoker(joker: Card, blocks: Block[], drafts: Block[]) {
+  const completes = drafts.filter(draft => isValidMeld([...draft.cards, joker], draft.type));
+  const target = completes.sort((a, b) => b.cards.length - a.cards.length)[0]
+    ?? [...drafts].sort((a, b) => b.cards.length - a.cards.length)[0]
+    ?? blocks.find(block => block.jokersAllowed && isValidMeld([...block.cards, joker], block.type));
+  if (!target) return false;
+  target.cards = [...target.cards, joker];
+  return true;
 }
 
 /** Returns every card id exactly once, ordered for the strongest visible hand. */
@@ -264,17 +328,30 @@ export function autoArrangeHand(cards: Card[], options: AutoArrangeOptions = {})
     : [];
   const primaryIds = new Set(primary.flatMap(group => group.cards.map(card => card.id)));
   const extraHand = cards.filter(card => !primaryIds.has(card.id));
-  const groups = [...primary, ...groupSearch(extraHand, allowJokers)()];
+  // Joker limits apply to the opening only; groups added after it may use jokers.
+  const extras = groupSearch(extraHand, true)();
+  const blocks: Block[] = [
+    ...primary.map(group => ({ type: group.type, cards: group.cards, jokersAllowed: allowJokers })),
+    ...extras.map(group => ({ type: group.type, cards: group.cards, jokersAllowed: true })),
+  ];
 
-  const used = new Set(groups.flatMap(group => group.cards.map(card => card.id)));
+  const used = new Set(blocks.flatMap(block => block.cards.map(card => card.id)));
   const remaining = cards.filter(card => !used.has(card.id));
+  let loose = attachTo(blocks, naturalCards(remaining), true);
   const preferredType = prioritizeContract ? options.contract?.parts[0]?.type : undefined;
-  const { clusters, loose } = nearPairs(remaining, preferredType);
-  const leftoverJokers = remaining.filter(card => card.isJoker);
+  const drafts: Block[] = [];
+  for (let draft = bestDraft(loose, preferredType); draft; draft = bestDraft(loose, preferredType)) {
+    drafts.push(draft);
+    const taken = new Set(draft.cards.map(card => card.id));
+    loose = loose.filter(card => !taken.has(card.id));
+  }
+  loose = attachTo([...blocks, ...drafts], loose, false);
+  const leftoverJokers = remaining.filter(card => card.isJoker && !placeJoker(card, blocks, drafts));
+  loose.sort((a, b) => SUITS.indexOf(a.suit!) - SUITS.indexOf(b.suit!) || rankValue(a) - rankValue(b));
 
   return [
-    ...groups.flatMap(orderGroup),
-    ...clusters.flat(),
+    ...blocks.flatMap(orderBlock),
+    ...drafts.flatMap(orderBlock),
     ...loose,
     ...leftoverJokers,
   ].map(card => card.id);

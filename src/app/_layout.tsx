@@ -1,8 +1,8 @@
 import { useTranslations } from '@/i18n/language';
 import { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { AppState } from 'react-native';
+import { AppState, Pressable, Text } from 'react-native';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 
@@ -17,6 +17,7 @@ import { hasRemovedAds, initializePurchases } from '@/purchases/purchases';
 import { preloadCardArt } from '@/constants/preload-card-art';
 import { useAuth } from '@/network/auth';
 import { refreshOnlinePlayerCount, resetOnlinePlayerCount } from '@/network/presence';
+import { NotificationBridge } from '@/notifications/notification-bridge';
 
 installGlobalErrorHandler();
 
@@ -72,13 +73,17 @@ export default function RootLayout() {
     <KeyboardProvider>
     <AppErrorBoundary><GameSettingsProvider><GameSoundsProvider>
       <StatusBar style="light" />
+      <NotificationBridge />
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: palette.felt },
           headerTintColor: palette.cream,
           headerShadowVisible: false,
           contentStyle: { backgroundColor: palette.felt },
-          headerBackButtonDisplayMode: 'minimal',
+          headerBackVisible: false,
+          headerLeft: () => <Pressable accessibilityRole="button" onPress={() => router.back()} style={{ paddingVertical: 9, paddingRight: 16 }}>
+            <Text style={{ color: palette.cream, fontSize: 15, fontWeight: '700' }}>{t('Geri')}</Text>
+          </Pressable>,
         }}>
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="setup" options={{ title: t("Oyunu Kur") }} />

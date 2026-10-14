@@ -74,7 +74,7 @@ function SetupView({ isTablet, onStart }: { isTablet: boolean; onStart: (names: 
   }
 
   return <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={[s.content, isTablet && s.contentTablet]} keyboardShouldPersistTaps="handled">
-    <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>{t("← Geri")}</Text></Pressable>
+    <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>{t("Geri")}</Text></Pressable>
     <View style={s.heading}>
       <Text style={s.eyebrow}>{t("SKOR TUTUCU")}</Text>
       <Text style={s.title}>{t("Masada oyna, puanı biz tutalım.")}</Text>
@@ -110,7 +110,7 @@ function SheetView({ sheet, isTablet, onEdit, onNewMatch }: { sheet: ScoreSheet;
 
   return <ScrollView contentContainerStyle={[s.content, isTablet && s.contentTablet]} showsVerticalScrollIndicator={false}>
     <View style={s.topBar}>
-      <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>{t("← Geri")}</Text></Pressable>
+      <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>{t("Geri")}</Text></Pressable>
       <Pressable accessibilityRole="button" onPress={onNewMatch}><Text style={s.newMatch}>{t("Yeni maç")}</Text></Pressable>
     </View>
     <View style={s.heading}>
@@ -241,7 +241,7 @@ function EntryModal({ sheet, cell, onClose, onSave }: { sheet: ScoreSheet; cell:
 }
 
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: p.felt },
+  page: { flex: 1, backgroundColor: p.canvas },
   content: { width: '100%', maxWidth: 680, alignSelf: 'center', padding: 24, paddingBottom: 42, gap: 18 },
   contentTablet: { maxWidth: 1060, paddingHorizontal: 36, paddingTop: 30 },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

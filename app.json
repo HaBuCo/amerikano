@@ -2,7 +2,7 @@
   "expo": {
     "name": "Amerikano",
     "slug": "amerikano",
-    "version": "1.1.1",
+    "version": "1.1.3",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "amerikano",
@@ -103,7 +103,15 @@
           "microphonePermission": false
         }
       ],
-      "react-native-fast-tflite"
+      "react-native-fast-tflite",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#D9A441",
+          "defaultChannel": "default"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

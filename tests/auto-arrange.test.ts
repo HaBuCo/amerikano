@@ -136,3 +136,31 @@ test('handles a large duplicate hand and preserves exact opening lengths', () =>
     assert.ok(isValidMeld(order.slice(start, start + 3).map(id => hand.find(card => card.id === id)!), type));
   }
 });
+
+const ids = (order: string[], hand: Card[]) => order.map(id => hand.find(card => card.id === id)!);
+
+test('keeps a card that extends the opening run beside it', () => {
+  const hand = [card('h3', '3', 'hearts'), card('h4', '4', 'hearts'), card('h5', '5', 'hearts'), card('h6', '6', 'hearts'),
+    card('c9', '9', 'clubs'), card('sK', 'K', 'spades'), card('d2', '2', 'diamonds')];
+  const order = autoArrangeHand(hand, { contract: ROUND_CONTRACTS[1], prioritizeContract: true, allowJokersInGroups: false });
+  assert.deepEqual(order.slice(0, 4), ['h3', 'h4', 'h5', 'h6']);
+  assert.equal(new Set(order).size, hand.length);
+});
+
+test('keeps a run draft with a gap together', () => {
+  const hand = [card('c9', '9', 'clubs'), card('d9', '9', 'diamonds'), card('s9', '9', 'spades'),
+    card('h5', '5', 'hearts'), card('dK', 'K', 'diamonds'), card('h6', '6', 'hearts'), card('s2', '2', 'spades'), card('h8', '8', 'hearts')];
+  const order = autoArrangeHand(hand, { contract: ROUND_CONTRACTS[0], prioritizeContract: true, allowJokersInGroups: false });
+  const start = order.indexOf('h5');
+  assert.deepEqual(order.slice(start, start + 3), ['h5', 'h6', 'h8']);
+});
+
+test('puts a forbidden-for-opening joker into the gap of a later draft, not at the end', () => {
+  const hand = [card('c9', '9', 'clubs'), card('d9', '9', 'diamonds'), card('s9', '9', 'spades'),
+    card('c5', '5', 'clubs'), card('c7', '7', 'clubs'), joker('j'), card('sK', 'K', 'spades'), card('h2', '2', 'hearts')];
+  const order = autoArrangeHand(hand, { contract: ROUND_CONTRACTS[0], prioritizeContract: true, allowJokersInGroups: false });
+  assert.deepEqual(new Set(order.slice(0, 3)), new Set(['c9', 'd9', 's9']));
+  const start = order.indexOf('c5');
+  assert.deepEqual(order.slice(start, start + 3), ['c5', 'j', 'c7']);
+  assert.ok(isValidMeld(ids(order.slice(start, start + 3), hand), 'run'));
+});

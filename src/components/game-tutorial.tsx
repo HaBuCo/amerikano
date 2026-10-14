@@ -44,7 +44,7 @@ const steps: Step[] = [
     eyebrow: 'AÇTIKTAN SONRA',
     title: 'Masaya kart işle',
     body: 'Görevini açtıktan sonraki sıralarda oyun hızlanır.',
-    points: ['Yerdeki uygun küt ve serilere kart ekleyebilirsin.', 'En az 3 kartlık yeni küt veya seri açabilirsin.', 'Jokerin tam karşılığını koyup Jokeri eline alabilirsin.'],
+    points: ['Bir karta, ardından parlayan gruba dokunarak kart işleyebilirsin.', 'En az 3 kartlık yeni küt veya seri açabilirsin.', 'Jokerin tam karşılığını koyup Jokeri eline alabilirsin.'],
     tip: 'Görevi açtığın aynı turda ek grup açamaz veya masaya kart işleyemezsin.',
     visual: 'after-open',
   },
@@ -79,11 +79,10 @@ function TutorialVisual({ type, roundCount, claimSeconds }: { type: Visual; roun
   const { t } = useTranslations();
   if (type === 'goal') return <View style={s.scoreVisual}>
     <View style={s.scoreCard}><Text style={s.scoreLabel}>{t("İYİ EL")}</Text><Text style={s.scoreGood}>+0</Text></View>
-    <Text style={s.visualArrow}>→</Text>
     <View style={s.scoreCard}><Text style={s.scoreLabel}>{t("ELDE JOKER")}</Text><Text style={s.scoreBad}>+25</Text></View>
   </View>;
   if (type === 'turn') return <View style={s.flow}>
-    <FlowBox number="1" label={t("KART ÇEK")} /><Text style={s.visualArrow}>›</Text><FlowBox number="2" label={t("OYNA")} /><Text style={s.visualArrow}>›</Text><FlowBox number="3" label={t("KART AT")} />
+    <FlowBox number="1" label={t("KART ÇEK")} /><FlowBox number="2" label={t("OYNA")} /><FlowBox number="3" label={t("KART AT")} />
   </View>;
   if (type === 'melds') return <View style={s.meldVisual}>
     <View style={s.exampleRow}><Text style={s.exampleLabel}>{t("KÜT")}</Text><MiniCard value="7" suit="♥" /><MiniCard value="7" suit="♣" /><MiniCard value="7" suit="♠" /></View>
@@ -94,7 +93,7 @@ function TutorialVisual({ type, roundCount, claimSeconds }: { type: Visual; roun
     <View style={s.trayRow}><View style={s.tray}><Text style={s.trayText}>{t("KÜT · 3/3 ✓")}</Text></View><View style={s.tray}><Text style={s.trayText}>{t("SERİ · 3/3 ✓")}</Text></View></View>
   </View>;
   if (type === 'after-open') return <View style={s.flow}>
-    <FlowBox number="✓" label={t("AÇ")} /><Text style={s.visualArrow}>›</Text><FlowBox number="+" label={t("İŞLE")} /><Text style={s.visualArrow}>›</Text><FlowBox number="3+" label={t("YENİ GRUP")} />
+    <FlowBox number="✓" label={t("AÇ")} /><FlowBox number="+" label={t("İŞLE")} /><FlowBox number="3+" label={t("YENİ GRUP")} />
   </View>;
   if (type === 'claim') return <View style={s.claimVisual}>
     <MiniCard value="9" suit="♠" /><View style={s.claimCopy}><Text style={s.claimTitle}>{t("Açık kartı al?")}</Text><Text style={s.claimPenalty}>{t("+ 1 kapalı ceza kartı")}</Text></View><View style={s.clock}><Text style={s.clockText}>{claimSeconds}</Text></View>
@@ -156,7 +155,7 @@ const s = StyleSheet.create({
   primary: { flex: 2, minHeight: 54, borderRadius: 14, backgroundColor: p.gold, alignItems: 'center', justifyContent: 'center' }, primaryText: { color: p.ink, fontSize: 16, fontWeight: '900' },
   secondary: { flex: 1, minHeight: 54, borderRadius: 14, borderWidth: 1, borderColor: p.line, alignItems: 'center', justifyContent: 'center' }, secondaryText: { color: p.cream, fontSize: 15, fontWeight: '800' },
   miniCard: { width: 43, height: 58, borderRadius: 6, backgroundColor: '#fffaf0', borderWidth: 1, borderColor: '#d5cdbb', padding: 5, alignItems: 'center', justifyContent: 'center' }, miniValue: { color: '#17211c', fontSize: 16, fontWeight: '900' }, miniSuit: { color: '#17211c', fontSize: 16 }, red: { color: '#b83942' },
-  visualArrow: { color: p.gold, fontSize: 24, fontWeight: '700' }, scoreVisual: { flexDirection: 'row', alignItems: 'center', gap: 13 }, scoreCard: { minWidth: 105, borderRadius: 13, padding: 13, alignItems: 'center', backgroundColor: '#0d3327', borderWidth: 1, borderColor: p.line }, scoreLabel: { color: p.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1 }, scoreGood: { color: '#79c99a', fontSize: 28, fontWeight: '900', marginTop: 5 }, scoreBad: { color: '#f08080', fontSize: 28, fontWeight: '900', marginTop: 5 },
+  scoreVisual: { flexDirection: 'row', alignItems: 'center', gap: 13 }, scoreCard: { minWidth: 105, borderRadius: 13, padding: 13, alignItems: 'center', backgroundColor: '#0d3327', borderWidth: 1, borderColor: p.line }, scoreLabel: { color: p.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1 }, scoreGood: { color: '#79c99a', fontSize: 28, fontWeight: '900', marginTop: 5 }, scoreBad: { color: '#f08080', fontSize: 28, fontWeight: '900', marginTop: 5 },
   flow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }, flowBox: { width: 78, minHeight: 68, borderRadius: 12, backgroundColor: '#0d3327', borderWidth: 1, borderColor: p.line, alignItems: 'center', justifyContent: 'center', padding: 7 }, flowNumber: { color: p.gold, fontSize: 20, fontWeight: '900' }, flowLabel: { color: p.cream, fontSize: 9, fontWeight: '900', marginTop: 5, textAlign: 'center' },
   meldVisual: { gap: 10 }, exampleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 }, exampleLabel: { color: p.gold, width: 42, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   contractVisual: { width: '100%', gap: 9, alignItems: 'center' }, contractLabel: { color: p.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1.4 }, contractTitle: { color: p.cream, fontSize: 20, fontWeight: '900' }, trayRow: { flexDirection: 'row', gap: 8, width: '100%' }, tray: { flex: 1, minHeight: 55, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: '#79c99a', backgroundColor: '#3b9b6922', alignItems: 'center', justifyContent: 'center' }, trayText: { color: '#9fe0b8', fontSize: 10, fontWeight: '900' },

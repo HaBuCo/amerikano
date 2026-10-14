@@ -18,6 +18,7 @@ import { useAuth } from '@/network/auth';
 import { useGameSettings } from '@/settings/game-settings';
 import { RemoveAdsCard } from '@/components/remove-ads-card';
 import { LanguagePicker } from '@/components/language-picker';
+import { notificationPermission, requestNotificationPermission } from '@/notifications/notifications';
 
 function SettingRow({ label, detail, value, onPress }: { label: string; detail: string; value: boolean; onPress: () => void }) {
   return <Pressable accessibilityRole="switch" accessibilityState={{ checked: value }} onPress={onPress} style={s.row}>
@@ -43,6 +44,19 @@ export default function SettingsScreen() {
   const [accountOpenFor, setAccountOpenFor] = useState<string | null>(null);
   const accountIdentity = auth.user?.id ?? 'signed-out';
   const [adsPrivacyRequired, setAdsPrivacyRequired] = useState(false);
+
+  const toggleNotifications = async () => {
+    feedback();
+    if (settings.notifications) {
+      updateSettings({ notifications: false });
+      return;
+    }
+    updateSettings({ notifications: true });
+    const permission = await notificationPermission();
+    // The system prompt can only be shown once; after a refusal the phone settings decide.
+    if (permission === 'undetermined') await requestNotificationPermission();
+    else if (permission === 'denied') void Linking.openSettings();
+  };
 
   useEffect(() => {
     let active = true;
@@ -83,6 +97,7 @@ export default function SettingsScreen() {
             <SettingRow label={t("Süre uyarısı")} detail={t("Son 10 saniyede uyarır.")} value={settings.criticalTimer} onPress={() => { feedback(); updateSettings({ criticalTimer: !settings.criticalTimer }); }} />
             <SettingRow label={t("Küçük kartlar")} detail={t("Kalabalık elleri daha sıkı gösterir.")} value={settings.compactCards} onPress={() => { feedback(); updateSettings({ compactCards: !settings.compactCards }); }} />
             <SettingRow label={t("Sürükleme ipuçları")} detail={t("Uygun bırakma alanlarını vurgular.")} value={settings.dragHints} onPress={() => { feedback(); updateSettings({ dragHints: !settings.dragHints }); }} />
+            <SettingRow label={t("Bildirimler")} detail={t("Masa davetleri, bekleyen masalar ve günlük hediye hatırlatmaları.")} value={settings.notifications} onPress={() => void toggleNotifications()} />
             <SettingRow label={t("Tepkiler")} detail={t("Diğer oyuncuların gönderdiği emoji ve hazır yazıları gösterir.")} value={settings.showReactions} onPress={() => { feedback(); updateSettings({ showReactions: !settings.showReactions }); }} />
           </View>
         </View>
@@ -119,7 +134,7 @@ export default function SettingsScreen() {
 }
 
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: p.felt },
+  page: { flex: 1, backgroundColor: p.canvas },
   content: { width: '100%', maxWidth: 620, alignSelf: 'center', paddingHorizontal: 22, paddingTop: 10, paddingBottom: 36 },
   contentTablet: { maxWidth: 1040, paddingHorizontal: 34, paddingTop: 24 },
   backButton: { alignSelf: 'flex-start', minHeight: 42, justifyContent: 'center', paddingRight: 18 },
@@ -129,10 +144,10 @@ const s = StyleSheet.create({
   body: { color: p.muted, fontSize: 14, lineHeight: 21, marginTop: 8, marginBottom: 13 },
   sectionTitle: { color: p.gold, fontSize: 9, letterSpacing: 2, fontWeight: '900', marginTop: 18, marginBottom: 8 },
   settingsGrid: {}, settingsGridTablet: { flexDirection: 'row', gap: 22, alignItems: 'flex-start' }, settingsColumn: { flex: 1, minWidth: 0 },
-  card: { borderRadius: 18, borderWidth: 1, borderColor: p.line, backgroundColor: '#071e154d', overflow: 'hidden' },
-  profileCard: { borderRadius: 18, borderWidth: 1, borderColor: p.line, backgroundColor: '#071e154d', overflow: 'hidden', marginBottom: 15 },
+  card: { borderTopWidth: 1, borderTopColor: p.line },
+  profileCard: { borderTopWidth: 1, borderTopColor: p.line, marginBottom: 15 },
   deletionLink: { marginTop: 10 },
-  row: { minHeight: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 14, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: p.line },
+  row: { minHeight: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 14, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: p.line },
   rowCopy: { flex: 1 },
   rowTitle: { color: p.cream, fontSize: 14, fontWeight: '800' },
   rowDetail: { color: p.muted, fontSize: 10, lineHeight: 15, marginTop: 4 },

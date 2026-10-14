@@ -73,7 +73,7 @@ export default function SetupScreen() {
 
         <View style={styles.bottomBar}>
           <Pressable onPress={start} style={({ pressed }) => [styles.startButton, isTablet && styles.startButtonTablet, pressed && styles.pressed]}>
-            <Text style={styles.startText}>{t("Masayı Kur")}</Text><Text style={styles.arrow}>→</Text>
+            <Text style={styles.startText}>{t("Masayı Kur")}</Text>
           </Pressable>
         </View>
       </View>
@@ -83,7 +83,7 @@ export default function SetupScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  safeArea: { flex: 1, backgroundColor: palette.felt },
+  safeArea: { flex: 1, backgroundColor: palette.canvas },
   content: { width: '100%', maxWidth: 680, alignSelf: 'center', padding: 24, paddingBottom: 32 },
   contentTablet: { maxWidth: 960, paddingHorizontal: 34, paddingTop: 30 },
   eyebrow: { color: palette.gold, fontSize: 11, fontWeight: '900', letterSpacing: 2.4, marginTop: 6 },
@@ -100,15 +100,14 @@ const styles = StyleSheet.create({
   number: { width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(217,164,65,0.16)', alignItems: 'center', justifyContent: 'center' },
   numberText: { color: palette.gold, fontSize: 13, fontWeight: '900' },
   input: { flex: 1, color: palette.cream, fontSize: 16, fontWeight: '700', paddingHorizontal: 12, paddingVertical: 10 },
-  infoCard: { marginTop: 22, borderRadius: 14, padding: 16, backgroundColor: palette.feltLight, flexDirection: 'row', alignItems: 'center', gap: 13 },
+  infoCard: { marginTop: 22, borderTopWidth: 1, borderTopColor: palette.line, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', gap: 13 },
   infoIcon: { color: palette.gold, fontSize: 24 },
   infoCopy: { flex: 1 },
   infoTitle: { color: palette.cream, fontSize: 14, fontWeight: '800' },
   infoText: { color: palette.muted, fontSize: 12, lineHeight: 17, marginTop: 3 },
-  bottomBar: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 14, borderTopWidth: 1, borderTopColor: palette.line, backgroundColor: palette.felt },
-  startButton: { width: '100%', maxWidth: 632, alignSelf: 'center', minHeight: 58, borderRadius: 16, backgroundColor: palette.gold, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20 },
+  bottomBar: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 14, borderTopWidth: 1, borderTopColor: palette.line, backgroundColor: palette.canvas },
+  startButton: { width: '100%', maxWidth: 632, alignSelf: 'center', minHeight: 58, borderRadius: 16, backgroundColor: palette.gold, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
   startButtonTablet: { maxWidth: 892 },
   startText: { color: palette.ink, fontSize: 18, fontWeight: '900' },
-  arrow: { color: palette.ink, fontSize: 25 },
   pressed: { opacity: 0.8 },
 });
