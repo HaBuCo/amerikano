@@ -3,14 +3,15 @@ import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
 import { palette as p } from '@/constants/palette';
 import { ROUND_CONTRACTS } from '@/game/contracts';
+import type { RoundContract } from '@/game/types';
 
-export function RoundIntro({ roundIndex, contractIndex = roundIndex, roundCount = 12, starterName, jokerRestricted = contractIndex < 5, mode = 'detailed', enabled = true, onComplete }: { roundIndex: number; contractIndex?: number; roundCount?: number; starterName: string; jokerRestricted?: boolean; mode?: 'short' | 'detailed' | 'off'; enabled?: boolean; onComplete?: (roundIndex: number) => void }) {
+export function RoundIntro({ roundIndex, contractIndex = roundIndex, contract: suppliedContract, roundCount = 12, starterName, cutBonusName, jokerRestricted = contractIndex < 5, mode = 'detailed', enabled = true, onComplete }: { roundIndex: number; contractIndex?: number; contract?: RoundContract; roundCount?: number; starterName: string; cutBonusName?: string; jokerRestricted?: boolean; mode?: 'short' | 'detailed' | 'off'; enabled?: boolean; onComplete?: (roundIndex: number) => void }) {
   const { t } = useTranslations();
   const [progress] = useState(() => new Animated.Value(0));
   const lastShownRound = useRef<number | null>(null);
   const completeRef = useRef(onComplete);
   useEffect(() => { completeRef.current = onComplete; }, [onComplete]);
-  const contract = ROUND_CONTRACTS[contractIndex];
+  const contract = suppliedContract ?? ROUND_CONTRACTS[contractIndex];
   const useNativeDriver = Platform.OS !== 'web';
 
   useEffect(() => {
@@ -42,7 +43,7 @@ export function RoundIntro({ roundIndex, contractIndex = roundIndex, roundCount 
 
   if (!contract) return null;
   if (mode === 'off') return null;
-  const note = contract.final ? t("Bütün elini tek seferde aç") : jokerRestricted ? t("Açılışta Joker kullanılamaz") : t("Açılışta Joker kullanılabilir");
+  const note = contract.free ? t("Elini tek turda bitirirsen Rummy!") : contract.noDiscard ? t("Bütün kartları seri olarak aç; atış yok") : contract.final ? t("Bütün elini tek seferde aç") : jokerRestricted ? t("Açılışta Joker kullanılamaz") : t("Açılışta Joker kullanılabilir");
   return <Animated.View style={[s.overlay, {
     opacity: progress,
     transform: [
@@ -54,6 +55,7 @@ export function RoundIntro({ roundIndex, contractIndex = roundIndex, roundCount 
     <Text style={s.eyebrow}>{t("YENİ EL")}</Text>
     <Text style={s.number}>{String(roundIndex + 1).padStart(2, '0')} <Text style={s.of}>/ {roundCount}</Text></Text>
     <Text style={s.contract}>{t(contract.title)}</Text>
+    {!!cutBonusName && <Text style={s.cutBonus}>{t("{0} desteyi tam kesti · −50 puan", [cutBonusName])}</Text>}
     {mode === 'detailed' && <View style={s.details}><Text style={s.detail}>{t("Başlayan ·")} {starterName}</Text><Text style={s.dot}>◆</Text><Text style={s.detail}>{note}</Text></View>}
     <View style={s.rule} />
   </Animated.View>;
@@ -64,5 +66,6 @@ const s = StyleSheet.create({
   rule: { width: 54, height: 1, backgroundColor: p.gold, marginVertical: 18 }, eyebrow: { color: p.gold, fontSize: 10, fontWeight: '900', letterSpacing: 4 },
   number: { color: p.cream, fontSize: 62, lineHeight: 69, fontWeight: '300', marginTop: 10 }, of: { color: p.muted, fontSize: 20, fontWeight: '700' },
   contract: { color: p.cream, fontSize: 25, lineHeight: 31, fontWeight: '900', textAlign: 'center', maxWidth: 430, marginTop: 8 },
+  cutBonus: { color: p.gold, fontSize: 13, fontWeight: '900', marginTop: 10, textAlign: 'center' },
   details: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: 9, marginTop: 15 }, detail: { color: p.muted, fontSize: 11, fontWeight: '700' }, dot: { color: p.gold, fontSize: 7 },
 });

@@ -29,6 +29,44 @@ export const ROUND_CONTRACTS: RoundContract[] = [
   { title: 'Tüm eli tek seferde aç', shortTitle: 'Final', parts: [], final: true },
 ];
 
+// Contract rummy as described on pagat.com: sets of three, runs of four.
+export const CONTRACT_RUMMY_CONTRACTS: RoundContract[] = [
+  { title: 'İki üçlü küt', shortTitle: '2 × 3’lü küt', parts: [{ type: 'set', length: 3, count: 2 }] },
+  {
+    title: 'Bir üçlü küt ve bir dörtlü seri',
+    shortTitle: '3’lü küt + 4’lü seri',
+    parts: [
+      { type: 'set', length: 3, count: 1 },
+      { type: 'run', length: 4, count: 1 },
+    ],
+  },
+  { title: 'İki dörtlü seri', shortTitle: '2 × 4’lü seri', parts: [{ type: 'run', length: 4, count: 2 }] },
+  { title: 'Üç üçlü küt', shortTitle: '3 × 3’lü küt', parts: [{ type: 'set', length: 3, count: 3 }] },
+  {
+    title: 'İki üçlü küt ve bir dörtlü seri',
+    shortTitle: '2 × 3’lü küt + 4’lü seri',
+    parts: [
+      { type: 'set', length: 3, count: 2 },
+      { type: 'run', length: 4, count: 1 },
+    ],
+  },
+  {
+    title: 'Bir üçlü küt ve iki dörtlü seri',
+    shortTitle: '3’lü küt + 2 × 4’lü seri',
+    parts: [
+      { type: 'set', length: 3, count: 1 },
+      { type: 'run', length: 4, count: 2 },
+    ],
+  },
+  {
+    title: 'Üç dörtlü seriyle elden bit',
+    shortTitle: 'Final · 3 × 4’lü seri',
+    parts: [{ type: 'run', length: 4, count: 3 }],
+    final: true,
+    noDiscard: true,
+  },
+];
+
 export function contractCardCount(contract: RoundContract) {
   return contract.parts.reduce((total, part) => total + part.length * part.count, 0);
 }

@@ -8,6 +8,7 @@ test('eski online el sonuçlarında eksik işlek cezasını sıfır kabul eder',
   assert.deepEqual(score, {
     penalty: 0,
     playableDiscardPenalty: 0,
+    cutBonus: 0,
     roundPenalty: 0,
     totalBefore: 0,
     totalAfter: 0,

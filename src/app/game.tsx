@@ -14,26 +14,28 @@ import { GameAction } from '@/game/types';
 import { palette as p } from '@/constants/palette';
 import { hasSeenFirstGameTutorial, markFirstGameTutorialSeen } from '@/game/tutorial';
 import { describeDebugAction, formatSingleGameDebug } from '@/game/debug-state';
-import { contractIndexForRound, openingJokerRestricted, roundCountForGame, rulesForGame } from '@/game/game-rules';
+import { contractForRound, contractIndexForRound, openingJokerRestricted, roundCountForGame, rulesForGame, validVariant } from '@/game/game-rules';
 import { parseSingleGameOptions, rulesFromSingleOptions } from '@/game/single-game-options';
 import type { SingleGameOptions } from '@/game/single-game-options';
 import { pickOpponentNames } from '@/game/opponent-names';
+import type { Language } from '@/i18n/translate';
 import { recordSinglePlayerResult } from '@/game/single-stats';
 import { registerRoundOver, showMatchEndInterstitial } from '@/ads/interstitial';
 import { maybeRequestReview } from '@/review/store-review';
+import { MODAL_ORIENTATIONS } from '@/constants/orientation';
 
-function createSingleGame(options: SingleGameOptions) {
-  const names = ["Sen", ...pickOpponentNames(options.playerCount - 1, Math.random, ["Sen"])];
+function createSingleGame(options: SingleGameOptions, language: Language) {
+  const names = ["Sen", ...pickOpponentNames(options.playerCount - 1, Math.random, ["Sen", "You"], language)];
   const game = createGame(names, options.starter === 'you' ? () => 0 : Math.random, rulesFromSingleOptions(options));
   return { ...game, botControlledPlayerIds: game.players.slice(1).map(player => player.id) };
 }
 
 export default function GameScreen() {
-  const { t } = useTranslations();
-  const params = useLocalSearchParams<{ players?: string; mode?: string; config?: string }>();
+  const { t, language } = useTranslations();
+  const params = useLocalSearchParams<{ players?: string; mode?: string; config?: string; variant?: string }>();
   const single = params.mode !== 'local';
   const requestedOptions = parseSingleGameOptions(params.config);
-  const [game, setGame] = useState(() => single ? createSingleGame(requestedOptions) : createGame((params.players || 'Oyuncu 1|Oyuncu 2|Oyuncu 3').split('|').slice(0, 6)));
+  const [game, setGame] = useState(() => single ? createSingleGame(requestedOptions, language) : createGame((params.players || 'Oyuncu 1|Oyuncu 2|Oyuncu 3').split('|').slice(0, 6), Math.random, { variant: validVariant(params.variant) }));
   const [visible, setVisible] = useState(single);
   const [error, setError] = useState('');
   const [savedGame, setSavedGame] = useState<typeof game | null>(null);
@@ -46,6 +48,8 @@ export default function GameScreen() {
   const resultRecorded = useRef(false);
   const adPending = useRef(false);
   const current = game.players.find(p => p.id === actingPlayerId(game))!;
+  // A resumed game keeps its own variant; the saved game is only known after loading.
+  const variant = rulesForGame(savedGame ?? game).variant;
   const viewerId = single ? game.players[0].id : current.id;
   const appendDebugEvent = useCallback((message: string) => {
     setDebugEvents(events => [message, ...events].slice(0, 16));
@@ -68,13 +72,13 @@ export default function GameScreen() {
   useEffect(() => {
     if (!single) return;
     let active = true;
-    void hasSeenFirstGameTutorial().then((seen) => {
+    void hasSeenFirstGameTutorial(variant).then((seen) => {
       if (!active) return;
       setTutorialOpen(!seen);
       setTutorialChecked(true);
     });
     return () => { active = false; };
-  }, [single]);
+  }, [single, variant]);
   useEffect(() => {
     if (!single || loadState !== 'ready') return;
     if (game.phase === 'game-over') {
@@ -126,7 +130,7 @@ export default function GameScreen() {
   }, [debugText, loadState, single]);
   function finishTutorial() {
     setTutorialOpen(false);
-    void markFirstGameTutorialSeen();
+    void markFirstGameTutorialSeen(variant);
   }
   function startFresh() {
     router.replace('/single-setup');
@@ -172,7 +176,7 @@ export default function GameScreen() {
         </> : <>
           <Text style={s.eyebrow}>{t("YARIM KALAN OYUN")}</Text>
           <Text style={s.resumeTitle}>{t("Masadaki yerin duruyor.")}</Text>
-          <Text style={s.copy}>{t("El")} {savedGame ? savedGame.roundIndex + 1 : 1} / {savedGame ? roundCountForGame(savedGame) : rulesFromSingleOptions(requestedOptions).contractSequence.length} {' '}{t("· Kaldığın hamleden devam edebilirsin.")}</Text>
+          <Text style={s.copy}>{t("El")} {savedGame ? savedGame.roundIndex + 1 : 1} / {roundCountForGame({ rules: savedGame?.rules ?? rulesFromSingleOptions(requestedOptions) })} {' '}{t("· Kaldığın hamleden devam edebilirsin.")}</Text>
           <Pressable accessibilityRole="button" onPress={resume} style={s.button}><Text style={s.buttonText}>{t("Oyuna devam et")}</Text></Pressable>
           <Pressable accessibilityRole="button" onPress={startFresh} style={s.outlineButton}><Text style={s.outlineText}>{t("Yeni oyun başlat")}</Text></Pressable>
           <Pressable accessibilityRole="button" onPress={() => router.replace('/')}><Text style={s.menuText}>{t("Ana menüye dön")}</Text></Pressable>
@@ -185,9 +189,9 @@ export default function GameScreen() {
   if (single) view.players = view.players.map(player => player.id === viewerId ? { ...player, name: t('Sen') } : player);
   return <View style={s.gameRoot}>
     <GameTable key={game.roundIndex + ':' + viewerId} game={view} viewerId={viewerId} modeLabel={single ? "TEK OYUNCULU" : "AYNI CİHAZDA"} blocked={single && (tutorialOpen || introFinishedRound !== game.roundIndex)} onAction={act} error={error} debugText={single ? debugText : undefined} onOpenTutorial={single ? () => setTutorialOpen(true) : undefined} canUndo={Boolean(undoGame)} onUndo={single && rulesForGame(game).undoEnabled ? () => { if (undoGame) { setGame(undoGame); setUndoGame(null); setError(''); appendDebugEvent(t("Son hamle geri alındı.")); } } : undefined} onExit={() => { if (game.phase === 'game-over') void showMatchEndInterstitial().then(() => router.replace('/')); else router.replace('/'); }} />
-    <RoundIntro roundIndex={game.roundIndex} contractIndex={contractIndexForRound(game)} roundCount={roundCountForGame(game)} starterName={view.players[game.startingPlayerIndex]?.name ?? t("Oyuncu")} jokerRestricted={openingJokerRestricted(game)} mode={rulesForGame(game).roundIntro} enabled={single ? tutorialChecked && !tutorialOpen : visible} onComplete={single ? setIntroFinishedRound : undefined} />
-    {single && <GameTutorial visible={tutorialOpen} onDone={finishTutorial} roundCount={roundCountForGame(game)} claimsEnabled={rulesForGame(game).claimsEnabled && game.players.length > 2} claimSeconds={rulesForGame(game).claimTimeoutMs / 1000} jokerRestrictionRounds={rulesForGame(game).jokerOpeningRestrictionRounds} playableDiscardPenalty={rulesForGame(game).playableDiscardPenalty} />}
-    <Modal visible={!single && !visible && !['round-over', 'game-over'].includes(game.phase)} animationType="none" onRequestClose={() => router.replace('/')}>
+    <RoundIntro roundIndex={game.roundIndex} contractIndex={contractIndexForRound(game)} contract={contractForRound(game)} roundCount={roundCountForGame(game)} starterName={view.players[game.startingPlayerIndex]?.name ?? t("Oyuncu")} cutBonusName={view.players.find(player => player.id === game.cutBonus?.playerId)?.name} jokerRestricted={openingJokerRestricted(game)} mode={rulesForGame(game).roundIntro} enabled={single ? tutorialChecked && !tutorialOpen : visible} onComplete={single ? setIntroFinishedRound : undefined} />
+    {single && <GameTutorial visible={tutorialOpen} onDone={finishTutorial} variant={variant} openingMinPoints={rulesForGame(game).openingMinPoints} roundCount={roundCountForGame(game)} claimsEnabled={rulesForGame(game).claimsEnabled && game.players.length > 2} claimSeconds={rulesForGame(game).claimTimeoutMs / 1000} jokerRestrictionRounds={rulesForGame(game).jokerOpeningRestrictionRounds} playableDiscardPenalty={rulesForGame(game).playableDiscardPenalty} />}
+    <Modal supportedOrientations={MODAL_ORIENTATIONS} visible={!single && !visible && !['round-over', 'game-over'].includes(game.phase)} animationType="none" onRequestClose={() => router.replace('/')}>
       <View style={s.curtain}><Text style={s.eyebrow}>{t("TELEFONU VER")}</Text><Text style={s.name}>{current.name}</Text><Text style={s.copy}>{t("Hazır olduğunda kartlarını göster.")}</Text><Pressable accessibilityRole="button" onPress={() => setVisible(true)} style={s.button}><Text style={s.buttonText}>{t("Elimi göster")}</Text></Pressable></View>
     </Modal>
   </View>;

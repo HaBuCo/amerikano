@@ -56,30 +56,30 @@ try {
   assert.equal(await balance(0), 1000);
 
   await invoke(0, { type: 'claim-daily' });
-  assert.equal(await balance(0), 1500);
+  assert.equal(await balance(0), 1100);
   await invoke(0, { type: 'claim-daily' });
-  assert.equal(await balance(0), 1500);
-  await rejects(0, { type: 'create', name: 'Coin test', entryFee: 2000, economyVersion: 1 }, 'yeterli coinin yok');
-  for (const fee of [50, 250, 500, 1000]) {
-    const trial = await invoke(0, { type: 'create', name: 'Coin test', entryFee: fee, economyVersion: 1 });
+  assert.equal(await balance(0), 1100);
+  await rejects(0, { type: 'create', name: 'Coin test', entryFee: 2500, economyVersion: 2 }, 'yeterli coinin yok');
+  for (const fee of [100, 250, 500, 1000]) {
+    const trial = await invoke(0, { type: 'create', name: 'Coin test', entryFee: fee, economyVersion: 2 });
     roomIds[0] = trial.roomId;
     assert.equal(trial.room.entryFee, fee);
     await forfeitOrLeave(0);
   }
-  const queued = await invoke(0, { type: 'matchmake', name: 'Coin test', entryFee: 250, economyVersion: 1 });
+  const queued = await invoke(0, { type: 'matchmake', name: 'Coin test', entryFee: 250, economyVersion: 2 });
   roomIds[0] = queued.roomId;
   assert.equal(queued.room.entryFee, 250);
   await forfeitOrLeave(0);
-  assert.equal(await balance(0), 1500, 'waiting rooms must not charge coins');
+  assert.equal(await balance(0), 1100, 'waiting rooms must not charge coins');
 
-  const created = await invoke(0, { type: 'create', name: 'Coin test', entryFee: 100, economyVersion: 1 });
+  const created = await invoke(0, { type: 'create', name: 'Coin test', entryFee: 100, economyVersion: 2 });
   roomIds[0] = created.roomId;
   assert.equal(created.room.entryFee, 100);
   await rejects(1, { type: 'join', name: 'Coin test', code: created.room.code }, 'uygulamayı güncelle');
-  const joined = await invoke(1, { type: 'join', name: 'Coin test', code: created.room.code, economyVersion: 1 });
+  const joined = await invoke(1, { type: 'join', name: 'Coin test', code: created.room.code, economyVersion: 2 });
   roomIds[1] = joined.roomId;
   assert.equal(joined.room.entryFee, 100);
-  assert.equal(await balance(0), 1500, 'entry should not be charged before start');
+  assert.equal(await balance(0), 1100, 'entry should not be charged before start');
   assert.equal(await balance(1), 1000);
 
   await invoke(0, { type: 'add-bot', roomId: roomIds[0] });
@@ -88,15 +88,15 @@ try {
   const began = await invoke(0, { type: 'start', roomId: roomIds[0] });
   started = true;
   assert.equal(began.room.coinPot, 200);
-  assert.equal(await balance(0), 1400);
+  assert.equal(await balance(0), 1000);
   assert.equal(await balance(1), 900);
 
   // Forfeiting both seats removes the temporary room and returns unsettled stakes.
   await forfeitOrLeave(1);
   await forfeitOrLeave(0);
-  assert.equal(await balance(0), 1500);
+  assert.equal(await balance(0), 1100);
   assert.equal(await balance(1), 1000);
-  console.log(JSON.stringify({ opening: 1000, dailyGift: 500, supportedFees: [50, 100, 250, 500, 1000, 2000], entryFee: 100,
+  console.log(JSON.stringify({ opening: 1000, dailyGift: 100, supportedFees: [50, 100, 250, 500, 1000, 2000], entryFee: 100,
     pot: 200, directWalletWriteBlocked: true, abandonedRoomRefunded: true }));
 } finally {
   await forfeitOrLeave(1);

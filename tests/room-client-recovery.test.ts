@@ -63,6 +63,7 @@ function fixture(handlers: { fetch: () => Promise<Result>; action?: () => Promis
       if (name === 'react') return { useSyncExternalStore: (_subscribe: unknown, get: () => unknown) => get() };
       if (name === 'react-native') return { AppState: { addEventListener: () => {} } };
       if (name === './supabase') return { isSupabaseConfigured: true, supabase };
+      if (name === '../game/coin-economy') return { ECONOMY_VERSION: 2 };
       if (name === '../game/quick-room') return { localRoomDeadline: (value: unknown) => value };
       if (name === '../game/reactions') return { cooldownPassed: () => true, reactionById: () => true };
       if (name === './latency') return { recordRoomLatency: () => {} };

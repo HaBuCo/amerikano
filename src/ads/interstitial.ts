@@ -3,7 +3,7 @@ import { ADS_ENABLED, INTERSTITIAL_AD_UNIT_ID } from './config';
 import { areAdsAllowed, subscribeAdsAllowed } from './mobile-ads';
 import { hasRemovedAds } from '@/purchases/purchases';
 import { reportAdError } from './diagnostics';
-import { AppState } from 'react-native';
+import { AppState, Dimensions } from 'react-native';
 
 // El sonlarında oyunu boğmamak için reklamlar aralıklandırılır: her ROUND_INTERVAL
 // elde bir, art arda iki reklam arasında en az MIN_GAP_MS geçmesi şartıyla gösterilir.
@@ -17,6 +17,27 @@ let roundsSinceAd = 0;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let failures = 0;
 let disposeCurrent: (() => void) | null = null;
+// Google gösterir reklamı yüklendiği yönde; dikeyde yüklenen reklam yatay oyunu
+// dikeye çevirir. Bu yüzden ekran yönü değişince bekleyen reklam yeniden yüklenir.
+type Orientation = 'portrait' | 'landscape';
+let loadedFor: Orientation | null = null;
+let reorientTimer: ReturnType<typeof setTimeout> | null = null;
+
+function currentOrientation(): Orientation {
+  const { width, height } = Dimensions.get('window');
+  return width > height ? 'landscape' : 'portrait';
+}
+
+Dimensions.addEventListener('change', () => {
+  if (reorientTimer) clearTimeout(reorientTimer);
+  // Hızlı döndürmelerde her ara yön için istek atılmasın.
+  reorientTimer = setTimeout(() => {
+    reorientTimer = null;
+    if (!interstitial || showing || loadedFor === currentOrientation()) return;
+    disposeCurrent?.();
+    loadNext();
+  }, 1_500);
+});
 
 subscribeAdsAllowed((allowed) => {
   if (allowed) return;
@@ -38,6 +59,7 @@ function scheduleRetry() {
 function loadNext() {
   if (!ADS_ENABLED || !areAdsAllowed() || hasRemovedAds()) return;
   loaded = false;
+  loadedFor = currentOrientation();
   const ad = InterstitialAd.createForAdRequest(INTERSTITIAL_AD_UNIT_ID);
   interstitial = ad;
   const cleanup = () => {
@@ -75,6 +97,8 @@ let showing: Promise<void> | null = null;
  */
 function present(): Promise<void> | null {
   if (!areAdsAllowed() || hasRemovedAds() || !interstitial || !loaded) return null;
+  // Yanlış yönde yüklenmiş reklam gösterilmez; yeni yönde yüklenene kadar beklenir.
+  if (loadedFor !== currentOrientation()) return null;
   const ad = interstitial;
   const previousShownAt = lastShownAt;
   const shownAt = Date.now();

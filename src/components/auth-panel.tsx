@@ -4,6 +4,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Linking from 'expo-linking';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { AppIcon } from '@/components/app-icon';
 import { palette as p } from '@/constants/palette';
 import {
   clearAuthError,
@@ -105,12 +106,6 @@ export function AuthPanel({ entry = false, onClose }: { entry?: boolean; onClose
       title={activeMode === 'forgot' ? t("Parolanı yenile.") : activeMode === 'new-password' ? t("Yeni parolanı belirle.") : entry ? t("Nasıl devam etmek istersin?") : t("İlerlemeni güvenceye al.")}
       onClose={onClose}
     />
-    {entry && (activeMode === 'sign-in' || activeMode === 'sign-up') && <>
-      <Pressable accessibilityRole="button" disabled={auth.busy} style={[s.guestButton, auth.busy && s.disabled]} onPress={() => void continueAnonymously()}>
-        <View style={s.guestCopy}><Text style={s.guestTitle}>{t("Anonim olarak devam et")}</Text><Text style={s.guestCaption}>{t("Hesap oluşturmadan hemen oyna")}</Text></View>
-      </Pressable>
-      <View style={s.orRow}><View style={s.orLine} /><Text style={s.orText}>{t("veya hesabını kullan")}</Text><View style={s.orLine} /></View>
-    </>}
     {(activeMode === 'sign-in' || activeMode === 'sign-up') && <>
       <View style={s.tabs}>
         <Pressable accessibilityRole="tab" accessibilityState={{ selected: activeMode === 'sign-in' }} onPress={() => changeMode('sign-in')} style={[s.tab, activeMode === 'sign-in' && s.tabActive]}>
@@ -187,6 +182,12 @@ export function AuthPanel({ entry = false, onClose }: { entry?: boolean; onClose
     </>}
 
     <Messages />
+
+    {entry && (activeMode === 'sign-in' || activeMode === 'sign-up') && (
+      <Pressable accessibilityRole="button" disabled={auth.busy} hitSlop={8} style={[s.guestLink, auth.busy && s.disabled]} onPress={() => void continueAnonymously()}>
+        <Text style={s.guestLinkText}>{t("Anonim olarak devam et")}</Text>
+      </Pressable>
+    )}
   </View>;
 }
 
@@ -194,7 +195,9 @@ function PanelHeader({ eyebrow, title, onClose }: { eyebrow: string; title: stri
   const { t } = useTranslations();
   return <View style={s.header}>
     <View style={s.headerCopy}><Text style={s.eyebrow}>{eyebrow}</Text><Text style={s.title}>{title}</Text></View>
-    {!!onClose && <Pressable accessibilityRole="button" accessibilityLabel={t("Kapat")} onPress={onClose} style={s.close}><Text style={s.closeText}>{t("Kapat")}</Text></Pressable>}
+    {!!onClose && <Pressable accessibilityRole="button" accessibilityLabel={t("Kapat")} onPress={onClose} hitSlop={8} style={({ pressed }) => [s.close, pressed && s.pressed]}>
+      <AppIcon name="close" size={18} color={p.cream} />
+    </Pressable>}
   </View>;
 }
 
@@ -211,36 +214,34 @@ const s = StyleSheet.create({
   panel: { width: '100%', gap: 13 },
   header: { flexDirection: 'row', alignItems: 'flex-start', gap: 16 },
   headerCopy: { flex: 1, gap: 7 },
-  eyebrow: { color: p.gold, letterSpacing: 2.4, fontSize: 10, fontWeight: '900' },
-  title: { color: p.cream, fontSize: 28, lineHeight: 33, fontWeight: '900', letterSpacing: -0.7 },
-  close: { minHeight: 38, borderRadius: 19, borderWidth: 1, borderColor: p.line, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 13 },
-  closeText: { color: p.cream, fontSize: 11, fontWeight: '800' },
+  eyebrow: { color: p.gold, letterSpacing: 2, fontSize: 10, fontWeight: '900' },
+  title: { color: p.cream, fontSize: 26, lineHeight: 31, fontWeight: '900', letterSpacing: -0.6 },
+  close: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: p.line, backgroundColor: '#ffffff0d', alignItems: 'center', justifyContent: 'center' },
+  pressed: { opacity: 0.82, transform: [{ scale: 0.97 }] },
   body: { color: p.muted, fontSize: 14, lineHeight: 20 },
-  tabs: { flexDirection: 'row', padding: 4, borderRadius: 14, backgroundColor: '#071e1566', borderWidth: 1, borderColor: p.line },
-  tab: { flex: 1, minHeight: 42, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  tabs: { flexDirection: 'row', padding: 3, borderRadius: 12, backgroundColor: '#0000002e' },
+  tab: { flex: 1, minHeight: 40, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   tabActive: { backgroundColor: p.cream },
   tabText: { color: p.muted, fontSize: 14, fontWeight: '800' },
   tabTextActive: { color: p.ink },
   socialRow: { gap: 9 },
   appleButton: { width: '100%', height: 52 },
-  googleButton: { minHeight: 52, borderRadius: 13, backgroundColor: '#fff', flexDirection: 'row', gap: 12, alignItems: 'center', justifyContent: 'center' },
+  googleButton: { minHeight: 52, borderRadius: 14, backgroundColor: '#fff', flexDirection: 'row', gap: 12, alignItems: 'center', justifyContent: 'center' },
   googleText: { color: '#1f1f1f', fontSize: 15, fontWeight: '700' },
   orRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 2 },
   orLine: { flex: 1, height: 1, backgroundColor: p.line },
   orText: { color: p.muted, fontSize: 11 },
   label: { color: p.gold, fontSize: 9, letterSpacing: 1.8, fontWeight: '900', marginTop: 2 },
-  input: { paddingHorizontal: 16, minHeight: 52, borderRadius: 13, borderWidth: 1, borderColor: p.line, color: p.cream, backgroundColor: '#ffffff09', fontSize: 16 },
-  primary: { borderRadius: 13, minHeight: 54, alignItems: 'center', justifyContent: 'center', backgroundColor: p.gold, marginTop: 2 },
+  input: { paddingHorizontal: 16, minHeight: 52, borderRadius: 14, borderWidth: 1, borderColor: p.line, color: p.cream, backgroundColor: '#0000001f', fontSize: 16 },
+  primary: { borderRadius: 16, minHeight: 56, alignItems: 'center', justifyContent: 'center', backgroundColor: p.gold, marginTop: 2 },
   primaryText: { color: p.ink, fontWeight: '900', fontSize: 16 },
-  secondary: { borderRadius: 13, minHeight: 52, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: p.line },
+  secondary: { borderRadius: 14, minHeight: 50, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: p.line, backgroundColor: '#ffffff0d' },
   white: { color: p.cream, fontSize: 15, fontWeight: '800' },
   link: { color: p.gold, fontSize: 13, paddingVertical: 5, textAlign: 'center', fontWeight: '700' },
   divider: { height: 1, backgroundColor: p.line, marginVertical: 2 },
-  guestButton: { minHeight: 68, borderRadius: 15, borderWidth: 1, borderColor: '#d9a44166', backgroundColor: '#d9a44112', justifyContent: 'center', paddingHorizontal: 16 },
-  guestCopy: { justifyContent: 'center' },
-  guestTitle: { color: p.cream, fontSize: 15, fontWeight: '900' },
-  guestCaption: { color: p.muted, fontSize: 11, marginTop: 4 },
-  member: { padding: 14, borderRadius: 15, borderWidth: 1, borderColor: p.line, backgroundColor: '#ffffff08', flexDirection: 'row', alignItems: 'center', gap: 12 },
+  guestLink: { alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 10, marginTop: 4 },
+  guestLinkText: { color: p.muted, fontSize: 12, opacity: 0.75 },
+  member: { padding: 14, borderRadius: 18, borderWidth: 1, borderColor: p.line, backgroundColor: p.surface, flexDirection: 'row', alignItems: 'center', gap: 12 },
   memberCopy: { flex: 1, gap: 3 },
   savedBadge: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5, backgroundColor: '#2d8b6533' },
   savedBadgeText: { color: '#9bd5b5', fontSize: 8, letterSpacing: 1.2, fontWeight: '900' },
@@ -250,7 +251,7 @@ const s = StyleSheet.create({
   validation: { color: '#f0aaa4', fontSize: 12 },
   disabled: { opacity: 0.42 },
   deleteLink: { color: '#f0aaa4', fontSize: 13, paddingVertical: 8, textAlign: 'center' },
-  dangerPanel: { borderRadius: 14, borderWidth: 1, borderColor: '#a84b4b88', padding: 15, gap: 11 },
+  dangerPanel: { borderRadius: 18, borderWidth: 1, borderColor: '#a84b4b88', backgroundColor: '#a83e3e14', padding: 15, gap: 11 },
   dangerTitle: { color: '#f4b1ac', fontSize: 16, fontWeight: '800' },
   deleteButton: { borderRadius: 12, minHeight: 50, alignItems: 'center', justifyContent: 'center', backgroundColor: '#a83e3e' },
   deleteButtonText: { color: '#fff', fontWeight: '800', fontSize: 14 },

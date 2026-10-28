@@ -1,13 +1,14 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { actingPlayerId, applyAction, armTurnTimer, cedeSeatToBot, expireTurn, explainInvalidAction, MIN_GAME_PLAYERS, reclaimBotSeat, resetMissedTurns, RULESET_ID } from '../../../src/game/engine.ts';
+import { actingPlayerId, applyAction, armTurnTimer, cedeSeatToBot, expireTurn, explainInvalidAction, MIN_GAME_PLAYERS, reclaimBotSeat, resetMissedTurns, rulesetForVariant, variantForRuleset } from '../../../src/game/engine.ts';
+import { validVariant } from '../../../src/game/game-rules.ts';
 import { createSeatedRoomGame } from '../../../src/game/room-game.ts';
 import { QUICK_ROOM_MINIMUM, QUICK_ROOM_BOT_WAIT_MS, quickRoomStartsAt } from '../../../src/game/quick-room.ts';
 import { botAction } from '../../../src/game/bot.ts';
 import { projectGame } from '../../../src/game/view.ts';
-import type { GameAction, GameState } from '../../../src/game/types.ts';
+import type { GameAction, GameState, GameVariant } from '../../../src/game/types.ts';
 import { enforceRateLimit, publicErrorMessage } from '../_shared/guard.ts';
 import { sendPush } from '../_shared/push.ts';
-import { ROOM_TIERS } from '../../../src/game/coin-economy.ts';
+import { ECONOMY_VERSION, isRoomEntryFee, RESCUE_BELOW, RESCUE_COINS, ROOM_TIERS } from '../../../src/game/coin-economy.ts';
 
 const ENGLISH_TIER_NAMES: Record<string, string> = {
   'Başlangıç': 'Starter', Bronz: 'Bronze', 'Gümüş': 'Silver', 'Altın': 'Gold', 'Zümrüt': 'Emerald', Kraliyet: 'Royal',
@@ -20,15 +21,17 @@ const corsHeaders = {
 
 type Command =
   | { type: 'claim-daily' }
-  | { type: 'activity' }
-  | { type: 'create'; name: string; entryFee?: number; economyVersion?: number }
-  | { type: 'join'; code: string; name: string; economyVersion?: number }
-  | { type: 'matchmake'; name: string; entryFee?: number; economyVersion?: number }
+  | { type: 'claim-rescue' }
+  // Clients without a variant predate classic rummy and always play Amerikano.
+  | { type: 'activity'; variant?: GameVariant }
+  | { type: 'create'; name: string; entryFee?: number; economyVersion?: number; variant?: GameVariant }
+  | { type: 'join'; code: string; name: string; economyVersion?: number; variants?: GameVariant[] }
+  | { type: 'matchmake'; name: string; entryFee?: number; economyVersion?: number; variant?: GameVariant }
   | { type: 'fetch'; roomId: string }
   | { type: 'ready'; roomId: string; ready: boolean }
-  | { type: 'add-bot'; roomId: string }
+  | { type: 'add-bot'; roomId: string; language?: string }
   | { type: 'remove-bot'; roomId: string }
-  | { type: 'fill-bots'; roomId: string }
+  | { type: 'fill-bots'; roomId: string; language?: string }
   | { type: 'start'; roomId: string }
   | { type: 'rematch'; roomId: string }
   | { type: 'reclaim'; roomId: string }
@@ -43,6 +46,11 @@ function json(body: unknown, status = 200) {
   });
 }
 
+// Bots take names in the language of the player who seats them.
+function botNameLanguage(value: unknown) {
+  return value === 'en' ? 'en' : 'tr';
+}
+
 function playerName(value: unknown) {
   if (typeof value !== 'string' || !value.trim() || value.trim().length > 20) {
     throw new Error('1–20 karakterlik bir ad yaz.');
@@ -51,8 +59,10 @@ function playerName(value: unknown) {
 }
 
 function entryFee(value: unknown, version: unknown) {
-  if (version !== 1) return 0;
-  if (value === 50 || value === 100 || value === 250 || value === 500 || value === 1000 || value === 2000) return value;
+  // Clients without a version predate paid tables and still get free rooms.
+  if (version === undefined) return 0;
+  if (version !== ECONOMY_VERSION) throw new Error('Ücretli masa için uygulamayı güncelle.');
+  if (isRoomEntryFee(value)) return value;
   throw new Error('Geçersiz masa ücreti.');
 }
 
@@ -81,8 +91,8 @@ function advanceBots(state: GameState) {
   return current;
 }
 
-function createRoomGame(members: { id: string; name: string; isBot: boolean }[]) {
-  const game = createSeatedRoomGame(members, secureRandom);
+function createRoomGame(members: { id: string; name: string; isBot: boolean }[], variant: GameVariant) {
+  const game = createSeatedRoomGame(members, secureRandom, { variant });
   return advanceBots(armTurnTimer(game));
 }
 
@@ -139,7 +149,7 @@ Deno.serve(async (request) => {
         // The FK is one-to-one: PostgREST reads revision and private state in a
         // single database snapshot. Separate reads can pair an old revision with
         // a newly committed hand, causing rejected moves and apparent freezes.
-        .select('id, code, host_id, revision, status, visibility, updated_at, quick_three_since, quick_four_since, entry_fee, coin_pot, coin_match_no, result_recorded, room_states(state)')
+        .select('id, code, host_id, ruleset, revision, status, visibility, updated_at, quick_three_since, quick_four_since, entry_fee, coin_pot, coin_match_no, result_recorded, room_states(state)')
         .eq('id', roomId)
         .gt('expires_at', now)
         .maybeSingle();
@@ -229,7 +239,7 @@ Deno.serve(async (request) => {
             revision: roomRecord.revision + 1,
             updated_at: new Date().toISOString(),
           }).eq('id', roomId).eq('revision', roomRecord.revision)
-            .select('id, code, host_id, revision, status, visibility, updated_at, quick_three_since, quick_four_since, entry_fee, coin_pot, coin_match_no, result_recorded').maybeSingle();
+            .select('id, code, host_id, ruleset, revision, status, visibility, updated_at, quick_three_since, quick_four_since, entry_fee, coin_pot, coin_match_no, result_recorded').maybeSingle();
           if (transferred.data) roomRecord = transferred.data;
         }
       }
@@ -252,6 +262,7 @@ Deno.serve(async (request) => {
         hostId: roomRecord.host_id,
         status: roomRecord.status,
         visibility: roomRecord.visibility ?? 'private',
+        variant: variantForRuleset(roomRecord.ruleset),
         you: user.id,
         revision: roomRecord.revision,
         entryFee: roomRecord.entry_fee,
@@ -303,7 +314,7 @@ Deno.serve(async (request) => {
       const activeMembers = currentView.members.filter((member) => member.connected);
       if (activeMembers.length < QUICK_ROOM_MINIMUM) return false;
       if (currentView.entryFee > 0 && activeMembers.filter(member => !member.isBot).length < 2) return false;
-      const game = createRoomGame(activeMembers);
+      const game = createRoomGame(activeMembers, currentView.variant);
       const commit = await admin.rpc('commit_room_state', {
         target_room: targetRoomId,
         expected_revision: currentView.revision,
@@ -335,15 +346,28 @@ Deno.serve(async (request) => {
 
     if (command.type === 'activity') {
       await enforceRateLimit(admin, user.id, 'room-activity', 60, 600);
-      const { data, error } = await admin.rpc('quick_room_activity', { p_ruleset: RULESET_ID });
+      const ruleset = rulesetForVariant(validVariant(command.variant));
+      const [{ data, error }, highlights] = await Promise.all([
+        admin.rpc('quick_room_activity', { p_ruleset: ruleset }),
+        admin.rpc('table_highlights', { p_ruleset: ruleset }),
+      ]);
       if (error) throw error;
-      return reply({ activity: data ?? [] });
+      // Highlights are a nicety; the table counts still load without them.
+      return reply({ activity: data ?? [], highlights: highlights.error ? null : highlights.data });
     }
 
     if (command.type === 'claim-daily') {
       const result = await admin.rpc('claim_daily_coins', { p_user_id: user.id });
       if (result.error) throw result.error;
       return reply({ coins: result.data as number });
+    }
+
+    if (command.type === 'claim-rescue') {
+      await enforceRateLimit(admin, user.id, 'claim-rescue', 5, 600);
+      const result = await admin.rpc('claim_rescue_coins', { p_user_id: user.id, p_coins: RESCUE_COINS, p_below: RESCUE_BELOW });
+      if (result.error) throw result.error;
+      if (result.data === null) throw new Error("Kurtarma coin'i yalnızca bakiye bitince, günde bir kez alınır.");
+      return reply({ coins: Number(result.data), reward: RESCUE_COINS });
     }
 
     if (command.type === 'create') {
@@ -354,7 +378,7 @@ Deno.serve(async (request) => {
       let roomId: string | null = null;
       for (let attempt = 0; attempt < 8 && !roomId; attempt += 1) {
         const result = await admin.rpc('create_coin_room', {
-          p_code: roomCode(), p_user_id: user.id, p_name: name, p_ruleset: RULESET_ID, p_entry_fee: fee,
+          p_code: roomCode(), p_user_id: user.id, p_name: name, p_ruleset: rulesetForVariant(validVariant(command.variant)), p_entry_fee: fee,
         });
         if (!result.error) roomId = result.data as string;
         else if (result.error.message.includes('insufficient coins')) throw new Error('Bu masa için yeterli coinin yok.');
@@ -369,10 +393,15 @@ Deno.serve(async (request) => {
       await enforceRateLimit(admin, user.id, 'room-join', 20, 600);
       await admin.from('rooms').delete().lt('expires_at', new Date().toISOString());
       const { data: invitedRoom, error: invitedError } = await admin.from('rooms')
-        .select('entry_fee').eq('code', String(command.code || '').toUpperCase()).maybeSingle();
+        .select('entry_fee, ruleset').eq('code', String(command.code || '').toUpperCase()).maybeSingle();
       if (invitedError) throw invitedError;
+      if (invitedRoom && !(command.variants ?? ['amerikano']).includes(variantForRuleset(invitedRoom.ruleset))) {
+        throw new Error(variantForRuleset(invitedRoom.ruleset) === 'contract'
+          ? 'Bu masa Contract Rummy oynuyor; katılmak için uygulamayı güncelle.'
+          : 'Bu masa Klasik Rummy oynuyor; katılmak için uygulamayı güncelle.');
+      }
       if (invitedRoom?.entry_fee > 0) {
-        if (command.economyVersion !== 1) throw new Error('Ücretli masa için uygulamayı güncelle.');
+        if (command.economyVersion !== ECONOMY_VERSION) throw new Error('Ücretli masa için uygulamayı güncelle.');
         const { data: wallet } = await admin.from('coin_wallets').select('balance').eq('user_id', user.id).maybeSingle();
         if (!wallet || Number(wallet.balance) < invitedRoom.entry_fee) throw new Error('Bu masa için yeterli coinin yok.');
       }
@@ -398,7 +427,7 @@ Deno.serve(async (request) => {
       let targetRoomId: string | null = null;
       for (let attempt = 0; attempt < 8 && !targetRoomId; attempt += 1) {
         const result = await admin.rpc('matchmake_coin_room', {
-          p_code: roomCode(), p_user_id: user.id, p_name: await accountName(), p_ruleset: RULESET_ID, p_entry_fee: fee,
+          p_code: roomCode(), p_user_id: user.id, p_name: await accountName(), p_ruleset: rulesetForVariant(validVariant(command.variant)), p_entry_fee: fee,
         });
         if (!result.error) targetRoomId = result.data as string;
         else if (result.error.message.includes('insufficient coins')) throw new Error('Bu masa için yeterli coinin yok.');
@@ -464,7 +493,9 @@ Deno.serve(async (request) => {
       if (fillView.entryFee > 0 && fillView.members.filter(member => !member.isBot && member.connected).length < 2) {
         throw new Error('Ücretli masada bot eklemek için en az 2 gerçek oyuncu gerekli.');
       }
-      const result = await admin.rpc('fill_quick_room_with_bots', { p_room_id: command.roomId, p_user_id: user.id });
+      const result = await admin.rpc('fill_quick_room_with_bots', {
+        p_room_id: command.roomId, p_user_id: user.id, p_language: botNameLanguage(command.language),
+      });
       if (result.error) throw new Error(result.error.message.includes('wait 30 seconds')
         ? 'Botlarla tamamlamak için 30 saniye beklemelisin.'
         : result.error.message.includes('enough players') ? 'Yeterli oyuncu bulundu; masa hazırlanıyor.' : 'Masa değişti; botlarla tamamlamayı yeniden dene.');
@@ -476,6 +507,7 @@ Deno.serve(async (request) => {
         p_room_id: command.roomId,
         p_user_id: user.id,
         p_delta: command.type === 'add-bot' ? 1 : -1,
+        p_language: botNameLanguage(command.type === 'add-bot' ? command.language : undefined),
       });
       if (result.error) {
         const message = result.error.message.includes('host only') ? 'Yapay oyuncuları yalnızca oda sahibi değiştirebilir.'
@@ -552,7 +584,7 @@ Deno.serve(async (request) => {
       if (currentView.entryFee > 0 && currentView.members.filter(member => !member.isBot).length < 2) {
         throw new Error('Ücretli masada en az 2 gerçek oyuncu gerekli.');
       }
-      const game = createRoomGame(currentView.members);
+      const game = createRoomGame(currentView.members, currentView.variant);
       const commit = await admin.rpc('commit_room_state', {
         target_room: command.roomId,
         expected_revision: currentView.revision,
@@ -572,7 +604,7 @@ Deno.serve(async (request) => {
       if (currentView.hostId !== user.id && !hostIsBot) throw new Error('Yeni maçı yalnızca oda sahibi başlatabilir.');
       if (currentView.status !== 'finished' || currentView.game?.phase !== 'game-over') throw new Error('Maç henüz tamamlanmadı.');
       await recordResult(command.roomId, roomState?.state as GameState);
-      const game = createRoomGame(currentView.members);
+      const game = createRoomGame(currentView.members, currentView.variant);
       const commit = await admin.rpc('commit_room_state', {
         target_room: command.roomId,
         expected_revision: currentView.revision,

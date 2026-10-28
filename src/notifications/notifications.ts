@@ -2,10 +2,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { DAILY_GIFT_COINS } from '@/game/coin-economy';
 import { translate, type Language } from '@/i18n/translate';
 import { supabase } from '@/network/supabase';
-import { comebackReminderAt, dailyGiftReminderAt } from './reminder-times';
+import { comebackReminderAt, dailyGiftReminderAt, dailyGiftReminderCopy } from './reminder-times';
 
 export type NotificationPermission = 'granted' | 'denied' | 'undetermined' | 'unavailable';
 
@@ -13,8 +12,11 @@ const CHANNEL_ID = 'default';
 const TOKEN_KEY = 'amerikano:push-token:v1';
 const DAILY_GIFT_ID = 'daily-gift';
 const COMEBACK_IDS = [{ id: 'comeback-2', days: 2 }, { id: 'comeback-5', days: 5 }] as const;
+const TABLE_WAITING_ID = 'table-waiting';
+/** How long after leaving a running online game the table reminder fires. */
+const TABLE_WAITING_DELAY_MS = 2 * 60_000;
 /** Screens a notification may open. Anything else in a payload is ignored. */
-const ALLOWED_ROUTES = new Set(['/', '/friends', '/online?quick=1']);
+const ALLOWED_ROUTES = new Set(['/', '/friends', '/online', '/online?quick=1']);
 
 const supported = Platform.OS === 'ios' || Platform.OS === 'android';
 
@@ -81,7 +83,7 @@ async function schedule(id: string, date: Date, title: string, body: string, url
 }
 
 async function cancelReminders() {
-  await Promise.all([DAILY_GIFT_ID, ...COMEBACK_IDS.map(item => item.id)]
+  await Promise.all([DAILY_GIFT_ID, TABLE_WAITING_ID, ...COMEBACK_IDS.map(item => item.id)]
     .map(id => Notifications.cancelScheduledNotificationAsync(id).catch(() => undefined)));
 }
 
@@ -117,6 +119,7 @@ export type NotificationSyncInput = {
   language: Language;
   userId: string | null;
   dailyClaimedOn: string | null | undefined;
+  dailyStreak: number;
 };
 
 /**
@@ -124,7 +127,7 @@ export type NotificationSyncInput = {
  * comeback reminders forward, re-times the daily gift reminder and keeps the
  * push token registered. Every failure is swallowed; notifications are extras.
  */
-export async function syncNotifications({ enabled, language, userId, dailyClaimedOn }: NotificationSyncInput) {
+export async function syncNotifications({ enabled, language, userId, dailyClaimedOn, dailyStreak }: NotificationSyncInput) {
   if (!supported) return;
   try {
     if (!enabled) {
@@ -137,8 +140,15 @@ export async function syncNotifications({ enabled, language, userId, dailyClaime
     const tr = (key: string, values?: readonly (string | number)[]) => translate(language, key, values);
     const now = new Date();
     if (dailyClaimedOn !== undefined) {
-      await schedule(DAILY_GIFT_ID, dailyGiftReminderAt(now, dailyClaimedOn), tr('Günlük hediyen hazır ✦'),
-        tr('{0} coin seni bekliyor. Al ve bir masaya otur.', [DAILY_GIFT_COINS]), '/');
+      // One gift reminder a day, worded for the streak day it would pay.
+      const at = dailyGiftReminderAt(now, dailyClaimedOn);
+      const gift = dailyGiftReminderCopy(at, dailyClaimedOn, dailyStreak);
+      const [title, body] = gift.kind === 'final'
+        ? [tr('Serinin büyük ödülü hazır ✦'), tr('7. gün: +{0} coin seni bekliyor. Al ve bir masaya otur.', [gift.coins])]
+        : gift.kind === 'streak'
+          ? [tr('Serin bozulmasın · {0}. gün ✦', [gift.day]), tr('+{0} coin seni bekliyor. Bugün almazsan seri 1. günden başlar.', [gift.coins])]
+          : [tr('Günlük hediyen hazır ✦'), tr('{0} coin seni bekliyor. Al ve bir masaya otur.', [gift.coins])];
+      await schedule(DAILY_GIFT_ID, at, title, body, '/');
     }
     const [twoDays, fiveDays] = COMEBACK_IDS;
     await schedule(twoDays.id, comebackReminderAt(now, twoDays.days), tr('Masalar seni özledi'),
@@ -151,6 +161,29 @@ export async function syncNotifications({ enabled, language, userId, dailyClaime
   } catch (error) {
     if (__DEV__) console.warn('Notification sync failed', error);
   }
+}
+
+/**
+ * Leaving a running online game: remind the player in a couple of minutes
+ * that the table goes on (a bot plays the seat) and they can take it back.
+ */
+export async function remindOpenTable(enabled: boolean, language: Language) {
+  if (!supported || !enabled) return;
+  try {
+    if (await notificationPermission() !== 'granted') return;
+    await ensureChannel();
+    const tr = (key: string) => translate(language, key);
+    await schedule(TABLE_WAITING_ID, new Date(Date.now() + TABLE_WAITING_DELAY_MS), tr('Masan seni bekliyor'),
+      tr('Oyunun sürüyor; sen yokken yerine bot oynuyor. Dön ve koltuğunu geri al.'), '/online');
+  } catch (error) {
+    if (__DEV__) console.warn('Table reminder failed', error);
+  }
+}
+
+/** Back at the table, or the game is over: the reminder is no longer true. */
+export async function cancelOpenTableReminder() {
+  if (!supported) return;
+  await Notifications.cancelScheduledNotificationAsync(TABLE_WAITING_ID).catch(() => undefined);
 }
 
 /** Returns the in-app route a tapped notification asks for, if it is allowed. */

@@ -10,6 +10,8 @@ import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
 import { connectRoom, enterRoom, leaveWaitingRoom, useRoom } from '@/network/client';
 import { refreshPlayerProfile } from '@/network/profile';
 import { PlayerAvatar } from '@/components/player-avatar';
+import { AppIcon } from '@/components/app-icon';
+import { kit, Note, ScreenHeader } from '@/components/screen-kit';
 import { clearPlayerSearch, dismissInvite, FriendPlayer, inviteFriend, refreshSocial, removeFriend, requestFriend, respondFriend, searchPlayers, useSocial } from '@/network/social';
 import { normalizeUsername } from '@/network/usernames';
 
@@ -70,26 +72,27 @@ export default function FriendsScreen() {
     );
   };
 
-  return <SafeAreaView style={s.page}>
+  return <SafeAreaView edges={['top', 'bottom']} style={kit.page}>
     <Stack.Screen options={{ headerShown: false }} />
-    <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={[s.content, isTablet && s.contentTablet]} keyboardShouldPersistTaps="handled">
-      <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>{t("Geri")}</Text></Pressable>
-      <Text style={s.eyebrow}>{t("ARKADAŞLAR")}</Text>
-      <Text style={s.title}>{roomCode ? t("Masaya kimi çağıralım?") : t("Masan artık bir koddan fazlası.")}</Text>
-      <Text style={s.body}>{roomCode ? t("Arkadaşların daveti alır ve tek dokunuşla bekleyen masaya oturur.") : t("Arkadaş ekle, çevrim içi olduklarını gör ve açık masalarına katıl.")}</Text>
+    <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={[kit.content, isTablet && kit.contentTablet, s.content]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <ScreenHeader title={roomCode ? t("Masaya kimi çağıralım?") : t("Arkadaşlar")}
+        subtitle={roomCode ? t("Arkadaşların daveti alır ve tek dokunuşla bekleyen masaya oturur.") : t("Arkadaş ekle, çevrim içi olduklarını gör ve açık masalarına katıl.")} />
 
-      <View style={s.codePanel}>
-        <View><Text style={s.label}>{t("KULLANICI ADIN")}</Text><Text selectable style={s.ownCode}>@{social.username || t("hazırlanıyor")}</Text></View>
-        <Pressable disabled={!social.username} onPress={() => void Share.share({ message: t("Amerikano'da beni ekle: @{0}", [social.username]) })}><Text style={s.link}>{t("Paylaş")}</Text></Pressable>
+      <View style={s.handleCard}>
+        <AppIcon name="account" size={22} color={p.gold} />
+        <View style={s.grow}><Text style={s.label}>{t("KULLANICI ADIN")}</Text><Text selectable style={s.ownCode}>@{social.username || t("hazırlanıyor")}</Text></View>
+        <SmallButton label={t("Paylaş")} disabled={!social.username} onPress={() => void Share.share({ message: t("Amerikano'da beni ekle: @{0}", [social.username]) })} />
       </View>
 
-      <Text style={s.label}>{t("KULLANICI ADIYLA ARA")}</Text>
-      <TextInput accessibilityLabel={t("Kullanıcı adıyla arkadaş ara")} autoCapitalize="none" autoCorrect={false} maxLength={20} value={query}
-        onChangeText={(value) => setQuery(normalizeUsername(value))} placeholder={t('@kullaniciadi')} placeholderTextColor={p.muted} style={s.input} />
-      {query.length > 0 && query.length < 3 && <Text style={s.searchHint}>{t("Aramak için en az 3 karakter yaz.")}</Text>}
-      {social.searching && <Text style={s.searchHint}>{t("Oyuncular aranıyor…")}</Text>}
-      {query.length >= 3 && !social.searching && social.searchResults.length === 0 && !social.error && <Text style={s.searchHint}>{t("Bu kullanıcı adıyla eşleşen oyuncu bulunamadı.")}</Text>}
-      {social.searchResults.length > 0 && <Section title={t("ARAMA SONUÇLARI")}>{social.searchResults.map((player) => <PlayerRow key={player.userId} player={player}
+      <View style={s.search}>
+        <AppIcon name="friends" size={18} color={p.muted} />
+        <TextInput accessibilityLabel={t("Kullanıcı adıyla arkadaş ara")} autoCapitalize="none" autoCorrect={false} maxLength={20} value={query}
+          onChangeText={(value) => setQuery(normalizeUsername(value))} placeholder={t('@kullaniciadi')} placeholderTextColor={p.muted} style={s.searchInput} />
+      </View>
+      {query.length > 0 && query.length < 3 && <Note>{t("Aramak için en az 3 karakter yaz.")}</Note>}
+      {social.searching && <Note>{t("Oyuncular aranıyor…")}</Note>}
+      {query.length >= 3 && !social.searching && social.searchResults.length === 0 && !social.error && <Note>{t("Bu kullanıcı adıyla eşleşen oyuncu bulunamadı.")}</Note>}
+      {social.searchResults.length > 0 && <Section title={t("ARAMA SONUÇLARI")}>{social.searchResults.map((player, index) => <PlayerRow key={player.userId} player={player} last={index === social.searchResults.length - 1}
         detail={`@${player.username}`}
         actions={player.relationship === 'friend'
           ? <SmallButton label={t("Arkadaşın")} disabled onPress={() => {}} />
@@ -99,23 +102,25 @@ export default function FriendsScreen() {
               ? <SmallButton label={t("Kabul et")} filled disabled={social.busy} onPress={() => void respondFriend(player.userId, true)} />
               : <SmallButton label={t("Ekle")} filled disabled={social.busy} onPress={() => void addFriend(player.userId)} />} />)}</Section>}
 
-      {!!social.error && <Text style={s.error}>{localizeMessage(social.error)}</Text>}
-      {!!social.info && <Text style={s.success}>{localizeMessage(social.info)}</Text>}
+      {!!social.error && <Text style={kit.error}>{localizeMessage(social.error)}</Text>}
+      {!!social.info && <Text style={kit.success}>{localizeMessage(social.info)}</Text>}
 
-      {social.invites.length > 0 && <Section title={t("MASA DAVETLERİ")}>{social.invites.map((invite) => <PlayerRow key={invite.inviteId} player={invite.sender}
+      {social.invites.length > 0 && <Section title={t("MASA DAVETLERİ")}>{social.invites.map((invite, index) => <PlayerRow key={invite.inviteId} player={invite.sender} last={index === social.invites.length - 1}
         detail={t("Seni {0} masasına çağırıyor", [invite.roomCode])} actions={<>
           <SmallButton label={t("Katıl")} filled onPress={() => void joinRoom(invite.roomCode)} />
           <SmallButton label={t("Kapat")} onPress={() => void dismissInvite(invite.inviteId)} />
         </>} />)}</Section>}
 
-      {social.incoming.length > 0 && <Section title={t("GELEN İSTEKLER")}>{social.incoming.map((player) => <PlayerRow key={player.userId} player={player} detail={`@${player.username} · Arkadaşlık isteği gönderdi`} actions={<>
+      {social.incoming.length > 0 && <Section title={t("GELEN İSTEKLER")}>{social.incoming.map((player, index) => <PlayerRow key={player.userId} player={player} last={index === social.incoming.length - 1}
+        detail={`@${player.username} · ${t("Arkadaşlık isteği gönderdi")}`} actions={<>
         <SmallButton label={t("Kabul")} filled onPress={() => void respondFriend(player.userId, true)} />
         <SmallButton label={t("Reddet")} onPress={() => void respondFriend(player.userId, false)} />
       </>} />)}</Section>}
 
       <Section title={t("ARKADAŞLAR · {0}", [social.friends.length])}>
         {social.friends.length === 0 && !social.loading ? <Text style={s.empty}>{t("Henüz arkadaşın yok. Kullanıcı adıyla arayarak ilk arkadaşını ekleyebilirsin.")}</Text> : null}
-        {social.friends.map((player) => <PlayerRow key={player.userId} player={player}
+        {social.loading && social.friends.length === 0 && <Text style={s.empty}>{t("Arkadaşların yükleniyor…")}</Text>}
+        {social.friends.map((player, index) => <PlayerRow key={player.userId} player={player} last={index === social.friends.length - 1}
           detail={`@${player.username} · ${player.online ? t("● Çevrim içi") : t("○ Çevrim dışı")} · ${player.wins}/${player.gamesPlayed} ${t("galibiyet")}`}
           actions={<>
             {roomCode
@@ -127,49 +132,56 @@ export default function FriendsScreen() {
           </>} />)}
       </Section>
 
-      {social.outgoing.length > 0 && <Section title={t("BEKLEYEN İSTEKLER")}>{social.outgoing.map((player) => <PlayerRow key={player.userId} player={player} detail={`@${player.username} · İstek gönderildi`}
+      {social.outgoing.length > 0 && <Section title={t("BEKLEYEN İSTEKLER")}>{social.outgoing.map((player, index) => <PlayerRow key={player.userId} player={player} last={index === social.outgoing.length - 1}
+        detail={`@${player.username} · ${t("İstek gönderildi")}`}
         actions={<SmallButton label={t("İptal et")} disabled={social.busy} onPress={() => void removeFriend(player.userId, t("Arkadaşlık isteği iptal edildi."))} />} />)}</Section>}
-      {social.loading && <Text style={s.empty}>{t("Arkadaşların yükleniyor…")}</Text>}
-      {roomState.room?.status === 'playing' && <Text style={s.note}>{t("Devam eden oyun varken başka bir masaya geçemezsin.")}</Text>}
+      {roomState.room?.status === 'playing' && <Note icon="rules">{t("Devam eden oyun varken başka bir masaya geçemezsin.")}</Note>}
     </KeyboardAwareScrollView>
   </SafeAreaView>;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const { isTablet } = useResponsiveLayout();
-  return <View style={s.section}><Text style={s.label}>{title}</Text><View style={[s.sectionItems, isTablet && s.sectionItemsTablet]}>{children}</View></View>;
+  return <View style={s.section}><Text style={s.sectionTitle}>{title}</Text><View style={s.group}>{children}</View></View>;
 }
 
-function PlayerRow({ player, detail, actions }: { player: FriendPlayer; detail: string; actions?: React.ReactNode }) {
-  const { isTablet } = useResponsiveLayout();
-  return <View style={[s.playerRow, isTablet && s.playerRowTablet]}>
-    <View style={s.playerMain}>
-      <PlayerAvatar avatarKey={player.avatarKey} size={42} />
-      <View style={s.playerCopy}><Text numberOfLines={1} style={s.playerName}>{player.username || player.displayName}</Text><Text style={[s.playerDetail, player.online && s.online]}>{detail}</Text></View>
+function PlayerRow({ player, detail, actions, last }: { player: FriendPlayer; detail: string; actions?: React.ReactNode; last?: boolean }) {
+  return <View style={[s.playerRow, !last && s.divider]}>
+    <PlayerAvatar avatarKey={player.avatarKey} size={42} />
+    <View style={s.grow}>
+      <Text numberOfLines={1} style={s.playerName}>{player.username || player.displayName}</Text>
+      <Text style={[s.playerDetail, player.online && s.online]}>{detail}</Text>
+      {!!actions && <View style={s.rowActions}>{actions}</View>}
     </View>
-    {!!actions && <View style={s.rowActions}>{actions}</View>}
   </View>;
 }
 
 function SmallButton({ label, onPress, filled = false, disabled = false }: { label: string; onPress: () => void; filled?: boolean; disabled?: boolean }) {
-  return <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={[s.smallButton, filled && s.smallFilled, disabled && s.disabled]}>
+  return <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={({ pressed }) => [s.smallButton, filled && s.smallFilled, disabled && s.disabled, pressed && kit.pressed]}>
     <Text style={[s.smallText, filled && s.smallFilledText]}>{label}</Text>
   </Pressable>;
 }
 
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: p.canvas }, content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 50, gap: 15, width: '100%', maxWidth: 680, alignSelf: 'center' },
-  contentTablet: { maxWidth: 1080, paddingHorizontal: 34, paddingTop: 30 },
-  back: { color: p.cream, fontSize: 15, paddingVertical: 10 }, eyebrow: { color: p.gold, letterSpacing: 3, fontSize: 11, marginTop: 8, fontWeight: '800' },
-  title: { color: p.cream, fontSize: 34, lineHeight: 40, fontWeight: '800' }, body: { color: p.muted, fontSize: 15, lineHeight: 22 }, label: { color: p.gold, fontSize: 10, letterSpacing: 2, fontWeight: '800' },
-  codePanel: { borderTopWidth: 1, borderBottomWidth: 1, borderColor: p.line, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  ownCode: { color: p.cream, fontSize: 23, fontWeight: '900', letterSpacing: 4, marginTop: 7 }, link: { color: p.gold, fontWeight: '700', padding: 8 },
-  input: { minHeight: 52, borderRadius: 12, borderWidth: 1, borderColor: p.line, color: p.cream, backgroundColor: '#ffffff08', paddingHorizontal: 15, fontSize: 16 },
-  searchHint: { color: p.muted, fontSize: 12, lineHeight: 18 }, disabled: { opacity: 0.4 },
-  section: { gap: 9, marginTop: 8 }, sectionItems: {}, sectionItemsTablet: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 20 }, playerRow: { borderBottomWidth: 1, borderBottomColor: p.line, paddingVertical: 13, gap: 12 }, playerRowTablet: { width: '48%', flexGrow: 1 },
-  playerMain: { flexDirection: 'row', alignItems: 'center', gap: 11 },
-  playerCopy: { flex: 1 }, playerName: { color: p.cream, fontSize: 15, fontWeight: '800' }, playerDetail: { color: p.muted, fontSize: 11, marginTop: 4 }, online: { color: '#9bd5b5' },
-  rowActions: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end' }, smallButton: { minHeight: 36, borderRadius: 9, borderWidth: 1, borderColor: p.line, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
-  smallFilled: { backgroundColor: p.gold, borderColor: p.gold }, smallText: { color: p.cream, fontSize: 12, fontWeight: '800' }, smallFilledText: { color: p.ink },
-  empty: { width: '100%', color: p.muted, fontSize: 13, lineHeight: 20, paddingVertical: 15 }, note: { color: p.gold, fontSize: 12, textAlign: 'center' }, error: { color: '#f0aaa4', textAlign: 'center' }, success: { color: '#9bd5b5', textAlign: 'center' },
+  content: { maxWidth: 680 },
+  grow: { flex: 1, minWidth: 0 },
+  label: { color: p.gold, fontSize: 10, letterSpacing: 2, fontWeight: '800' },
+  handleCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 18, backgroundColor: p.surface, borderWidth: 1, borderColor: p.line },
+  ownCode: { color: p.cream, fontSize: 20, fontWeight: '900', letterSpacing: 1, marginTop: 4 },
+  search: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 52, borderRadius: 16, borderWidth: 1, borderColor: p.line, backgroundColor: '#0000001f', paddingHorizontal: 14 },
+  searchInput: { flex: 1, color: p.cream, fontSize: 16, paddingVertical: 12 },
+  disabled: { opacity: 0.4 },
+  section: { gap: 8 },
+  sectionTitle: { color: p.gold, fontSize: 10, letterSpacing: 2, fontWeight: '900', marginTop: 6, marginLeft: 4 },
+  group: { borderRadius: 18, backgroundColor: p.surface, borderWidth: 1, borderColor: p.line, overflow: 'hidden' },
+  playerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  divider: { borderBottomWidth: 1, borderBottomColor: p.line },
+  playerName: { color: p.cream, fontSize: 15, fontWeight: '800' },
+  playerDetail: { color: p.muted, fontSize: 11, marginTop: 3 },
+  online: { color: '#9bd5b5' },
+  rowActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  smallButton: { minHeight: 34, borderRadius: 10, borderWidth: 1, borderColor: p.line, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff0a' },
+  smallFilled: { backgroundColor: p.gold, borderColor: p.gold },
+  smallText: { color: p.cream, fontSize: 12, fontWeight: '800' },
+  smallFilledText: { color: p.ink },
+  empty: { color: p.muted, fontSize: 13, lineHeight: 20, padding: 14 },
 });

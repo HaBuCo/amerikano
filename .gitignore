@@ -51,3 +51,5 @@ supabase/.temp/
 ios-cert/
 
 /store
+# Python bytecode
+__pycache__/

@@ -1,17 +1,26 @@
 import { useTranslations } from '@/i18n/language';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { palette } from '@/constants/palette';
+import { kit, Note, PrimaryButton, ScreenHeader, Section, Segmented } from '@/components/screen-kit';
+import { palette as p } from '@/constants/palette';
+import { normalizeGameRules, roundCountForGame } from '@/game/game-rules';
 import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
+import { selectedVariant, useGameSettings } from '@/settings/game-settings';
+
+const GAME_NAMES = { amerikano: 'Amerikano', rummy: 'Klasik Rummy', contract: 'Contract Rummy' } as const;
 
 export default function SetupScreen() {
   const { t } = useTranslations();
   const { isTablet } = useResponsiveLayout();
+  const { settings } = useGameSettings();
+  const variant = selectedVariant(settings);
   const [names, setNames] = useState([t("Oyuncu 1"), t("Oyuncu 2"), t("Oyuncu 3"), t("Oyuncu 4")]);
+  // Same-device games use each game's default rules, so its full deal count.
+  const deals = roundCountForGame({ rules: normalizeGameRules({ variant }) });
 
   function resizePlayers(count: number) {
     setNames((current) =>
@@ -21,93 +30,52 @@ export default function SetupScreen() {
 
   function start() {
     const cleanNames = names.map((name, index) => name.trim().replaceAll('|', '') || t("Oyuncu {0}", [index + 1]));
-    router.push({ pathname: '/game', params: { players: cleanNames.join('|'), mode: 'local' } });
+    router.push({ pathname: '/game', params: { players: cleanNames.join('|'), mode: 'local', variant } });
   }
 
   return (
-    <SafeAreaView edges={['bottom']} style={styles.safeArea}>
-      <View style={styles.flex}>
-        <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={[styles.content, isTablet && styles.contentTablet]} keyboardShouldPersistTaps="handled">
-          <Text style={styles.eyebrow}>{t("OYUNCULAR")}</Text>
-          <Text style={styles.title}>{t("Masada kimler var?")}</Text>
-          <Text style={styles.description}>{t("Telefon her tur sıradaki oyuncuya geçecek. Elini göstermeden önce yalnız olduğundan emin ol.")}</Text>
+    <SafeAreaView edges={['top', 'bottom']} style={kit.page}>
+      <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={[kit.content, isTablet && kit.contentTablet]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <ScreenHeader title={t("Aynı cihazda")} subtitle={t("Telefon her tur sıradaki oyuncuya geçecek. Elini göstermeden önce yalnız olduğundan emin ol.")} />
 
-          <View style={styles.counter}>
-            {[3, 4, 5, 6].map((count) => (
-              <Pressable
-                key={count}
-                onPress={() => resizePlayers(count)}
-                style={[styles.countButton, names.length === count && styles.countButtonActive]}>
-                <Text style={[styles.countText, names.length === count && styles.countTextActive]}>{count}</Text>
-              </Pressable>
-            ))}
-          </View>
+        <Segmented label={t("Oyuncu sayısı")} value={names.length} onChange={resizePlayers}
+          choices={[3, 4, 5, 6].map(count => ({ value: count, label: t("{0} oyuncu", [count]) }))} />
 
-          <View style={styles.inputs}>
-            {names.map((name, index) => (
-              <View key={index} style={[styles.inputRow, isTablet && styles.inputRowTablet]}>
-                <View style={styles.number}><Text style={styles.numberText}>{index + 1}</Text></View>
-                <TextInput
-                  accessibilityLabel={t("{0}. oyuncunun adı", [index + 1])}
-                  autoCapitalize="words"
-                  maxLength={18}
-                  onChangeText={(value) => setNames((current) => current.map((item, itemIndex) => itemIndex === index ? value : item))}
-                  placeholder={t("Oyuncu adı")}
-                  placeholderTextColor="#809487"
-                  returnKeyType="done"
-                  style={styles.input}
-                  value={name}
-                />
-              </View>
-            ))}
-          </View>
-
-          <View style={styles.infoCard}>
-            <Text style={styles.infoIcon}>♠</Text>
-            <View style={styles.infoCopy}>
-              <Text style={styles.infoTitle}>{t("12 el · yaklaşık 45–90 dk.")}</Text>
-              <Text style={styles.infoText}>{t("İki deste, 2 joker ve yaygın puanlama sistemi kullanılır.")}</Text>
+        <Section title={t("MASADA KİMLER VAR?")}>
+          {names.map((name, index) => (
+            <View key={index} style={[s.playerRow, index < names.length - 1 && s.divider]}>
+              <Text style={s.seat}>{index + 1}</Text>
+              <TextInput
+                accessibilityLabel={t("{0}. oyuncunun adı", [index + 1])}
+                autoCapitalize="words"
+                maxLength={18}
+                onChangeText={(value) => setNames((current) => current.map((item, itemIndex) => itemIndex === index ? value : item))}
+                placeholder={t("Oyuncu adı")}
+                placeholderTextColor="#809487"
+                returnKeyType="done"
+                style={s.input}
+                value={name}
+              />
             </View>
-          </View>
-        </KeyboardAwareScrollView>
+          ))}
+        </Section>
 
-        <View style={styles.bottomBar}>
-          <Pressable onPress={start} style={({ pressed }) => [styles.startButton, isTablet && styles.startButtonTablet, pressed && styles.pressed]}>
-            <Text style={styles.startText}>{t("Masayı Kur")}</Text>
-          </Pressable>
-        </View>
+        <Note icon="rules">{t("{0} · {1} el. İki deste ve joker kullanılır; kurallar oyunun klasik ayarlarıdır.", [t(GAME_NAMES[variant]), deals])}</Note>
+      </KeyboardAwareScrollView>
+
+      <View style={s.bottomBar}>
+        <PrimaryButton icon="play" label={t("Masayı Kur")} caption={t("{0} oyuncu · {1} el", [names.length, deals])} onPress={start} style={[s.start, isTablet && s.startTablet]} />
       </View>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  safeArea: { flex: 1, backgroundColor: palette.canvas },
-  content: { width: '100%', maxWidth: 680, alignSelf: 'center', padding: 24, paddingBottom: 32 },
-  contentTablet: { maxWidth: 960, paddingHorizontal: 34, paddingTop: 30 },
-  eyebrow: { color: palette.gold, fontSize: 11, fontWeight: '900', letterSpacing: 2.4, marginTop: 6 },
-  title: { color: palette.cream, fontSize: 31, fontWeight: '900', letterSpacing: -0.7, marginTop: 8 },
-  description: { color: palette.muted, fontSize: 15, lineHeight: 22, marginTop: 9 },
-  counter: { flexDirection: 'row', gap: 9, marginTop: 25 },
-  countButton: { flex: 1, height: 45, borderRadius: 12, borderWidth: 1, borderColor: palette.line, alignItems: 'center', justifyContent: 'center' },
-  countButtonActive: { backgroundColor: palette.gold, borderColor: palette.gold },
-  countText: { color: palette.cream, fontSize: 16, fontWeight: '800' },
-  countTextActive: { color: palette.ink },
-  inputs: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 22 },
-  inputRow: { minHeight: 56, borderRadius: 14, borderWidth: 1, borderColor: palette.line, backgroundColor: 'rgba(255,255,255,0.05)', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 13 },
-  inputRowTablet: { width: '48%', flexGrow: 1 },
-  number: { width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(217,164,65,0.16)', alignItems: 'center', justifyContent: 'center' },
-  numberText: { color: palette.gold, fontSize: 13, fontWeight: '900' },
-  input: { flex: 1, color: palette.cream, fontSize: 16, fontWeight: '700', paddingHorizontal: 12, paddingVertical: 10 },
-  infoCard: { marginTop: 22, borderTopWidth: 1, borderTopColor: palette.line, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', gap: 13 },
-  infoIcon: { color: palette.gold, fontSize: 24 },
-  infoCopy: { flex: 1 },
-  infoTitle: { color: palette.cream, fontSize: 14, fontWeight: '800' },
-  infoText: { color: palette.muted, fontSize: 12, lineHeight: 17, marginTop: 3 },
-  bottomBar: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 14, borderTopWidth: 1, borderTopColor: palette.line, backgroundColor: palette.canvas },
-  startButton: { width: '100%', maxWidth: 632, alignSelf: 'center', minHeight: 58, borderRadius: 16, backgroundColor: palette.gold, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
-  startButtonTablet: { maxWidth: 892 },
-  startText: { color: palette.ink, fontSize: 18, fontWeight: '900' },
-  pressed: { opacity: 0.8 },
+const s = StyleSheet.create({
+  playerRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14 },
+  divider: { borderBottomWidth: 1, borderBottomColor: p.line },
+  seat: { width: 22, color: p.gold, fontSize: 15, fontWeight: '900', textAlign: 'center' },
+  input: { flex: 1, color: p.cream, fontSize: 16, fontWeight: '700', paddingVertical: 12 },
+  bottomBar: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 12, borderTopWidth: 1, borderTopColor: p.line, backgroundColor: p.canvas },
+  start: { width: '100%', maxWidth: 580, alignSelf: 'center' },
+  startTablet: { maxWidth: 972 },
 });

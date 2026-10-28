@@ -15,3 +15,16 @@ guest session is used, so no accounts are created in production.
 
 Captions live in `compose.py`. The Play feature graphic reuses helpers from the
 untracked `store/build_feature.py`.
+
+## 1.2 screenshots (Turkish and English, new UI)
+
+1. `npx expo start --web --port 8095`
+2. `node gen-states.mts` (writes `states.json` next to it)
+3. Add the temporary victory route: `src/app/preview-victory.tsx` renders
+   `<VictoryCelebration visible ...>` on the felt after a 3.2 s delay, with
+   `<Stack.Screen options={{ headerShown: false }} />`. Delete it after capturing.
+4. From a folder with `playwright-core`, for each `lang` in `tr en` and group in `phone ipad`:
+   `node capture-v12.mjs <captures>/<lang>-<group> <group> lang=<lang> states=<path to states.json>`
+5. `python scripts/store-shots/compose-v12.py <captures>` → `store-assets/v1.2/<lang>/<device>/`
+
+Captions live in `compose-v12.py`; every Supabase call is answered locally in `capture-v12.mjs`.

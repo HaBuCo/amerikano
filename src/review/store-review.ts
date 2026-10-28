@@ -35,6 +35,14 @@ export async function maybeRequestReview(won: boolean, gamesPlayed: number) {
   } catch { /* A review prompt must never interrupt the game. */ }
 }
 
+let scheduled: ReturnType<typeof setTimeout> | null = null;
+
+/** Asks a little later, whatever screen the player has moved on to by then. */
+export function scheduleReviewRequest(won: boolean, gamesPlayed: number, delayMs: number) {
+  if (scheduled) clearTimeout(scheduled);
+  scheduled = setTimeout(() => { scheduled = null; void maybeRequestReview(won, gamesPlayed); }, delayMs);
+}
+
 /** "Rate us" link: opens the store's review page directly, which a button may do. */
 export async function openStoreReviewPage() {
   void markAsked();

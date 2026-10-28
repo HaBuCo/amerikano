@@ -1,5 +1,5 @@
-import { cardPoints, isValidMeld } from './engine.ts';
-import type { Card, MeldType, RoundContract } from './types.ts';
+import { cardPoints, isValidMeld, meldsPoints, orderMeldCards } from './engine.ts';
+import type { Card, MeldStyle, MeldType, RoundContract } from './types.ts';
 import { RANKS, SUITS } from './types.ts';
 
 type Group = { type: MeldType; cards: Card[]; points: number };
@@ -8,11 +8,16 @@ export type AutoArrangeOptions = {
   contract?: RoundContract;
   prioritizeContract?: boolean;
   allowJokersInGroups?: boolean;
+  style?: MeldStyle;
 };
 
 export type SuggestedContractGroup = { type: MeldType; cardIds: string[] };
 
 const rankValue = (card: Card) => card.rank === 'A' ? 14 : RANKS.indexOf(card.rank!) + 1;
+// An Ace may end a run high (Q-K-A) or start it low (A-2-3); the engine picks the side.
+const hasAce = (cards: Card[]) => cards.some(card => card.rank === 'A');
+// Penalty values follow the game: contract rummy scores the Ace and the Joker at 15.
+const pointsOf = (card: Card, style: MeldStyle) => cardPoints(card, style === 'contract' ? 'contract' : 'amerikano');
 const identity = (card: Card) => card.isJoker ? 'joker' : `${card.rank}:${card.suit}`;
 
 function combinations<T>(items: T[], count: number): T[][] {
@@ -32,7 +37,7 @@ function combinations<T>(items: T[], count: number): T[][] {
 
 // Search interchangeable card values once; assign physical copies when selecting
 // groups, so a set and a run can use different copies of the same card.
-function groupCandidates(hand: Card[], allowJokers: boolean, keepDiscard = true, target?: { type: MeldType; length: number }): Group[] {
+function groupCandidates(hand: Card[], allowJokers: boolean, keepDiscard = true, target?: { type: MeldType; length: number }, style: MeldStyle = 'standard', runsOnly = false): Group[] {
   const result = new Map<string, Group>();
   const jokers = allowJokers ? hand.filter(card => card.isJoker) : [];
   const add = (type: MeldType, cards: Card[]) => {
@@ -40,18 +45,23 @@ function groupCandidates(hand: Card[], allowJokers: boolean, keepDiscard = true,
     const missing: Card[] = Array.from({ length: target ? target.length - cards.length : 0 }, (_, index) => ({
       id: `missing-${index}`, rank: null, suit: null, isJoker: true,
     }));
-    if (!isValidMeld([...cards, ...missing], type)) return;
+    if (!isValidMeld([...cards, ...missing], type, style)) return;
     const key = `${type}:${cards.map(identity).sort().join(',')}`;
     if (!result.has(key)) result.set(key, {
       type,
       cards,
-      points: cards.reduce((total, card) => total + cardPoints(card), 0),
+      points: cards.reduce((total, card) => total + pointsOf(card, style), 0),
     });
   };
 
-  if (!target || target.type === 'set') for (const rank of RANKS) {
-    const natural = SUITS.map(suit => hand.find(card => card.rank === rank && card.suit === suit)).filter((card): card is Card => Boolean(card));
-    for (const length of target ? [target.length] : [3, 4]) {
+  if ((!target || target.type === 'set') && !runsOnly) for (const rank of RANKS) {
+    // Contract rummy groups may repeat a suit, so every copy of the rank counts.
+    const natural = style === 'contract'
+      ? hand.filter(card => card.rank === rank && !card.isJoker)
+      : SUITS.map(suit => hand.find(card => card.rank === rank && card.suit === suit)).filter((card): card is Card => Boolean(card));
+    // Contract rummy groups have no upper size, so every copy and joker may join one.
+    const longest = style === 'contract' ? Math.max(4, natural.length + jokers.length) : 4;
+    for (const length of target ? [target.length] : Array.from({ length: longest - 2 }, (_, index) => index + 3)) {
       for (let jokerCount = 0; jokerCount <= Math.min(jokers.length, length - 1); jokerCount += 1) {
         const counts = target ? Array.from({ length: length - jokerCount }, (_, index) => index + 1) : [length - jokerCount];
         for (const naturalCount of counts) for (const selected of combinations(natural, naturalCount)) {
@@ -67,9 +77,13 @@ function groupCandidates(hand: Card[], allowJokers: boolean, keepDiscard = true,
       const value = rankValue(card);
       byValue.set(value, [...(byValue.get(value) ?? []), card]);
     }
-    for (const length of target ? [target.length] : Array.from({ length: 11 }, (_, index) => index + 3)) {
-      for (let start = 2; start + length - 1 <= 14; start += 1) {
-        const natural = Array.from({ length }, (_, offset) => byValue.get(start + offset)?.[0]).filter((card): card is Card => Boolean(card));
+    // A low Ace (value 1) can start a run; contract rummy runs have four or more cards.
+    const aces = byValue.get(14) ?? [];
+    const lowest = 1;
+    const shortest = style === 'contract' ? 4 : 3;
+    for (const length of target ? [target.length] : Array.from({ length: 14 - shortest }, (_, index) => index + shortest)) {
+      for (let start = lowest; start + length - 1 <= (start === 1 ? 13 : 14); start += 1) {
+        const natural = Array.from({ length }, (_, offset) => (start + offset === 1 ? aces : byValue.get(start + offset))?.[0]).filter((card): card is Card => Boolean(card));
         for (let jokerCount = 0; jokerCount <= Math.min(jokers.length, length - 1); jokerCount += 1) {
           const counts = target ? Array.from({ length: length - jokerCount }, (_, index) => index + 1) : [length - jokerCount];
           for (const naturalCount of counts) for (const selected of combinations(natural, naturalCount)) {
@@ -95,8 +109,8 @@ function allocate(group: Group, hand: Card[], used: Set<string>): Group | null {
 }
 
 // Search every non-overlapping combination, sharing remaining-hand results.
-function groupSearch(hand: Card[], allowJokers: boolean, keepDiscard = true) {
-  const candidates = groupCandidates(hand, allowJokers, false)
+function groupSearch(hand: Card[], allowJokers: boolean, keepDiscard = true, style: MeldStyle = 'standard', runsOnly = false) {
+  const candidates = groupCandidates(hand, allowJokers, false, undefined, style, runsOnly)
     .sort((a, b) => b.cards.length - a.cards.length || b.points - a.points);
   const byIdentity = new Map<string, Group[]>();
   for (const group of candidates) for (const value of new Set(group.cards.map(identity))) {
@@ -120,8 +134,8 @@ function groupSearch(hand: Card[], allowJokers: boolean, keepDiscard = true) {
     let best: Group[] = [];
     const pivot = identity(remaining[0]);
     const maxCoverage = remaining.length - Number(discardLeft);
-    const maxPoints = remaining.reduce((sum, card) => sum + cardPoints(card), 0)
-      - (discardLeft ? Math.min(...remaining.map(cardPoints)) : 0);
+    const maxPoints = remaining.reduce((sum, card) => sum + pointsOf(card, style), 0)
+      - (discardLeft ? Math.min(...remaining.map(card => pointsOf(card, style))) : 0);
     for (const template of byIdentity.get(pivot) ?? []) {
       const group = allocate(template, remaining, new Set());
       if (!group || (discardLeft && group.cards.length === remaining.length)) continue;
@@ -142,12 +156,12 @@ function groupSearch(hand: Card[], allowJokers: boolean, keepDiscard = true) {
   return (remaining = hand) => solve(remaining, keepDiscard);
 }
 
-function selectContractGroups(cards: Card[], contract: RoundContract, allowJokers: boolean, partial = false): Group[] | null {
+function selectContractGroups(cards: Card[], contract: RoundContract, allowJokers: boolean, partial = false, style: MeldStyle = 'standard', withExtras = true): Group[] | null {
   const slots = contract.parts.flatMap(part => Array.from({ length: part.count }, () => ({ type: part.type, length: part.length })));
-  const candidates = slots.map(slot => groupCandidates(cards, allowJokers, true, slot)
+  const candidates = slots.map(slot => groupCandidates(cards, allowJokers, true, slot, style)
     .filter(group => partial || group.cards.length === slot.length)
     .sort((a, b) => b.cards.length - a.cards.length || b.points - a.points));
-  const extras = groupSearch(cards, allowJokers);
+  const extras = groupSearch(cards, allowJokers, true, style);
   let best: Group[] | null = null;
   let bestScore: number[] = [];
   let optimal = false;
@@ -155,12 +169,13 @@ function selectContractGroups(cards: Card[], contract: RoundContract, allowJoker
   const minimumJokers = candidates.reduce((sum, groups, index) => sum + Math.min(...groups
     .filter(group => group.cards.length === slots[index].length)
     .map(group => group.cards.filter(card => card.isJoker).length)), 0);
-  const maximumPoints = cards.reduce((sum, card) => sum + cardPoints(card), 0) - Math.min(...cards.map(cardPoints));
+  const maximumPoints = cards.reduce((sum, card) => sum + pointsOf(card, style), 0) - Math.min(...cards.map(card => pointsOf(card, style)));
   const visit = (index: number, groups: Group[], used: Set<string>, completed: number) => {
     if (optimal) return;
     if (index === slots.length) {
       if (best && (completed < bestScore[0] || (completed === bestScore[0] && used.size < bestScore[1]))) return;
-      const additional = extras(cards.filter(card => !used.has(card.id)));
+      // Ranking by the groups left over is the costly part; progress checks skip it.
+      const additional = withExtras ? extras(cards.filter(card => !used.has(card.id))) : [];
       const score = [completed, used.size,
         additional.reduce((sum, group) => sum + group.cards.length, 0),
         [...groups, ...additional].reduce((sum, group) => sum + group.points, 0),
@@ -170,8 +185,8 @@ function selectContractGroups(cards: Card[], contract: RoundContract, allowJoker
         best = groups; bestScore = score;
       }
       optimal = score[0] === slots.length && score[1] === requiredCards
-        && score[2] === cards.length - 1 - requiredCards && score[3] === maximumPoints
-        && score[4] === -minimumJokers;
+        && (!withExtras || (score[2] === cards.length - 1 - requiredCards && score[3] === maximumPoints
+        && score[4] === -minimumJokers));
       return;
     }
     for (const template of candidates[index]) {
@@ -198,9 +213,9 @@ function orderRun(cards: Card[]) {
   return Array.from({ length }, (_, offset) => byValue.get(start + offset) ?? jokers[jokerIndex++]);
 }
 
-function orderGroup(group: Pick<Group, 'type' | 'cards'>) {
-  if (group.type === 'run') return isValidMeld(group.cards, 'run')
-    ? orderRun(group.cards)
+function orderGroup(group: Pick<Group, 'type' | 'cards'>, style: MeldStyle = 'standard') {
+  if (group.type === 'run') return isValidMeld(group.cards, 'run', style)
+    ? style === 'contract' || hasAce(group.cards) ? orderMeldCards(group.cards, 'run', style) : orderRun(group.cards)
     : [...group.cards].sort((a, b) => Number(a.isJoker) - Number(b.isJoker) || rankValue(a) - rankValue(b));
   return [...group.cards].sort((a, b) => {
     if (a.isJoker !== b.isJoker) return a.isJoker ? 1 : -1;
@@ -209,21 +224,33 @@ function orderGroup(group: Pick<Group, 'type' | 'cards'>) {
 }
 
 /** Finds one complete, non-overlapping opening that exactly matches the contract. */
-export function suggestContractGroups(cards: Card[], contract: RoundContract, allowJokers: boolean): SuggestedContractGroup[] | null {
+export function suggestContractGroups(cards: Card[], contract: RoundContract, allowJokers: boolean, style: MeldStyle = 'standard'): SuggestedContractGroup[] | null {
   if (contract.final) return null;
-  return selectContractGroups(cards, contract, allowJokers)?.map(group => ({
-    type: group.type, cardIds: orderGroup(group).map(card => card.id),
-  })) ?? null;
+  if (contract.free) {
+    // Classic rummy: open with the widest coverage once it reaches the minimum.
+    const groups = groupSearch(cards, allowJokers)();
+    if (!groups.length || meldsPoints(groups) < (contract.minPoints ?? 0)) return null;
+    return groups.map(group => ({ type: group.type, cardIds: orderGroup(group).map(card => card.id) }));
+  }
+  const groups = selectContractGroups(cards, contract, allowJokers, false, style);
+  // A best-effort pick can still miss a slot; only a complete contract is suggested.
+  const required = contract.parts.reduce((sum, part) => sum + part.length * part.count, 0);
+  if (!groups || groups.reduce((sum, group) => sum + group.cards.length, 0) !== required) return null;
+  return groups.map(group => ({ type: group.type, cardIds: orderGroup(group, style).map(card => card.id) }));
 }
 
-/** Finds a complete partition for the final round after choosing the discard. */
-export function suggestFinalGroups(cards: Card[], discardId: string): SuggestedContractGroup[] | null {
-  const remaining = cards.filter(card => card.id !== discardId);
-  if (remaining.length !== cards.length - 1 || remaining.length < 3) return null;
-  const groups = groupSearch(remaining, true, false)();
+/**
+ * Finds a complete partition for the final round after choosing the discard.
+ * Contract rummy's last deal has no discard (null): every card goes into runs.
+ */
+export function suggestFinalGroups(cards: Card[], discardId: string | null, style: MeldStyle = 'standard'): SuggestedContractGroup[] | null {
+  const remaining = discardId === null ? cards : cards.filter(card => card.id !== discardId);
+  if (remaining.length !== cards.length - (discardId === null ? 0 : 1) || remaining.length < 3) return null;
+  const groups = groupSearch(remaining, true, false, style, style === 'contract')();
   const used = new Set(groups.flatMap(group => group.cards.map(card => card.id)));
   if (used.size !== remaining.length || remaining.some(card => !used.has(card.id))) return null;
-  return groups.map(group => ({ type: group.type, cardIds: orderGroup(group).map(card => card.id) }));
+  if (style === 'contract' && groups.length < 3) return null;
+  return groups.map(group => ({ type: group.type, cardIds: orderGroup(group, style).map(card => card.id) }));
 }
 
 type Block = { type: MeldType; cards: Card[]; jokersAllowed: boolean };
@@ -264,9 +291,9 @@ function attachTo(blocks: Block[], cards: Card[], strict: boolean) {
   return left;
 }
 
-function bestDraft(cards: Card[], preferredType?: MeldType): Block | null {
+function bestDraft(cards: Card[], preferredType?: MeldType, runsOnly = false): Block | null {
   const drafts: Block[] = [];
-  for (const rank of RANKS) {
+  if (!runsOnly) for (const rank of RANKS) {
     const natural = SUITS.map(suit => cards.find(card => card.rank === rank && card.suit === suit)).filter((card): card is Card => Boolean(card));
     if (natural.length >= 2) drafts.push({ type: 'set', cards: natural, jokersAllowed: true });
   }
@@ -294,7 +321,7 @@ function orderBlock(block: Block) {
   const natural = naturalCards(block.cards);
   const jokers = block.cards.filter(card => card.isJoker);
   if (block.type === 'set' || !natural.length) return orderGroup(block);
-  if (isValidMeld(block.cards, 'run')) return orderRun(block.cards);
+  if (isValidMeld(block.cards, 'run')) return hasAce(block.cards) ? orderMeldCards(block.cards, 'run') : orderRun(block.cards);
   // A run draft: put jokers into the gaps they would fill, extras at the end.
   const sorted = [...natural].sort((a, b) => rankValue(a) - rankValue(b));
   const result: Card[] = [];
@@ -323,13 +350,17 @@ export function autoArrangeHand(cards: Card[], options: AutoArrangeOptions = {})
   if (cards.length < 2) return cards.map(card => card.id);
   const prioritizeContract = options.prioritizeContract ?? false;
   const allowJokers = options.allowJokersInGroups ?? true;
-  const primary = prioritizeContract && options.contract && !options.contract.final
-    ? selectContractGroups(cards, options.contract, allowJokers, true) ?? []
+  const style = options.style ?? 'standard';
+  // Contract rummy's last deal is melded whole as runs: arrange for runs only,
+  // and keep no card aside for a discard that deal does not have.
+  const wholeHandRuns = prioritizeContract && Boolean(options.contract?.noDiscard);
+  const primary = prioritizeContract && options.contract && !options.contract.final && !options.contract.free
+    ? selectContractGroups(cards, options.contract, allowJokers, true, style) ?? []
     : [];
   const primaryIds = new Set(primary.flatMap(group => group.cards.map(card => card.id)));
   const extraHand = cards.filter(card => !primaryIds.has(card.id));
   // Joker limits apply to the opening only; groups added after it may use jokers.
-  const extras = groupSearch(extraHand, true)();
+  const extras = groupSearch(extraHand, true, !wholeHandRuns, style, wholeHandRuns)();
   const blocks: Block[] = [
     ...primary.map(group => ({ type: group.type, cards: group.cards, jokersAllowed: allowJokers })),
     ...extras.map(group => ({ type: group.type, cards: group.cards, jokersAllowed: true })),
@@ -340,7 +371,7 @@ export function autoArrangeHand(cards: Card[], options: AutoArrangeOptions = {})
   let loose = attachTo(blocks, naturalCards(remaining), true);
   const preferredType = prioritizeContract ? options.contract?.parts[0]?.type : undefined;
   const drafts: Block[] = [];
-  for (let draft = bestDraft(loose, preferredType); draft; draft = bestDraft(loose, preferredType)) {
+  for (let draft = bestDraft(loose, preferredType, wholeHandRuns); draft; draft = bestDraft(loose, preferredType, wholeHandRuns)) {
     drafts.push(draft);
     const taken = new Set(draft.cards.map(card => card.id));
     loose = loose.filter(card => !taken.has(card.id));
@@ -355,4 +386,15 @@ export function autoArrangeHand(cards: Card[], options: AutoArrangeOptions = {})
     ...loose,
     ...leftoverJokers,
   ].map(card => card.id);
+}
+
+/** How many of the contract's slots the hand fills, counting groups still a card or two short. */
+export function contractProgress(cards: Card[], contract: RoundContract, style: MeldStyle = 'contract'): number {
+  const groups = selectContractGroups(cards, contract, true, true, style, false) ?? [];
+  return groups.reduce((sum, group) => sum + group.cards.length, 0);
+}
+
+/** How many cards a hand can lay down as contract rummy runs: the last deal's goal. */
+export function runCoverage(cards: Card[]): number {
+  return groupSearch(cards, true, false, 'contract', true)().reduce((sum, group) => sum + group.cards.length, 0);
 }

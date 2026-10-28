@@ -27,11 +27,21 @@ test('wrong ranks, duplicate suits, wrong tray type and mixed suits turn red', (
   assert.equal(meldFeedback([card('4'), card('8')], 'run'), 'incomplete');
 });
 
-test('joker restrictions and high ace rules match the game engine', () => {
+test('joker restrictions and ace rules match the game engine', () => {
   const set = [card('7'), card('7', 'clubs'), joker];
   assert.equal(meldFeedback(set, 'set', 3, false), 'invalid');
   assert.equal(meldFeedback(set, 'set', 3, true), 'valid');
   assert.equal(meldFeedback([joker], null), 'incomplete');
-  assert.equal(meldFeedback([card('A'), card('2'), card('3')], 'run'), 'invalid');
+  assert.equal(meldFeedback([card('A'), card('2'), card('3')], 'run'), 'valid');
+  assert.equal(meldFeedback([card('K'), card('A'), card('2')], 'run'), 'invalid');
   assert.equal(meldFeedback([card('Q'), card('K'), card('A')], null), 'valid');
+});
+
+test('an open-length tray with a gap stays open for the missing card', () => {
+  const gapped = [card('10'), card('Q'), card('K')];
+  assert.equal(meldFeedback(gapped, null), 'incomplete');
+  assert.equal(meldFeedback([...gapped, card('A')], null), 'incomplete');
+  assert.equal(meldFeedback(gapped, 'run'), 'incomplete');
+  assert.equal(meldFeedback([...gapped, card('J')], null), 'valid');
+  assert.equal(meldFeedback([card('10'), card('Q'), card('K', 'clubs')], null), 'invalid');
 });

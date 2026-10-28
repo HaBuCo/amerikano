@@ -1,3 +1,4 @@
+import type { TableBadge } from '@/game/coin-economy';
 import { supabase } from './supabase';
 
 export type LeaderboardPeriod = 'week' | 'all';
@@ -5,6 +6,7 @@ export type LeaderboardPlayer = {
   userId: string;
   username: string;
   avatarKey: string;
+  badge?: TableBadge | null;
   netCoins: number;
   matches: number;
   rank: number;

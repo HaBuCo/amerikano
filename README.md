@@ -80,8 +80,9 @@ Revision kontrolü aynı anda gelen hamlelerin birbirini ezmesini engeller ve Re
 `social` Edge Function'ı arkadaş grafiğini özel tutar. Yalnızca kabul edilmiş arkadaşlar
 birbirinin çevrim içi durumunu ve bekleyen, dolmamış masasını görebilir. Masa davetleri
 10 dakika sonra sona erer. Bağlı oyuncusu olan bekleme odaları açık kalır; tamamen boş
-kalan odalar 5 dakika sonra temizlenir. Başlamış oyunlara sonradan oyuncu alınmaz ve
-her hamlede 24 saatlik geri dönüş süresi yenilenir.
+kalan odalar 5 dakika sonra temizlenir. Başlamış oyunlara sonradan oyuncu alınmaz;
+masada en az bir oyuncu açık kaldıkça masa sürer, tüm oyuncular ayrıldıktan
+15 dakika sonra kapanır.
 
 `server/` altındaki eski WebSocket + SQLite sunucusu yalnızca yerel referans ve geriye
 dönüş seçeneği olarak korunmaktadır; mobil istemci artık onu kullanmaz.

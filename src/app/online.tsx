@@ -1,38 +1,63 @@
 import { useTranslations } from '@/i18n/language';
 import { useEffect, useRef, useState } from 'react';
 import { Href, router, useLocalSearchParams } from 'expo-router';
-import { Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AppState, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { connectRoom, enterQuickRoom, enterRoom, forgetRoom, forfeitRoom, leaveWaitingRoom, sendAction, sendReaction, sendRoom, suspendRoom, useReactions, useRoom } from '@/network/client';
 import { GameTable } from '@/components/game-table';
 import { WaitingTable } from '@/components/waiting-table';
 import { RoomTierCard } from '@/components/room-tier-card';
+import { kit, Note, PrimaryButton, ScreenHeader, SecondaryButton } from '@/components/screen-kit';
 import { RoundIntro } from '@/components/round-intro';
 import { palette as p } from '@/constants/palette';
 import { refreshPlayerProfile, usePlayerProfile } from '@/network/profile';
-import { refreshWallet, useWallet } from '@/network/wallet';
+import { claimRescueCoins, refreshWallet, useWallet } from '@/network/wallet';
+import { buyProduct, useStore } from '@/network/store';
+import { fetchStoreOffers, type StoreOffer } from '@/purchases/purchases';
+import { coinPackForGap, COIN_PACKS } from '@/store/catalog';
 import { MIN_GAME_PLAYERS } from '@/game/engine';
+import { contractForRound, contractIndexForRound, openingJokerRestricted, roundCountForGame } from '@/game/game-rules';
 import { QUICK_ROOM_TARGET } from '@/game/quick-room';
 import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
-import { GameAction } from '@/game/types';
-import { ROOM_TIERS, type RoomEntryFee } from '@/game/coin-economy';
+import { GameAction, type GameVariant } from '@/game/types';
+import { RESCUE_BELOW, RESCUE_COINS, ROOM_TIERS, TABLE_BADGES, type RoomEntryFee } from '@/game/coin-economy';
 import { recommendRoomFee } from '@/game/room-recommendation';
-import { fetchRoomActivity, type RoomActivity } from '@/network/room-activity';
+import { fetchLobby, type RoomActivity, type TableHighlights } from '@/network/room-activity';
+import { selectedVariant, useGameSettings } from '@/settings/game-settings';
+import { cancelOpenTableReminder, remindOpenTable } from '@/notifications/notifications';
+import { scheduleReviewRequest } from '@/review/store-review';
+
+const BIG_TIERS = ROOM_TIERS.filter(tier => tier.fee in TABLE_BADGES);
+
+/** "5 dk önce" style age of a big win. */
+function ageOf(wonAt: string, now: number, t: (key: string, values?: readonly (string | number)[]) => string) {
+  const minutes = Math.max(0, Math.round((now - Date.parse(wonAt)) / 60_000));
+  if (minutes < 1) return t("az önce");
+  if (minutes < 60) return t("{0} dk önce", [minutes]);
+  return t("{0} sa önce", [Math.round(minutes / 60)]);
+}
 
 export default function OnlineScreen() {
-  const { t, localizeMessage } = useTranslations();
-  const { isTablet } = useResponsiveLayout();
+  const { t, localizeMessage, language } = useTranslations();
+  const { isTablet, isLandscape, isPhoneLandscape, width: screenWidth, height: screenHeight } = useResponsiveLayout();
   const { quick } = useLocalSearchParams<{ quick?: string }>();
   const state = useRoom();
   const reactions = useReactions();
   const profileState = usePlayerProfile();
   const wallet = useWallet();
+  const { settings } = useGameSettings();
+  const variant = selectedVariant(settings);
+  const VARIANT_LABELS: Record<GameVariant, string> = { amerikano: t("Amerikano"), rummy: t("Klasik Rummy"), contract: t("Contract Rummy") };
   const name = profileState.profile?.username || '';
   const [code, setCode] = useState('');
   const [selectedFee, setSelectedFee] = useState<RoomEntryFee>(100);
   const [activity, setActivity] = useState<RoomActivity[] | null>(null);
+  const [highlights, setHighlights] = useState<TableHighlights | null>(null);
+  const [offers, setOffers] = useState<Record<string, StoreOffer>>({});
+  const store = useStore();
   const feeTouched = useRef(false);
+  const carouselRef = useRef<ScrollView>(null);
   const defaultChosen = useRef(false);
   const [initialized, setInitialized] = useState(false);
   const [clock, setClock] = useState(() => Date.now());
@@ -51,15 +76,36 @@ export default function OnlineScreen() {
     .sort((a, b) => b.closestTablePlayers - a.closestTablePlayers || a.entryFee - b.entryFee)
     .flatMap(item => { const tier = ROOM_TIERS.find(candidate => candidate.fee === item.entryFee); return tier ? [{ tier, item }] : []; });
   const selectedWaiting = activity?.find(item => item.entryFee === selectedFee)?.waitingPlayers ?? 0;
+  const carouselGutter = isTablet ? 34 : 20;
+  const carouselViewport = Math.min(screenWidth, isTablet ? 820 : 620);
+  // A sideways phone counts as wide, but its short screen sizes the chips.
+  const cardWidth = Math.round(Math.min(carouselViewport * (isTablet ? 0.27 : 0.5), isPhoneLandscape ? screenHeight * 0.36 : Infinity));
+  const cardStep = cardWidth + 12;
+  // Landscape has room for most chips at once: list them from the left edge and pick by tapping,
+  // instead of centring the selected chip with half a screen of empty space beside it.
+  const centredCarousel = !isLandscape;
+  const selectedIndex = ROOM_TIERS.findIndex(tier => tier.fee === selectedFee);
+  const picking = !room;
+  useEffect(() => {
+    if (picking && centredCarousel) carouselRef.current?.scrollTo({ x: selectedIndex * cardStep, animated: true });
+  }, [picking, centredCarousel, selectedIndex, cardStep]);
+  const onCarouselSettled = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const index = Math.min(ROOM_TIERS.length - 1, Math.max(0, Math.round(event.nativeEvent.contentOffset.x / cardStep)));
+    const fee = ROOM_TIERS[index].fee;
+    if (fee !== selectedFee) { feeTouched.current = true; setSelectedFee(fee); }
+  };
   const canPlay = initialized && Boolean(name.trim()) && !state.busy && state.status === 'online' && wallet.balance !== null;
   useEffect(() => {
     if (!initialized || (roomVisibility !== undefined && (roomVisibility !== 'public' || roomStatus !== 'waiting'))) return;
     let active = true;
     const refresh = async () => {
       try {
-        const next = await fetchRoomActivity();
+        const lobby = await fetchLobby(variant);
         if (!active) return;
+        const next = lobby.activity;
         setActivity(next);
+        setHighlights(lobby.highlights);
+        setClock(Date.now());
         if (!defaultChosen.current && !feeTouched.current) {
           const fee = recommendRoomFee(next, wallet.balance);
           if (fee !== null) { setSelectedFee(fee); defaultChosen.current = true; }
@@ -69,7 +115,7 @@ export default function OnlineScreen() {
     void refresh();
     const timer = setInterval(() => { void refresh(); }, 12_000);
     return () => { active = false; clearInterval(timer); };
-  }, [initialized, roomVisibility, roomStatus, wallet.balance]);
+  }, [initialized, roomVisibility, roomStatus, wallet.balance, variant]);
   useEffect(() => {
     if (room?.visibility !== 'public' || room.status !== 'waiting') return;
     const timer = setInterval(() => setClock(Date.now()), 250);
@@ -90,12 +136,53 @@ export default function OnlineScreen() {
     }
     void leaveWaitingRoom().finally(() => router.back());
   };
+  // An online win is the happiest moment to ask for a review. Wait out the win
+  // celebration first; the review policy decides whether the sheet really shows.
+  const reviewedMatch = useRef<string | null>(null);
+  const matchOver = room?.game?.phase === 'game-over';
+  const matchKey = room?.game ? `${room.code}:${room.game.scoreHistory?.length ?? 0}` : null;
+  const wonMatch = Boolean(room?.game && room.game.players.find(player => player.id === room.you)?.score === Math.min(...room.game.players.map(player => player.score)));
+  const onlineGames = profileState.profile?.gamesPlayed ?? 0;
+  useEffect(() => {
+    if (!matchOver || !matchKey || reviewedMatch.current === matchKey) return;
+    reviewedMatch.current = matchKey;
+    // Scheduled outside the screen, so leaving the table right away still asks.
+    scheduleReviewRequest(wonMatch, onlineGames + 1, 4_000);
+  }, [matchKey, matchOver, onlineGames, wonMatch]);
+
+  // A running game goes on without the player (a bot takes the seat): remind
+  // them shortly after they leave the table, and drop the reminder once back.
+  const gameRunning = Boolean(room?.game && room.game.phase !== 'game-over');
+  useEffect(() => {
+    void cancelOpenTableReminder();
+    if (!gameRunning) return;
+    const subscription = AppState.addEventListener('change', next => {
+      if (next === 'background') void remindOpenTable(settings.notifications, settings.language);
+      else if (next === 'active') void cancelOpenTableReminder();
+    });
+    return () => subscription.remove();
+  }, [gameRunning, settings.notifications, settings.language]);
   const me = room?.members.find(member => member.id === room.you);
   const botCount = room?.members.filter(member => member.isBot).length ?? 0;
   const hostIsBot = room?.members.find(member => member.id === room.hostId)?.botControlled ?? false;
   const playerMeta = Object.fromEntries((room?.members ?? []).map((member) => {
     return [member.id, { avatarKey: member.avatarKey, level: member.level, connected: member.connected, missedTurns: member.missedTurns, botControlled: member.botControlled }];
   }));
+  // What stands between the player and the chosen table, and the pack that closes it.
+  const gap = wallet.balance === null ? 0 : Math.max(0, selectedFee - wallet.balance);
+  const gapPack = gap > 0 ? coinPackForGap(gap) : null;
+  const gapOffer = gapPack ? offers[gapPack.productId] : undefined;
+  const outOfCoins = wallet.balance !== null && wallet.balance < RESCUE_BELOW;
+  const rescuedToday = wallet.rescueClaimedOn === new Date(clock).toISOString().slice(0, 10);
+  const bigTables = BIG_TIERS.map(tier => ({ tier, players: highlights?.playing.find(item => item.entryFee === tier.fee)?.players ?? 0 }));
+  const bigWins = highlights?.bigWins ?? [];
+  const needsOffers = gap > 0 && Platform.OS !== 'web';
+  useEffect(() => {
+    if (!needsOffers) return;
+    let active = true;
+    void fetchStoreOffers(COIN_PACKS.map(pack => pack.productId)).then(result => { if (active) setOffers(result); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [needsOffers]);
   if (room?.game) return <View style={s.gameRoot}>
     <GameTable key={room.code + ':' + room.game.roundIndex} game={room.game} viewerId={room.you}
       modeLabel={`ÇEVRİM İÇİ · ${room.code}`} canAdvance={room.hostId === room.you || hostIsBot} canRematch={room.entryFee === 0 && (room.hostId === room.you || hostIsBot)}
@@ -107,147 +194,244 @@ export default function OnlineScreen() {
       connectionState={state.status === 'online' ? 'online' : state.status === 'connecting' ? 'reconnecting' : 'offline'}
       error={state.error || (state.status !== 'online' ? t("Yeniden bağlanılıyor… Elin korunuyor.") : '')}
       onForfeit={() => { void forfeitRoom().then((left) => { if (left) router.replace('/'); }); }}
-      onExit={() => { if (room.game?.phase === 'game-over') forgetRoom(); else suspendRoom(); router.replace('/'); }} />
-    <RoundIntro roundIndex={room.game.roundIndex} starterName={room.game.players[room.game.startingPlayerIndex]?.name ?? t("Oyuncu")} enabled={state.status === 'online'} />
+      onExit={() => {
+        if (room.game?.phase === 'game-over') forgetRoom();
+        else { suspendRoom(); void remindOpenTable(settings.notifications, settings.language); }
+        router.replace('/');
+      }} />
+    <RoundIntro roundIndex={room.game.roundIndex} contractIndex={contractIndexForRound(room.game)} contract={contractForRound(room.game)} roundCount={roundCountForGame(room.game)} jokerRestricted={openingJokerRestricted(room.game)} starterName={room.game.players[room.game.startingPlayerIndex]?.name ?? t("Oyuncu")} cutBonusName={room.game.players.find(player => player.id === room.game?.cutBonus?.playerId)?.name} enabled={state.status === 'online'} />
   </View>;
-  return <SafeAreaView style={s.page}>
-    <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={[s.content, isTablet && s.contentTablet]} keyboardShouldPersistTaps="handled">
-      <Pressable accessibilityRole="button" disabled={state.busy} onPress={goBack}><Text style={s.back}>{t("Ana menü")}</Text></Pressable>
-      <Pressable accessibilityRole="button" onPress={() => router.push('/profile')} style={s.profileLink}>
-        <Text style={s.profileLinkText}>{t("Profilim · {0} coin", [wallet.balance === null ? '—' : wallet.balance.toLocaleString()])}</Text>
-      </Pressable>
-      <Text style={s.eyebrow}>{room?.visibility === 'public' || (!room && quick === '1') ? t("HIZLI MASA") : t("ARKADAŞ MASASI")}</Text>
-      <Text style={s.title}>{room ? t("Masana oturdun.") : quick === '1' ? t("Masanı seç.") : t("Masanı kur.")}</Text>
-      <Text style={s.body}>{room?.visibility === 'public' ? t("Yerini tuttun. Sistem yeni oyuncuları bu masaya yerleştirirken sen bekle.") : room ? t("Kodunu veya arkadaş davetini paylaş. Herkes hazır olduğunda başlayın.") : quick === '1' ? t("Bakiyene uygun masayı seç; rakiplerini bulalım.") : t("Arkadaşlarınla oynayacağın masayı seç veya gelen kodla katıl.")}</Text>
-      {state.status !== 'online' && <Text style={s.status}>{t("○ Bağlantı bekleniyor")}</Text>}
-      {!!state.error && <View style={s.error}><Text style={s.body}>{localizeMessage(state.error)}</Text><Pressable onPress={forgetRoom}><Text style={s.link}>{t("Oturumu sıfırla ve yeniden dene")}</Text></Pressable></View>}
+  const busyOffline = state.busy || state.status !== 'online';
+  const canAfford = (fee: number) => wallet.balance !== null && wallet.balance >= fee;
+  const shareMessage = room?.variant === 'rummy' ? t("Rummy masama katıl! Oda kodu: {0}", [room.code])
+    : room?.variant === 'contract' ? t("Contract Rummy masama katıl! Oda kodu: {0}", [room?.code ?? ''])
+    : t("Amerikano masama katıl! Oda kodu: {0}", [room?.code ?? '']);
+  const startBlocked = !room || room.members.length < MIN_GAME_PLAYERS || (room.entryFee > 0 && room.members.filter(m => !m.isBot).length < 2) || room.members.some(m => !m.ready || !m.connected);
+
+  return <SafeAreaView edges={['top', 'bottom']} style={kit.page}>
+    <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={[kit.content, isTablet && kit.contentTablet, s.content]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <ScreenHeader onBack={state.busy ? null : goBack}
+        title={room ? t("Masana oturdun.") : quick === '1' ? t("Masanı seç.") : t("Masanı kur.")}
+        subtitle={`${room?.visibility === 'public' || (!room && quick === '1') ? t("Hızlı masa") : t("Arkadaş masası")} · ${VARIANT_LABELS[room?.variant ?? (room ? 'amerikano' : variant)]}`}
+        right={<Pressable accessibilityRole="button" accessibilityLabel={t("Coin bakiyen: {0}. Mağazayı aç", [wallet.balance === null ? '—' : wallet.balance.toLocaleString()])}
+          onPress={() => router.push('/store' as Href)} style={({ pressed }) => [s.balancePill, pressed && kit.pressed]}>
+          <Text style={s.balanceGlyph}>✦</Text>
+          <Text style={s.balanceValue}>{wallet.balance === null ? '—' : wallet.balance.toLocaleString()}</Text>
+        </Pressable>} />
+      {!!room && <Text style={s.body}>{room.visibility === 'public' ? t("Yerini tuttun. Sistem yeni oyuncuları bu masaya yerleştirirken sen bekle.") : t("Kodunu veya arkadaş davetini paylaş. Herkes hazır olduğunda başlayın.")}</Text>}
+      {state.status !== 'online' && <Note icon="more">{t("Bağlantı bekleniyor…")}</Note>}
+      {!!state.error && <View style={s.errorCard}>
+        <Text style={s.errorText}>{localizeMessage(state.error)}</Text>
+        <Pressable accessibilityRole="button" onPress={forgetRoom}><Text style={s.link}>{t("Oturumu sıfırla ve yeniden dene")}</Text></Pressable>
+      </View>}
+
       {!room ? <>
-        <View style={s.selectionHeading}>
-          <Text style={s.label}>{t("MASALAR")}</Text>
-          <View style={s.walletPill}><Text style={s.walletPillLabel}>{t("BAKİYEN")}</Text><Text style={s.walletPillValue}>{wallet.balance === null ? '—' : wallet.balance.toLocaleString()} ✦</Text></View>
-        </View>
-        {activity && recommendedFee !== null && recommendedActivity && recommendedActivity.waitingPlayers > 0 && <Text style={s.liveLead}>
-          {t('{0} coin masasında {1} oyuncu bekliyor. En hızlı eşleşme burada olabilir.', [recommendedFee, recommendedActivity.waitingPlayers])}
-        </Text>}
-        {/* Waiting counts are shown on every tier card, so both screens must offer a way to sit at those public tables. */}
-        {(quick === '1' || openTables.length > 0) && <View style={s.openTables}>
-          <Text style={s.label}>{t("BEKLEYEN MASALAR")}</Text>
-          {activity === null ? <Text style={s.joinHint}>{t("Masalar yükleniyor…")}</Text>
-            : openTables.length === 0 ? <Text style={s.joinHint}>{t("Şu an bekleyen masa yok. Aşağıdan bir masa aç; gelen oyuncular sana katılsın.")}</Text>
-            : openTables.map(({ tier, item }) => {
-              const blocked = !canPlay || (wallet.balance ?? 0) < tier.fee;
-              return <View key={tier.fee} style={[s.openTable, { borderColor: tier.accent }]}>
-                <View style={s.openTableCopy}>
-                  <Text style={[s.openTableName, { color: tier.accent }]}>{tier.suit} {t(tier.name)} · {tier.fee.toLocaleString()} coin</Text>
-                  <Text style={s.joinHint}>{t("{0}/4 oyuncu oturuyor", [item.closestTablePlayers])}</Text>
-                </View>
-                <Pressable accessibilityRole="button" accessibilityLabel={t("{0} masasına katıl", [t(tier.name)])} disabled={blocked}
-                  onPress={() => { feeTouched.current = true; setSelectedFee(tier.fee); void enterQuickRoom(name, tier.fee); }}
-                  style={[s.openTableJoin, { backgroundColor: tier.accent }, blocked && s.disabled]}>
-                  <Text style={s.openTableJoinText}>{t("Katıl")}</Text>
-                </Pressable>
-              </View>;
-            })}
+        {outOfCoins && <View style={s.gapCard}>
+          <Text style={s.gapTitle}>{t("Coin'in bitti")}</Text>
+          <Text style={s.hint}>{rescuedToday
+            ? t("Bugünkü kurtarma coin'ini aldın. Yarın yine gel ya da günlük hediyeni al.")
+            : t("Masaya dönmen için günde bir kez {0} coin hediye.", [RESCUE_COINS])}</Text>
+          {!rescuedToday && <PrimaryButton disabled={wallet.claiming} onPress={() => void claimRescueCoins()} style={s.gapButton}
+            label={wallet.claiming ? t("İşleniyor…") : t("{0} coin al", [RESCUE_COINS])} />}
+          <SecondaryButton icon="store" label={t("Mağazaya git")} onPress={() => router.push('/store' as Href)} />
         </View>}
-        <View style={s.tierGrid}>{ROOM_TIERS.map(tier => <RoomTierCard key={tier.fee} tier={tier} selected={selectedFee === tier.fee}
-          affordable={wallet.balance === null ? null : wallet.balance >= tier.fee} tablet={isTablet}
-          waitingPlayers={activity ? (activity.find(item => item.entryFee === tier.fee)?.waitingPlayers ?? 0) : undefined}
-          recommended={recommendedFee === tier.fee && (recommendedActivity?.waitingPlayers ?? 0) > 0}
-          onPress={() => { feeTouched.current = true; setSelectedFee(tier.fee); }} />)}</View>
-        <View style={s.selectedInfo}>
-          <Text style={s.selectedCopy}>{t("Giriş ücreti oyun başlayınca kesilir. Botlar coin kazanmaz.")}</Text>
-          {wallet.balance !== null && wallet.balance < selectedFee && <Text style={s.insufficient}>{t("Bakiye yetersiz. Günlük hediyeni al veya daha uygun bir masa seç.")}</Text>}
-        </View>
-        {quick === '1' ? <Pressable accessibilityRole="button" disabled={!canPlay || (wallet.balance ?? 0) < selectedFee} style={[s.primary, (!canPlay || (wallet.balance ?? 0) < selectedFee) && s.disabled]} onPress={() => enterQuickRoom(name, selectedFee)}><Text style={s.primaryText}>{selectedWaiting > 0 ? t("{0} masasına katıl", [t(selectedTier.name)]) : t("{0} masasında oyna", [t(selectedTier.name)])}</Text></Pressable> : <>
-          <Pressable accessibilityRole="button" disabled={!name.trim() || state.busy || state.status !== 'online' || wallet.balance === null || wallet.balance < selectedFee} style={[s.primary, (!name.trim() || state.busy || state.status !== 'online' || wallet.balance === null || wallet.balance < selectedFee) && s.disabled]} onPress={() => enterRoom(name, undefined, selectedFee)}><Text style={s.primaryText}>{t("{0} masası kur", [t(selectedTier.name)])}</Text></Pressable>
-          <View style={s.joinPanel}>
-            <Text style={s.label}>{t("DAVET KODUN VAR MI?")}</Text>
-            <Text style={s.joinHint}>{t("Arkadaşının masasındaki giriş ücreti katılınca gösterilir.")}</Text>
-            <View style={s.joinRow}><TextInput accessibilityLabel={t("Oda kodu")} autoCapitalize="characters" autoCorrect={false} style={[s.input, s.codeInput, s.joinInput]} placeholder="ABC123" placeholderTextColor={p.muted} maxLength={6} value={code} onChangeText={v => setCode(v.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
-              <Pressable accessibilityRole="button" disabled={!name.trim() || code.length !== 6 || state.busy || state.status !== 'online'} style={[s.joinButton, (!name.trim() || code.length !== 6 || state.busy || state.status !== 'online') && s.disabled]} onPress={() => enterRoom(name, code)}><Text style={s.white}>{t("Katıl")}</Text></Pressable></View>
+        {/* Waiting counts are shown on every tier card, so both screens must offer a way to sit at those public tables. */}
+        {(quick === '1' || openTables.length > 0) && <View style={s.section}>
+          <Text style={s.sectionTitle}>{t("BEKLEYEN MASALAR")}</Text>
+          <View style={s.group}>
+            {activity === null ? <Text style={s.groupNote}>{t("Masalar yükleniyor…")}</Text>
+              : openTables.length === 0 ? <Text style={s.groupNote}>{t("Şu an bekleyen masa yok. Aşağıdan bir masa aç; gelen oyuncular sana katılsın.")}</Text>
+              : openTables.map(({ tier, item }, index) => {
+                const blocked = !canPlay || (wallet.balance ?? 0) < tier.fee;
+                return <View key={tier.fee} style={[s.openTable, index < openTables.length - 1 && s.divider]}>
+                  <Text style={[s.openTableSuit, { color: tier.accent }]}>{tier.suit}</Text>
+                  <View style={s.grow}>
+                    <Text style={s.openTableName}>{t(tier.name)} · {tier.fee.toLocaleString()} ✦</Text>
+                    <Text style={s.hint}>{t("{0}/4 oyuncu oturuyor", [item.closestTablePlayers])}</Text>
+                  </View>
+                  <Pressable accessibilityRole="button" accessibilityLabel={t("{0} masasına katıl", [t(tier.name)])} disabled={blocked}
+                    onPress={() => { feeTouched.current = true; setSelectedFee(tier.fee); void enterQuickRoom(name, tier.fee, variant); }}
+                    style={({ pressed }) => [s.openTableJoin, { backgroundColor: tier.accent }, blocked && kit.disabled, pressed && kit.pressed]}>
+                    <Text style={s.openTableJoinText}>{t("Katıl")}</Text>
+                  </Pressable>
+                </View>;
+              })}
           </View>
-        </>}
+        </View>}
+
+        <Text style={s.sectionTitle}>{t("MASA SEÇ")}</Text>
+        <ScrollView ref={carouselRef} horizontal showsHorizontalScrollIndicator={false} decelerationRate="fast" snapToInterval={centredCarousel ? cardStep : undefined} snapToAlignment="start"
+          onMomentumScrollEnd={centredCarousel ? onCarouselSettled : undefined} style={{ marginHorizontal: -carouselGutter }}
+          contentContainerStyle={{ paddingHorizontal: centredCarousel ? (carouselViewport - cardWidth) / 2 : carouselGutter, gap: 12, alignItems: 'center' }}>
+          {ROOM_TIERS.map(tier => <RoomTierCard key={tier.fee} tier={tier} selected={selectedFee === tier.fee}
+            affordable={wallet.balance === null ? null : wallet.balance >= tier.fee} width={cardWidth}
+            waitingPlayers={activity ? (activity.find(item => item.entryFee === tier.fee)?.waitingPlayers ?? 0) : undefined}
+            recommended={recommendedFee === tier.fee && (recommendedActivity?.waitingPlayers ?? 0) > 0}
+            prized={tier.fee in TABLE_BADGES}
+            onPress={() => { feeTouched.current = true; setSelectedFee(tier.fee); }} />)}
+        </ScrollView>
+        <View style={s.dots}>{ROOM_TIERS.map(tier => <View key={tier.fee} style={[s.dot, selectedFee === tier.fee && { backgroundColor: tier.accent, width: 18 }]} />)}</View>
+
+        {quick === '1'
+          ? <PrimaryButton icon="play" disabled={!canPlay || !canAfford(selectedFee)} onPress={() => void enterQuickRoom(name, selectedFee, variant)}
+            label={selectedWaiting > 0 ? t("{0} masasına katıl", [t(selectedTier.name)]) : t("{0} masasında oyna", [t(selectedTier.name)])} />
+          : <PrimaryButton icon="friends" disabled={!name.trim() || busyOffline || !canAfford(selectedFee)} onPress={() => void enterRoom(name, undefined, selectedFee, variant)}
+            label={t("{0} masası kur", [t(selectedTier.name)])} />}
+        <Note icon="rules">{t("Giriş ücreti oyun başlayınca kesilir. Botlar coin kazanmaz.")}</Note>
+        {gap > 0 && !outOfCoins && <View style={s.gapCard}>
+          <Text style={s.gapTitle}>{t("{0} masasına {1} coin kaldı", [t(selectedTier.name), gap.toLocaleString()])}</Text>
+          <Text style={s.hint}>{t("Günlük hediye ve videolarla da biriktirebilirsin.")}</Text>
+          {gapPack && gapOffer && <PrimaryButton disabled={store.busy !== null} onPress={() => void buyProduct(gapPack.productId)} style={s.gapButton}
+            label={store.busy === gapPack.productId ? t("İşleniyor…") : t("{0} coin al · {1}", [gapPack.coins.toLocaleString(), gapOffer.priceString])} />}
+          <SecondaryButton icon="store" label={t("Mağazaya git")} onPress={() => router.push('/store' as Href)} />
+        </View>}
+
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>{t("BÜYÜK MASALAR")}</Text>
+          <View style={s.group}>
+            {bigTables.map(({ tier, players }) => <View key={tier.fee} style={[s.openTable, s.divider]}>
+              <Text style={[s.openTableSuit, { color: tier.accent }]}>{tier.suit}</Text>
+              <View style={s.grow}>
+                <Text style={s.openTableName}>{t(tier.name)} · {tier.fee.toLocaleString()} ✦</Text>
+                <Text style={s.hint}>{players > 0 ? t("{0} oyuncu şu an oynuyor", [players]) : t("Kazanana özel çuha ve profil rozeti")}</Text>
+              </View>
+            </View>)}
+            {bigWins.length > 0 ? bigWins.slice(0, 3).map((win, index) => {
+              const tier = ROOM_TIERS.find(item => item.fee === win.entryFee)!;
+              return <View key={win.wonAt + win.username} style={[s.bigWin, index < Math.min(3, bigWins.length) - 1 && s.divider]}>
+                <Text style={s.bigWinText} numberOfLines={1}>
+                  <Text style={s.bigWinName}>@{win.username}</Text>{' '}
+                  {t("{0} masasında kazandı", [t(tier.name)])}{' '}
+                  <Text style={[s.bigWinPrize, { color: tier.accent }]}>+{win.payout.toLocaleString()} ✦</Text>
+                </Text>
+                <Text style={s.bigWinAge}>{ageOf(win.wonAt, clock, t)}</Text>
+              </View>;
+            }) : <Text style={s.groupNote}>{t("Son 24 saatte büyük masada kazanan yok. İlk sen ol.")}</Text>}
+          </View>
+        </View>
+
+        {quick !== '1' && <View style={s.section}>
+          <Text style={s.sectionTitle}>{t("DAVET KODUN VAR MI?")}</Text>
+          <View style={[s.group, s.joinBox]}>
+            <TextInput accessibilityLabel={t("Oda kodu")} autoCapitalize="characters" autoCorrect={false} style={s.codeInput} placeholder="ABC123" placeholderTextColor={p.muted}
+              maxLength={6} value={code} onChangeText={v => setCode(v.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
+            <Pressable accessibilityRole="button" disabled={!name.trim() || code.length !== 6 || busyOffline} onPress={() => void enterRoom(name, code)}
+              style={({ pressed }) => [s.joinButton, (!name.trim() || code.length !== 6 || busyOffline) && kit.disabled, pressed && kit.pressed]}>
+              <Text style={s.joinButtonText}>{t("Katıl")}</Text>
+            </Pressable>
+          </View>
+        </View>}
       </> : <>
-        <View style={s.codePanel}><Text style={s.label}>{t("ODA KODU")}</Text><Text selectable style={s.code}>{room.code}</Text><Pressable accessibilityRole="button" onPress={() => void Share.share({ message: t("Amerikano masama katıl! Oda kodu: {0}", [room.code]) })}><Text style={s.link}>{t("Kodu paylaş")}</Text></Pressable></View>
-        <Pressable accessibilityRole="button" style={s.inviteButton} onPress={() => router.push(`/friends?roomCode=${room.code}` as Href)}>
-          <Text style={s.white}>{t("Arkadaşlarını davet et")}</Text>
-        </Pressable>
+        <View style={s.codeCard}>
+          <Text style={s.sectionTitleCentered}>{t("ODA KODU")}</Text>
+          <Text selectable style={s.code}>{room.code}</Text>
+          <View style={s.codeActions}>
+            <SecondaryButton icon="external" label={t("Kodu paylaş")} onPress={() => void Share.share({ message: shareMessage })} style={s.grow} />
+            <SecondaryButton icon="friends" label={t("Davet et")} onPress={() => router.push(`/friends?roomCode=${room.code}` as Href)} style={s.grow} />
+          </View>
+        </View>
+
         <WaitingTable room={room} tableWidth={isTablet ? 780 : 560} searching={room.visibility === 'public'}
           onInviteEmptySeat={room.visibility === 'private' ? () => router.push(`/friends?roomCode=${room.code}` as Href) : undefined} />
-        {room.entryFee > 0 && <View style={[s.lobbyTier, { borderColor: activeTier?.accent ?? p.gold }]}><Text style={[s.lobbyTierName, { color: activeTier?.accent ?? p.gold }]}>{activeTier?.suit} {t(activeTier?.name ?? 'Masa')}</Text><Text style={s.lobbyTierFee}>{t("{0} coin giriş", [room.entryFee])}</Text><Text style={s.joinHint}>{t("Ücret maç başlayınca bakiyenden düşer.")}</Text></View>}
+        <Text style={s.seatCount}>{room.visibility === 'public' ? t("{0}/4 oyuncu · En az 3 kişi gerekli", [connectedPlayers]) : t("{0}/6 oyuncu · En az 2 kişi gerekli", [room.members.length])}</Text>
+
+        {room.entryFee > 0 && <View style={[s.tierCard, { borderColor: activeTier?.accent ?? p.gold }]}>
+          <Text style={[s.openTableSuit, { color: activeTier?.accent ?? p.gold }]}>{activeTier?.suit}</Text>
+          <View style={s.grow}>
+            <Text style={[s.tierName, { color: activeTier?.accent ?? p.gold }]}>{t(activeTier?.name ?? 'Masa')} · {t("{0} coin giriş", [room.entryFee])}</Text>
+            <Text style={s.hint}>{t("Ücret maç başlayınca bakiyenden düşer.")}</Text>
+          </View>
+        </View>}
+
         {room.visibility === 'private' ? <>
-          {room.hostId === room.you && <View style={s.botPanel}>
-            <View style={s.botCopy}><Text style={s.white}>{t("Yapay oyuncular")}</Text><Text style={s.botHint}>{botCount ? t("{0} yapay oyuncu masada", [botCount]) : t("Boş koltukları botlarla doldur.")}</Text></View>
-            <View style={s.botActions}>
-              {botCount > 0 && <Pressable accessibilityRole="button" accessibilityLabel={t("Yapay oyuncu çıkar")} disabled={state.busy || state.status !== 'online'} onPress={() => sendRoom({ type: 'remove-bot' })} style={[s.botButton, (state.busy || state.status !== 'online') && s.disabled]}><Text style={s.white}>−</Text></Pressable>}
-              <Pressable accessibilityRole="button" accessibilityLabel={t("Yapay oyuncu ekle")} disabled={state.busy || state.status !== 'online' || room.members.length >= 6} onPress={() => sendRoom({ type: 'add-bot' })} style={[s.botButton, (state.busy || state.status !== 'online' || room.members.length >= 6) && s.disabled]}><Text style={s.botAddText}>{t("+ Oyuncu ekle")}</Text></Pressable>
-            </View>
+          {room.hostId === room.you && <View style={[s.group, s.botRow]}>
+            <View style={s.grow}><Text style={s.rowTitle}>{t("Yapay oyuncular")}</Text><Text style={s.hint}>{botCount ? t("{0} yapay oyuncu masada", [botCount]) : t("Boş koltukları botlarla doldur.")}</Text></View>
+            {botCount > 0 && <Pressable accessibilityRole="button" accessibilityLabel={t("Yapay oyuncu çıkar")} disabled={busyOffline} onPress={() => sendRoom({ type: 'remove-bot' })}
+              style={({ pressed }) => [s.botButton, busyOffline && kit.disabled, pressed && kit.pressed]}><Text style={s.botButtonText}>−</Text></Pressable>}
+            <Pressable accessibilityRole="button" accessibilityLabel={t("Yapay oyuncu ekle")} disabled={busyOffline || room.members.length >= 6} onPress={() => sendRoom({ type: 'add-bot', language })}
+              style={({ pressed }) => [s.botButton, (busyOffline || room.members.length >= 6) && kit.disabled, pressed && kit.pressed]}><Text style={s.botButtonText}>+</Text></Pressable>
           </View>}
-          <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online'} onPress={() => sendRoom({ type: 'ready', ready: !me?.ready })} style={s.secondary}><Text style={s.white}>{me?.ready ? t("Hazır değilim") : t("Hazırım ✓")}</Text></Pressable>
-          {room.hostId === room.you && <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online' || room.members.length < MIN_GAME_PLAYERS || (room.entryFee > 0 && room.members.filter(m => !m.isBot).length < 2) || room.members.some(m => !m.ready || !m.connected)} style={[s.primary, (room.members.length < MIN_GAME_PLAYERS || (room.entryFee > 0 && room.members.filter(m => !m.isBot).length < 2) || room.members.some(m => !m.ready || !m.connected)) && s.disabled]} onPress={() => sendRoom({ type: 'start' })}><Text style={s.primaryText}>{t("Kartları dağıt")}</Text></Pressable>}
-          <Text style={s.roomHint}>{t("Herkes hazır olduğunda oda sahibi kartları dağıtır.")}</Text>
-        </> : <View style={s.matchPanel}>
+          <SecondaryButton icon={me?.ready ? 'restore' : 'play'} label={me?.ready ? t("Hazır değilim") : t("Hazırım ✓")} disabled={busyOffline} onPress={() => sendRoom({ type: 'ready', ready: !me?.ready })} />
+          {room.hostId === room.you && <PrimaryButton icon="cards" label={t("Kartları dağıt")} disabled={busyOffline || startBlocked} onPress={() => sendRoom({ type: 'start' })} />}
+          <Note>{t("Herkes hazır olduğunda oda sahibi kartları dağıtır.")}</Note>
+        </> : <View style={s.matchCard}>
           <Text style={s.matchTitle}>{quickSeconds === null ? t("{0}/{1} oyuncu bulundu", [connectedPlayers, QUICK_ROOM_TARGET]) : connectedPlayers >= QUICK_ROOM_TARGET ? t("Masa hazır · {0} saniye içinde başlıyor", [quickSeconds]) : t("4. oyuncu aranıyor · {0} saniye içinde başlıyor", [quickSeconds])}</Text>
-          <Text style={s.roomHint}>{quickSeconds === null ? t("{0} oyuncu aranıyor. Hızlı masa en az 3 kişiyle başlar.", [Math.max(0, QUICK_ROOM_TARGET - connectedPlayers)]) : connectedPlayers < QUICK_ROOM_TARGET ? t("Dördüncü oyuncu gelmezse 3 kişiyle başlayacaksınız.") : t("Masadan ayrılma; oyun otomatik başlayacak.")}</Text>
-          {botCount > 0 && <Text style={s.roomHint}>{botCount}{t("bot masaya katıldı. Botlar koltuklarında işaretli.")}</Text>}
+          <Text style={s.hintCentered}>{quickSeconds === null ? t("{0} oyuncu aranıyor. Hızlı masa en az 3 kişiyle başlar.", [Math.max(0, QUICK_ROOM_TARGET - connectedPlayers)]) : connectedPlayers < QUICK_ROOM_TARGET ? t("Dördüncü oyuncu gelmezse 3 kişiyle başlayacaksınız.") : t("Masadan ayrılma; oyun otomatik başlayacak.")}</Text>
+          {botCount > 0 && <Text style={s.hintCentered}>{botCount}{t("bot masaya katıldı. Botlar koltuklarında işaretli.")}</Text>}
           {recommendedFee !== null && recommendedActivity && recommendedFee !== room.entryFee && recommendedActivity.closestTablePlayers > connectedPlayers && <>
             <Text style={s.waitNotice}>{t('{0} coin masasında {1} oyuncu bekliyor.', [recommendedFee, recommendedActivity.waitingPlayers])}</Text>
-            <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online'} onPress={() => {
+            <SecondaryButton label={t('Masa seçimine dön')} disabled={busyOffline} onPress={() => {
               void leaveWaitingRoom().then(() => { feeTouched.current = true; setSelectedFee(recommendedFee); });
-            }} style={s.secondary}><Text style={s.white}>{t('Masa seçimine dön')}</Text></Pressable>
+            }} />
           </>}
           {longWait && (room.entryFee === 0 || room.members.filter(m => !m.isBot && m.connected).length >= 2) && <>
             {continuedRoomCode !== room.code && <Text style={s.waitNotice}>{t("Bekleme uzadı. Masayı botlarla 4 kişiye tamamlayabilir veya gerçek oyuncuları bekleyebilirsin.")}</Text>}
-            <Pressable accessibilityRole="button" disabled={state.busy || state.status !== 'online'} onPress={() => sendRoom({ type: 'fill-bots' })} style={[s.primary, (state.busy || state.status !== 'online') && s.disabled]}><Text style={s.primaryText}>{t("Botlarla 4 kişiye tamamla")}</Text></Pressable>
-            {continuedRoomCode !== room.code && <Pressable accessibilityRole="button" onPress={() => setContinuedRoomCode(room.code)} style={s.secondary}><Text style={s.white}>{t("Aramaya devam et")}</Text></Pressable>}
+            <PrimaryButton label={t("Botlarla 4 kişiye tamamla")} disabled={busyOffline} onPress={() => sendRoom({ type: 'fill-bots', language })} />
+            {continuedRoomCode !== room.code && <SecondaryButton label={t("Aramaya devam et")} onPress={() => setContinuedRoomCode(room.code)} />}
           </>}
         </View>}
-        <Text style={s.body}>{room.visibility === 'public' ? t("{0}/4 oyuncu · En az 3 kişi gerekli", [connectedPlayers]) : t("{0}/6 oyuncu · En az 2 kişi gerekli", [room.members.length])}</Text>
-        <Text style={s.roomHint}>{t("Ana menüye dönersen bu bekleme odasından ayrılırsın.")}</Text>
-        <Pressable disabled={state.busy} onPress={() => void leaveWaitingRoom()}><Text style={s.link}>{room.visibility === 'public' ? t("Aramayı iptal et") : t("Odadan ayrıl")}</Text></Pressable>
+
+        <SecondaryButton icon="logout" danger label={room.visibility === 'public' ? t("Aramayı iptal et") : t("Odadan ayrıl")} disabled={state.busy} onPress={() => void leaveWaitingRoom()} />
+        <Note>{t("Ana menüye dönersen bu bekleme odasından ayrılırsın.")}</Note>
       </>}
     </KeyboardAwareScrollView>
   </SafeAreaView>;
 }
+
 const s = StyleSheet.create({
   gameRoot: { flex: 1, backgroundColor: '#09271e' },
-  page: { flex: 1, backgroundColor: p.canvas }, content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 34, gap: 15, width: '100%', maxWidth: 620, alignSelf: 'center' },
-  contentTablet: { maxWidth: 820, paddingHorizontal: 34, paddingTop: 30, paddingBottom: 44 },
-  back: { color: p.cream, fontSize: 15, paddingVertical: 10 }, profileLink: { position: 'absolute', top: 16, right: 20, paddingVertical: 10 }, profileLinkText: { color: p.gold, fontSize: 13, fontWeight: '700' }, eyebrow: { color: p.gold, letterSpacing: 2.4, fontSize: 10, marginTop: 10, fontWeight: '900' },
-  title: { color: p.cream, fontSize: 35, lineHeight: 40, fontWeight: '900' }, body: { color: p.muted, fontSize: 14, lineHeight: 21 },
-  status: { color: '#bdd4c4', fontSize: 12 }, label: { color: p.gold, fontSize: 10, letterSpacing: 2, fontWeight: '800' },
-  input: { padding: 17, minHeight: 55, borderRadius: 12, borderWidth: 1, borderColor: p.line, color: p.cream, backgroundColor: '#ffffff08', fontSize: 18 },
-  primary: { borderRadius: 13, minHeight: 54, alignItems: 'center', justifyContent: 'center', backgroundColor: p.gold },
-  primaryText: { color: p.ink, fontWeight: '800', fontSize: 16 }, secondary: { borderRadius: 13, minHeight: 52, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: p.line },
-  white: { color: p.cream, fontSize: 15, fontWeight: '700' }, disabled: { opacity: 0.4 },
-  codeInput: { letterSpacing: 7, textAlign: 'center' }, codePanel: { paddingVertical: 18, alignItems: 'center', borderTopWidth: 1, borderBottomWidth: 1, borderColor: p.line, gap: 12 },
-  code: { fontSize: 39, fontWeight: '800', letterSpacing: 6, color: p.cream }, link: { color: p.gold, fontSize: 14, paddingVertical: 8 },
-  error: { borderRadius: 12, backgroundColor: '#842c2c55', padding: 14 },
-  roomHint: { color: p.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' },
-  inviteButton: { minHeight: 52, paddingHorizontal: 17, borderRadius: 13, backgroundColor: '#ffffff0d', borderWidth: 1, borderColor: p.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  botPanel: { minHeight: 80, paddingVertical: 15, borderTopWidth: 1, borderBottomWidth: 1, borderColor: p.line, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 14 },
-  botCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 140, gap: 5 },
-  botHint: { color: p.muted, fontSize: 12, lineHeight: 18, textAlign: 'left' },
-  botActions: { flexDirection: 'row', flexShrink: 0, marginLeft: 'auto', gap: 8 }, botButton: { minHeight: 44, minWidth: 44, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: p.gold, alignItems: 'center', justifyContent: 'center' }, botAddText: { color: p.gold, fontSize: 13, fontWeight: '800' },
-  matchPanel: { gap: 10, paddingVertical: 16, borderTopWidth: 1, borderBottomWidth: 1, borderColor: p.line },
-  matchTitle: { color: p.cream, fontSize: 17, fontWeight: '800', textAlign: 'center' }, waitNotice: { color: p.gold, fontSize: 12, lineHeight: 18, textAlign: 'center' },
-  selectionHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 7 },
-  selectionLead: { color: p.cream, fontSize: 14, fontWeight: '700', marginTop: 6, flexShrink: 1 },
-  liveLead: { color: '#A9F3CD', fontSize: 13, lineHeight: 19, fontWeight: '700' },
-  walletPill: { alignItems: 'flex-end' },
-  walletPillLabel: { color: p.gold, fontSize: 8, letterSpacing: 1.4, fontWeight: '900' }, walletPillValue: { color: p.cream, fontSize: 17, fontWeight: '900' },
-  tierGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10 },
-  selectedInfo: { paddingHorizontal: 2, gap: 4 },
-  selectedInfoTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
-  selectedName: { fontSize: 18, fontWeight: '900' }, selectedPrice: { color: p.cream, fontSize: 16, fontWeight: '900' }, selectedCopy: { color: p.muted, fontSize: 12, lineHeight: 18 },
-  insufficient: { color: '#FFD7B0', fontSize: 12, fontWeight: '700', lineHeight: 18 },
-  joinPanel: { marginTop: 11, borderTopWidth: 1, borderColor: p.line, paddingTop: 20, gap: 10 },
-  joinHint: { color: p.muted, fontSize: 12, lineHeight: 18 }, joinRow: { flexDirection: 'row', gap: 10, alignItems: 'center' }, joinInput: { flex: 1, minWidth: 0 },
-  joinButton: { minHeight: 55, paddingHorizontal: 17, borderRadius: 12, borderWidth: 1, borderColor: p.gold, alignItems: 'center', justifyContent: 'center' },
-  openTables: { gap: 10 },
-  openTable: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderRadius: 13, paddingVertical: 12, paddingHorizontal: 14, backgroundColor: '#ffffff08' },
-  openTableCopy: { flex: 1, minWidth: 0, gap: 2 }, openTableName: { fontSize: 15, fontWeight: '900' },
-  openTableJoin: { minHeight: 44, minWidth: 84, paddingHorizontal: 16, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  openTableJoinText: { color: p.ink, fontSize: 15, fontWeight: '900' },
-  lobbyTier: { borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: 14, gap: 5 }, lobbyTierName: { fontSize: 19, fontWeight: '900' }, lobbyTierFee: { color: p.cream, fontSize: 16, fontWeight: '800' },
+  content: { maxWidth: 620 },
+  grow: { flex: 1, minWidth: 0 },
+  body: { color: p.muted, fontSize: 14, lineHeight: 21 },
+  link: { color: p.gold, fontSize: 14, fontWeight: '800', paddingVertical: 6 },
+  balancePill: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, borderRadius: 19, backgroundColor: '#ffffff0d', borderWidth: 1, borderColor: p.line },
+  balanceGlyph: { color: p.gold, fontSize: 14, fontWeight: '900' },
+  balanceValue: { color: p.cream, fontSize: 15, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  errorCard: { borderRadius: 18, borderWidth: 1, borderColor: '#a6404866', backgroundColor: '#a640481a', padding: 14, gap: 4 },
+  errorText: { color: '#f4c3bf', fontSize: 13, lineHeight: 19 },
+
+  section: { gap: 8 },
+  sectionTitle: { color: p.gold, fontSize: 10, letterSpacing: 2, fontWeight: '900', marginTop: 6, marginLeft: 4 },
+  sectionTitleCentered: { color: p.gold, fontSize: 10, letterSpacing: 2, fontWeight: '900', textAlign: 'center' },
+  group: { borderRadius: 18, backgroundColor: p.surface, borderWidth: 1, borderColor: p.line, overflow: 'hidden' },
+  groupNote: { color: p.muted, fontSize: 12, lineHeight: 18, padding: 14 },
+  divider: { borderBottomWidth: 1, borderBottomColor: p.line },
+  gapCard: { borderRadius: 18, backgroundColor: p.surface, borderWidth: 1, borderColor: p.gold + '55', padding: 16, gap: 8 },
+  gapTitle: { color: p.cream, fontSize: 17, fontWeight: '900' },
+  gapButton: { marginTop: 4 },
+  bigWin: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 14 },
+  bigWinText: { flex: 1, color: '#C8D7CD', fontSize: 12, lineHeight: 17 },
+  bigWinName: { color: p.cream, fontWeight: '900' },
+  bigWinPrize: { fontWeight: '900' },
+  bigWinAge: { color: p.muted, fontSize: 11, fontWeight: '700' },
+  hint: { color: p.muted, fontSize: 11, lineHeight: 16, marginTop: 2 },
+  hintCentered: { color: p.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' },
+  rowTitle: { color: p.cream, fontSize: 14, fontWeight: '800' },
+
+  openTable: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14 },
+  openTableSuit: { width: 24, fontSize: 22, fontWeight: '900', textAlign: 'center' },
+  openTableName: { color: p.cream, fontSize: 14, fontWeight: '900' },
+  openTableJoin: { minHeight: 40, minWidth: 76, paddingHorizontal: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  openTableJoinText: { color: p.ink, fontSize: 14, fontWeight: '900' },
+
+  dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: -4 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#ffffff30' },
+
+  joinBox: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10 },
+  codeInput: { flex: 1, minWidth: 0, minHeight: 48, borderRadius: 12, backgroundColor: '#0000001f', borderWidth: 1, borderColor: p.line, color: p.cream, fontSize: 18, fontWeight: '800', letterSpacing: 6, textAlign: 'center' },
+  joinButton: { minHeight: 48, paddingHorizontal: 20, borderRadius: 12, backgroundColor: p.gold, alignItems: 'center', justifyContent: 'center' },
+  joinButtonText: { color: p.ink, fontSize: 15, fontWeight: '900' },
+
+  codeCard: { borderRadius: 20, backgroundColor: p.surface, borderWidth: 1, borderColor: p.line, padding: 16, gap: 8, alignItems: 'stretch' },
+  code: { fontSize: 38, fontWeight: '900', letterSpacing: 8, color: p.cream, textAlign: 'center' },
+  codeActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  seatCount: { color: p.muted, fontSize: 12, textAlign: 'center', marginTop: -6 },
+  tierCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 18, borderWidth: 1, backgroundColor: p.surface, paddingVertical: 12, paddingHorizontal: 14 },
+  tierName: { fontSize: 15, fontWeight: '900' },
+  botRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14 },
+  botButton: { width: 44, height: 44, borderRadius: 12, borderWidth: 1, borderColor: p.gold, alignItems: 'center', justifyContent: 'center' },
+  botButtonText: { color: p.gold, fontSize: 22, fontWeight: '800', marginTop: -2 },
+  matchCard: { borderRadius: 18, backgroundColor: p.surface, borderWidth: 1, borderColor: p.line, padding: 16, gap: 10 },
+  matchTitle: { color: p.cream, fontSize: 17, fontWeight: '900', textAlign: 'center' },
+  waitNotice: { color: p.gold, fontSize: 12, lineHeight: 18, textAlign: 'center' },
 });

@@ -15,13 +15,14 @@ export function NotificationBridge() {
   const userId = auth.status === 'anonymous' || auth.status === 'signed-in' ? auth.user?.id ?? null : null;
   // null balance means the wallet has not loaded yet; keep the previous gift reminder then.
   const dailyClaimedOn = wallet.balance === null ? undefined : wallet.dailyClaimedOn;
+  const dailyStreak = wallet.dailyStreak;
 
   useEffect(() => {
-    const sync = () => void syncNotifications({ enabled: settings.notifications, language: settings.language, userId, dailyClaimedOn });
+    const sync = () => void syncNotifications({ enabled: settings.notifications, language: settings.language, userId, dailyClaimedOn, dailyStreak });
     sync();
     const subscription = AppState.addEventListener('change', state => { if (state === 'active') sync(); });
     return () => subscription.remove();
-  }, [settings.notifications, settings.language, userId, dailyClaimedOn]);
+  }, [settings.notifications, settings.language, userId, dailyClaimedOn, dailyStreak]);
 
   useEffect(() => {
     if (Platform.OS !== 'ios' && Platform.OS !== 'android') return;

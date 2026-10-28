@@ -4,6 +4,8 @@ export const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q
 export type Suit = (typeof SUITS)[number];
 export type Rank = (typeof RANKS)[number];
 export type MeldType = 'set' | 'run';
+/** Contract rummy sets ignore suits and runs need at least four cards. */
+export type MeldStyle = 'standard' | 'contract';
 
 export type Card = {
   id: string;
@@ -18,6 +20,7 @@ export type Meld = {
   cards: Card[];
   ownerId: string;
   jokerAssignments?: Record<string, Suit>;
+  style?: MeldStyle;
   /** Turn when this meld became unable to accept cards or release a joker. */
   closedTurn?: number;
 };
@@ -33,6 +36,11 @@ export type RoundContract = {
   shortTitle: string;
   parts: ContractPart[];
   final?: boolean;
+  /** Classic rummy: any valid groups open the hand once they reach minPoints. */
+  free?: boolean;
+  minPoints?: number;
+  /** Contract rummy's last deal: every card must be melded, with no discard. */
+  noDiscard?: boolean;
 };
 
 export type Player = {
@@ -47,10 +55,14 @@ export type Player = {
 export type RoundResult = {
   winnerId: string | null;
   reason?: 'stalemate';
+  /** Classic rummy: the winner went out in one turn, doubling everyone else's penalty. */
+  rummyOut?: boolean;
   entries: {
     playerId: string;
     penalty: number;
     playableDiscardPenalty: number;
+    /** Points taken off this deal for an exact cut (contract rummy option). */
+    cutBonus?: number;
     totalBefore: number;
     totalAfter: number;
     cards: Card[];
@@ -67,9 +79,17 @@ export type GamePenalty = {
 export type BotDifficulty = 'easy' | 'normal' | 'hard';
 export type BotSpeed = 'fast' | 'normal' | 'relaxed';
 export type RoundIntroMode = 'short' | 'detailed' | 'off';
+export type GameVariant = 'amerikano' | 'rummy' | 'contract';
+export type RummyOpeningPoints = 0 | 30 | 40 | 51;
 
 export type GameRules = {
+  variant: GameVariant;
   contractSequence: number[];
+  /** Classic rummy only: number of deals and the points the first opening needs. */
+  rummyRounds: number;
+  openingMinPoints: RummyOpeningPoints;
+  /** Contract rummy only: Liverpool's 50-point bonus for an exact cut. */
+  cutBonus: boolean;
   claimsEnabled: boolean;
   claimTimeoutMs: number;
   playableDiscardPenalty: boolean;
@@ -107,6 +127,8 @@ export type GameState = {
   botControlledPlayerIds?: string[];
   discardFaceDown?: boolean;
   claim?: { playerIds: string[]; deadline: number };
+  /** Set when the cutter cut exactly the cards needed for this deal. */
+  cutBonus?: { playerId: string; points: number };
   rules?: GameRules;
 };
 
@@ -114,7 +136,7 @@ export type GameAction =
   | { type: 'draw'; source: 'stock' | 'discard' }
   | { type: 'discard'; cardId: string }
   | { type: 'open'; groups: { type: MeldType; cardIds: string[]; jokerAssignments?: Record<string, Suit> }[] }
-  | { type: 'finish'; groups: { type: MeldType; cardIds: string[]; jokerAssignments?: Record<string, Suit> }[]; discardId: string }
+  | { type: 'finish'; groups: { type: MeldType; cardIds: string[]; jokerAssignments?: Record<string, Suit> }[]; discardId?: string }
   | { type: 'claim'; take: boolean }
   | { type: 'layoff'; meldId: string; cardId: string }
   | { type: 'replaceJoker'; meldId: string; jokerId: string; cardId: string }

@@ -165,3 +165,17 @@ test('bot discards high deadwood and preserves a complete group', () => {
 
   assert.deepEqual(botAction(state), { type: 'discard', cardId: 'K-diamonds' });
 });
+
+test('bots and the open button find a low-Ace run (A-2-3)', async () => {
+  const { findOpening } = await import('../src/game/bot.ts');
+  const { suggestContractGroups, autoArrangeHand } = await import('../src/game/auto-arrange.ts');
+  const { createGame } = await import('../src/game/engine.ts');
+  const { ROUND_CONTRACTS } = await import('../src/game/contracts.ts');
+  const hand = [card('A', 'spades'), card('2', 'spades'), card('3', 'spades'), card('9', 'clubs'), card('K', 'diamonds')];
+  const game = createGame(['a', 'b'], () => 0, { contractSequence: [1], jokerOpeningRestrictionRounds: 0 });
+  const state = { ...game, phase: 'play' as const, turnCount: 2, players: game.players.map((p, i) => i === game.currentPlayerIndex ? { ...p, hand } : p) };
+  assert.deepEqual(findOpening(state).map(group => group.cardIds.length), [3]);
+  const suggestion = suggestContractGroups(hand, ROUND_CONTRACTS[1], true);
+  assert.deepEqual(suggestion?.[0].cardIds, ['A-spades', '2-spades', '3-spades']);
+  assert.deepEqual(autoArrangeHand(hand).slice(0, 3), ['A-spades', '2-spades', '3-spades']);
+});

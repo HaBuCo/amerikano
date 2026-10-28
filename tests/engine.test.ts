@@ -46,8 +46,11 @@ test('set size, duplicates, suit and ace rules', () => {
   assert.ok(!isValidMeld([c('7'), c('7', 'hearts', 'duplicate'), j], 'set'));
   assert.ok(!isValidMeld([c('7'), c('7', 'clubs'), c('7', 'spades'), c('7', 'diamonds'), j], 'set'));
   assert.ok(isValidMeld([c('Q'), c('K'), c('A')], 'run'));
-  assert.ok(!isValidMeld([c('A'), c('2'), c('3')], 'run'));
+  // The Ace works at either end of a run, but a run never wraps around it.
+  assert.ok(isValidMeld([c('A'), c('2'), c('3')], 'run'));
+  assert.ok(isValidMeld([c('A'), j, c('3'), c('4')], 'run'));
   assert.ok(!isValidMeld([c('K'), c('A'), c('2')], 'run'));
+  assert.ok(!isValidMeld([c('A', 'hearts', 'a1'), c('2'), c('3'), c('4'), c('5'), c('6'), c('7'), c('8'), c('9'), c('10'), c('J'), c('Q'), c('K'), c('A', 'hearts', 'a2')], 'run'));
   assert.ok(isValidMeld([c('4'), j, c('6')], 'run'));
   assert.ok(!isValidMeld([c('4'), c('5', 'spades'), c('6')], 'run'));
 });

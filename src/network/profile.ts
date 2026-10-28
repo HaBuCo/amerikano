@@ -3,6 +3,7 @@ import { useSyncExternalStore } from 'react';
 import { supabase } from './supabase';
 import { normalizeUsername, RESERVED_USERNAME_MESSAGE, usernameError } from './usernames';
 import { avatarPortraits } from '@/constants/avatar-portraits';
+import { isTableBadge, type TableBadge } from '@/game/coin-economy';
 
 export const AVATAR_OPTIONS = [
   { key: 'character-lara', label: 'Lara', color: '#2d8b65', symbol: '', image: avatarPortraits.lara },
@@ -27,6 +28,8 @@ export type PlayerProfile = {
   experience: number;
   gamesPlayed: number;
   wins: number;
+  /** The highest big table the player has won at. */
+  tableBadge: TableBadge | null;
 };
 type State = { profile: PlayerProfile | null; loading: boolean; saving: boolean; error: string };
 
@@ -56,6 +59,7 @@ function mapProfile(row: Record<string, unknown>): PlayerProfile {
     experience: Number(row.experience) || 0,
     gamesPlayed: Number(row.games_played) || 0,
     wins: Number(row.wins) || 0,
+    tableBadge: isTableBadge(row.table_badge) ? row.table_badge : null,
   };
 }
 
@@ -79,7 +83,7 @@ export function refreshPlayerProfile() {
 
     const session = await ensureSession();
     const { data, error } = await supabase!.from('profiles')
-      .select('user_id, display_name, username, avatar_key, friend_code, experience, games_played, wins')
+      .select('*')
       .eq('user_id', session.user.id).maybeSingle();
     if (error) throw error;
     const profile = data ? mapProfile(data) : cached ? { ...cached, displayName: cached.username || cached.displayName } : null;
@@ -104,7 +108,7 @@ export async function savePlayerProfile(username: string, avatarKey: AvatarKey) 
     const { data, error } = await supabase!.from('profiles')
       .update({ username: cleanUsername, avatar_key: avatarKey })
       .eq('user_id', session.user.id)
-      .select('user_id, display_name, username, avatar_key, friend_code, experience, games_played, wins')
+      .select('*')
       .single();
     if (error) throw error;
     const profile = mapProfile(data);

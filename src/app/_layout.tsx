@@ -1,5 +1,6 @@
 import { useTranslations } from '@/i18n/language';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { IntroSplash } from '@/components/intro-splash';
 import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { AppState, Pressable, Text } from 'react-native';
@@ -13,7 +14,8 @@ import { AppErrorBoundary } from '@/components/app-error-boundary';
 import { installGlobalErrorHandler } from '@/monitoring/error-reporting';
 import { initializeAds } from '@/ads/mobile-ads';
 import { preloadInterstitial } from '@/ads/interstitial';
-import { hasRemovedAds, initializePurchases } from '@/purchases/purchases';
+import { hasRemovedAds, hasStorePurchases, identifyPurchaser, initializePurchases } from '@/purchases/purchases';
+import { refreshInventory, syncPurchases } from '@/network/store';
 import { preloadCardArt } from '@/constants/preload-card-art';
 import { useAuth } from '@/network/auth';
 import { refreshOnlinePlayerCount, resetOnlinePlayerCount } from '@/network/presence';
@@ -44,6 +46,9 @@ function safeWindowMetrics() {
 export default function RootLayout() {
   const { t } = useTranslations();
   const auth = useAuth();
+  // The animated opening plays once per cold start, over whatever screen loads beneath it.
+  const [introOpen, setIntroOpen] = useState(true);
+  const closeIntro = useCallback(() => setIntroOpen(false), []);
   useEffect(() => {
     preloadCardArt();
     void initializePurchases().then(() => {
@@ -51,6 +56,16 @@ export default function RootLayout() {
       void initializeAds().then(() => preloadInterstitial());
     });
   }, []);
+
+  // Link store purchases to the Supabase account, then credit anything an
+  // interrupted purchase left uncredited (the server ignores repeats).
+  useEffect(() => {
+    const userId = auth.status === 'anonymous' || auth.status === 'signed-in' ? auth.user?.id ?? null : null;
+    void refreshInventory();
+    void identifyPurchaser(userId).then(() => {
+      if (userId && hasStorePurchases()) void syncPurchases().catch(() => undefined);
+    });
+  }, [auth.status, auth.user?.id]);
 
   useEffect(() => {
     resetOnlinePlayerCount();
@@ -86,9 +101,11 @@ export default function RootLayout() {
           </Pressable>,
         }}>
         <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="setup" options={{ title: t("Oyunu Kur") }} />
-        <Stack.Screen name="single-setup" options={{ title: t("Tek Oyunculu") }} />
-        <Stack.Screen name="rules" options={{ title: t("Nasıl Oynanır") }} />
+        <Stack.Screen name="setup" options={{ headerShown: false }} />
+        <Stack.Screen name="single-setup" options={{ headerShown: false }} />
+        <Stack.Screen name="rules" options={{ headerShown: false }} />
+        <Stack.Screen name="lessons" options={{ headerShown: false }} />
+        <Stack.Screen name="lesson" options={{ headerShown: false, gestureEnabled: false, fullScreenGestureEnabled: false }} />
         <Stack.Screen name="game" options={{ headerShown: false, gestureEnabled: false, fullScreenGestureEnabled: false }} />
         <Stack.Screen name="online" options={{ headerShown: false, gestureEnabled: false, fullScreenGestureEnabled: false }} />
         <Stack.Screen name="friends" options={{ headerShown: false }} />
@@ -96,7 +113,9 @@ export default function RootLayout() {
         <Stack.Screen name="score-keeper" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="store" options={{ headerShown: false }} />
       </Stack>
+      {introOpen && <IntroSplash onDone={closeIntro} />}
     </GameSoundsProvider></GameSettingsProvider></AppErrorBoundary>
     </KeyboardProvider>
     </SafeAreaProvider>

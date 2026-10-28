@@ -34,8 +34,9 @@ Never add a service-role key to an Expo environment variable. It belongs only in
 Supabase's server environment.
 
 Coin economy: each profile starts with 1,000 virtual coins. The authenticated
-`room` function can grant 500 once per UTC day. New clients choose a 50, 100,
-250, 500, 1,000 or 2,000 coin entry fee; legacy clients use free rooms. Matching only groups
+`room` function can grant 500 once per UTC day. Clients on economy version 2 choose a 100,
+250, 500, 1,000, 2,500 or 5,000 coin entry fee; version 1 clients (the old
+50–2,000 fees) are asked to update, and clients without a version use free rooms. Matching only groups
 players at the same fee. The database charges human seats atomically when a
 match starts and rejects a negative balance. Bots pay and receive nothing.
 For four human seats, the 400-coin pot pays 300/60/30/10 by final score;
@@ -48,6 +49,26 @@ is deleted. The private ledger and wallet writes are service-only; any future
 coin purchase must verify the store transaction server-side before crediting.
 `node scripts/check-coin-economy.mjs` checks a live temporary two-player room,
 wallet permissions, daily idempotence, debit and abandoned-match refund.
+
+Store: `202610270001_store.sql` and the `store` Edge Function sell coins and
+cosmetics. The product catalog (`src/store/catalog.ts`) is shared with the
+function, so grants and coin prices never come from a client. The app logs in
+to RevenueCat with the Supabase user ID; `sync-purchases` reads that
+subscriber's validated one-time transactions from the RevenueCat REST API and
+credits each store transaction once ever (`store_purchases` keeps the
+transaction even after account deletion). On iOS every product ID carries an `amerikano_` prefix (for example
+`amerikano_coins_small`); the catalog strips it, so both stores grant the same.
+Consumables `coins_small`,
+`coins_medium`, `coins_large`, `coins_huge` add 2,000 / 5,000 / 12,000 / 30,000
+coins; non-consumable `starter_pack` adds 5,000 coins and must also be attached to the `no_ads`
+entitlement in RevenueCat; non-consumable `premium_collection` unlocks the
+premium cosmetics. Set `REVENUECAT_SECRET_API_KEY` (a v1 secret key) in the
+function secrets; `STORE_ALLOW_SANDBOX=false` stops crediting sandbox and
+TestFlight purchases (keep it unset during App Review). `claim-rewarded` grants
+100 coins after a rewarded video, at most 3 times per UTC day; the reward is
+reported by the client, so the daily cap is the protection until AdMob
+server-side verification is added. `buy-item` charges the catalog coin price
+for a cosmetic. Refunds are not clawed back automatically.
 
 The leaderboard records each settled paid match in `coin_match_outcomes`, which
 survives room cleanup. Weekly (Monday 00:00 UTC) and all-time rankings order

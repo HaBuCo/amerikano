@@ -2,7 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
-import { GameAction } from '../game/types';
+import { GameAction, type GameVariant } from '../game/types';
+import { ECONOMY_VERSION } from '../game/coin-economy';
 import { localRoomDeadline } from '../game/quick-room';
 import { cooldownPassed, reactionById } from '../game/reactions';
 import { isSupabaseConfigured, supabase } from './supabase';
@@ -342,12 +343,17 @@ export async function sendRoom(message: ClientMessage) {
   }
 }
 
-export function enterRoom(name: string, code?: string, entryFee = 100) {
-  return sendRoom(code ? { type: 'join', name, code: code.toUpperCase(), economyVersion: 1 } : { type: 'create', name, entryFee, economyVersion: 1 });
+// Joining by code takes the room's own game; this client can seat at either.
+const SUPPORTED_VARIANTS: GameVariant[] = ['amerikano', 'rummy', 'contract'];
+
+export function enterRoom(name: string, code?: string, entryFee = 100, variant: GameVariant = 'amerikano') {
+  return sendRoom(code
+    ? { type: 'join', name, code: code.toUpperCase(), economyVersion: ECONOMY_VERSION, variants: SUPPORTED_VARIANTS }
+    : { type: 'create', name, entryFee, economyVersion: ECONOMY_VERSION, variant });
 }
 
-export function enterQuickRoom(name: string, entryFee = 100) {
-  return sendRoom({ type: 'matchmake', name, entryFee, economyVersion: 1 });
+export function enterQuickRoom(name: string, entryFee = 100, variant: GameVariant = 'amerikano') {
+  return sendRoom({ type: 'matchmake', name, entryFee, economyVersion: ECONOMY_VERSION, variant });
 }
 
 export async function leaveWaitingRoom() {

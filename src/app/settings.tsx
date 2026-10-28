@@ -5,45 +5,39 @@ import { Href, router, Stack } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useGameSounds } from '@/audio/game-sounds';
 import { AuthPanel } from '@/components/auth-panel';
 import { AccountActions } from '@/components/account-actions';
+import { Chevron, External, kit, Row, ScreenHeader, Section, ToggleRow } from '@/components/screen-kit';
+import { PlayerAvatar } from '@/components/player-avatar';
 import { isAdsPrivacyOptionsRequired, manageAdsPrivacyChoices } from '@/ads/mobile-ads';
 import { deleteAccountUrl, privacyPolicyUrl, TERMS_LABEL, termsUrl } from '@/constants/legal';
 import { palette as p } from '@/constants/palette';
 import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
 import { useAuth } from '@/network/auth';
+import { usePlayerProfile } from '@/network/profile';
 import { useGameSettings } from '@/settings/game-settings';
 import { RemoveAdsCard } from '@/components/remove-ads-card';
-import { LanguagePicker } from '@/components/language-picker';
 import { notificationPermission, requestNotificationPermission } from '@/notifications/notifications';
+import { MODAL_ORIENTATIONS } from '@/constants/orientation';
 
-function SettingRow({ label, detail, value, onPress }: { label: string; detail: string; value: boolean; onPress: () => void }) {
-  return <Pressable accessibilityRole="switch" accessibilityState={{ checked: value }} onPress={onPress} style={s.row}>
-    <View style={s.rowCopy}><Text style={s.rowTitle}>{label}</Text><Text style={s.rowDetail}>{detail}</Text></View>
-    <View style={[s.switchTrack, value && s.switchTrackOn]}><View style={[s.switchKnob, value && s.switchKnobOn]} /></View>
-  </Pressable>;
-}
-
-function LinkRow({ label, detail, url }: { label: string; detail: string; url: string }) {
-  const { t } = useTranslations();
-  return <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(url)} style={s.row}>
-    <View style={s.rowCopy}><Text style={s.rowTitle}>{label}</Text><Text style={s.rowDetail}>{detail}</Text></View>
-    <Text style={s.openText}>{t("Aç")}</Text>
-  </Pressable>;
-}
+const chevron = <Chevron />;
+const external = <External />;
 
 export default function SettingsScreen() {
   const { t, language } = useTranslations();
   const { isTablet } = useResponsiveLayout();
+  const insets = useSafeAreaInsets();
   const auth = useAuth();
+  const profileState = usePlayerProfile();
   const { enabled: soundEnabled, toggle: toggleSound } = useGameSounds();
   const { settings, updateSettings, feedback } = useGameSettings();
   const [accountOpenFor, setAccountOpenFor] = useState<string | null>(null);
   const accountIdentity = auth.user?.id ?? 'signed-out';
   const [adsPrivacyRequired, setAdsPrivacyRequired] = useState(false);
+  const needsAccount = auth.status !== 'signed-in' || auth.recovery;
 
   const toggleNotifications = async () => {
     feedback();
@@ -57,6 +51,10 @@ export default function SettingsScreen() {
     if (permission === 'undetermined') await requestNotificationPermission();
     else if (permission === 'denied') void Linking.openSettings();
   };
+  const toggle = (key: 'criticalTimer' | 'compactCards' | 'dragHints' | 'showReactions') => {
+    feedback();
+    updateSettings({ [key]: !settings[key] });
+  };
 
   useEffect(() => {
     let active = true;
@@ -64,102 +62,107 @@ export default function SettingsScreen() {
     return () => { active = false; };
   }, []);
 
-  return <SafeAreaView style={s.page}>
+  const accountName = profileState.profile?.username || auth.user?.email || t("Misafir");
+  const accountDetail = auth.status === 'signed-in' ? auth.user?.email ?? t("Hesabın açık")
+    : auth.status === 'anonymous' ? t("Misafir hesap · ilerlemen bu cihazda") : t("Giriş yapılmadı");
+
+  return <SafeAreaView edges={['top', 'bottom']} style={kit.page}>
     <Stack.Screen options={{ headerShown: false }} />
-    <KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled" contentContainerStyle={[s.content, isTablet && s.contentTablet]} showsVerticalScrollIndicator={false}>
-      <Pressable accessibilityRole="button" onPress={() => router.back()} style={s.backButton}><Text style={s.backText}>{t("Geri")}</Text></Pressable>
-      <Text style={s.eyebrow}>{t("AYARLAR")}</Text>
-      <Text style={s.title}>{t("Oyun sana uysun.")}</Text>
-      <Text style={s.body}>{t("Ses, titreşim, oyun yardımları, hesap ve yasal belgeler tek yerde.")}</Text>
+    <KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled" contentContainerStyle={[kit.content, isTablet && kit.contentTablet]} showsVerticalScrollIndicator={false}>
+      <ScreenHeader title={t("Ayarlar")} />
 
-      <View style={s.profileCard}>
-        <Pressable accessibilityRole="button" onPress={() => router.push('/profile' as Href)} style={s.row}>
-          <View style={s.rowCopy}><Text style={s.rowTitle}>{t("Profilim")}</Text><Text style={s.rowDetail}>{t("Kullanıcı adını ve avatarını düzenle")}</Text></View>
-          <Text style={s.openText}>{t("Aç")}</Text>
-        </Pressable>
-      </View>
-
-      <RemoveAdsCard />
-
-      <View style={s.card}>
-        <View style={s.row}>
-          <View style={s.rowCopy}><Text style={s.rowTitle}>{t('Dil')}</Text><Text style={s.rowDetail}>{t('Oyun dilini seç. Tercihin bu cihazda saklanır.')}</Text></View>
-          <LanguagePicker />
+      <Pressable accessibilityRole="button" accessibilityLabel={t("Profilim")} onPress={() => router.push('/profile' as Href)} style={({ pressed }) => [s.account, pressed && s.pressed]}>
+        <PlayerAvatar avatarKey={profileState.profile?.avatarKey ?? 'emerald'} size={52} />
+        <View style={s.rowCopy}>
+          <Text numberOfLines={1} style={s.accountName}>{accountName}</Text>
+          <Text numberOfLines={1} style={s.rowDetail}>{accountDetail}</Text>
+          <Text style={s.accountLink}>{t("Profili düzenle")}</Text>
         </View>
-      </View>
-
-      <View style={[s.settingsGrid, isTablet && s.settingsGridTablet]}>
-        <View style={s.settingsColumn}>
-          <Text style={s.sectionTitle}>{t("OYUN")}</Text>
-          <View style={s.card}>
-            <SettingRow label={t("Ses efektleri")} detail={t("Kart ve masa seslerini açar.")} value={soundEnabled} onPress={() => { toggleSound(); feedback(); }} />
-            <SettingRow label={t("Titreşim")} detail={t("Dokunuşlarda geri bildirim verir.")} value={settings.haptics} onPress={() => updateSettings({ haptics: !settings.haptics })} />
-            <SettingRow label={t("Süre uyarısı")} detail={t("Son 10 saniyede uyarır.")} value={settings.criticalTimer} onPress={() => { feedback(); updateSettings({ criticalTimer: !settings.criticalTimer }); }} />
-            <SettingRow label={t("Küçük kartlar")} detail={t("Kalabalık elleri daha sıkı gösterir.")} value={settings.compactCards} onPress={() => { feedback(); updateSettings({ compactCards: !settings.compactCards }); }} />
-            <SettingRow label={t("Sürükleme ipuçları")} detail={t("Uygun bırakma alanlarını vurgular.")} value={settings.dragHints} onPress={() => { feedback(); updateSettings({ dragHints: !settings.dragHints }); }} />
-            <SettingRow label={t("Bildirimler")} detail={t("Masa davetleri, bekleyen masalar ve günlük hediye hatırlatmaları.")} value={settings.notifications} onPress={() => void toggleNotifications()} />
-            <SettingRow label={t("Tepkiler")} detail={t("Diğer oyuncuların gönderdiği emoji ve hazır yazıları gösterir.")} value={settings.showReactions} onPress={() => { feedback(); updateSettings({ showReactions: !settings.showReactions }); }} />
-          </View>
-        </View>
-
-        <View style={s.settingsColumn}>
-          <Text style={s.sectionTitle}>{t("YASAL VE GİZLİLİK")}</Text>
-          <View style={s.card}>
-            <LinkRow label={t("Gizlilik politikası")} detail={t("Toplanan veriler ve kullanım amaçları")} url={privacyPolicyUrl(language)} />
-            <LinkRow label={t(TERMS_LABEL)} detail={TERMS_LABEL === 'Apple Standart EULA' ? t("iOS lisans koşulları") : t("Android uygulama koşulları")} url={termsUrl(language)} />
-            {adsPrivacyRequired && <Pressable accessibilityRole="button" onPress={() => void manageAdsPrivacyChoices()} style={s.row}>
-              <View style={s.rowCopy}><Text style={s.rowTitle}>{t("Reklam tercihlerini yönet")}</Text><Text style={s.rowDetail}>{t("Kişiselleştirilmiş reklam rızanı gözden geçir")}</Text></View>
-              <Text style={s.openText}>{t("Aç")}</Text>
-            </Pressable>}
-          </View>
-        </View>
-      </View>
-      {(auth.status !== 'signed-in' || auth.recovery) && <Pressable accessibilityRole="button" onPress={() => setAccountOpenFor(accountIdentity)} style={s.primary}>
+        {chevron}
+      </Pressable>
+      {needsAccount && <Pressable accessibilityRole="button" onPress={() => setAccountOpenFor(accountIdentity)} style={({ pressed }) => [s.primary, pressed && s.pressed]}>
         <Text style={s.primaryText}>{auth.recovery ? t("Parolamı yenile") : t("Giriş yap veya kayıt ol")}</Text>
       </Pressable>}
-      <AccountActions key={auth.user?.id ?? 'signed-out'} />
-      <View style={s.deletionLink}>
-        <LinkRow label={t("Hesap ve veri silme talebi")} detail={t("Uygulama dışından silme talebi gönder")} url={deleteAccountUrl(language)} />
+
+      <View style={[kit.columns, isTablet && kit.columnsTablet]}>
+        <View style={[kit.column, isTablet && kit.columnTablet]}>
+          <Section title={t("SES VE BİLDİRİM")}>
+            <ToggleRow icon="sound" label={t("Ses efektleri")} detail={t("Kart ve masa seslerini açar.")} value={soundEnabled} onPress={() => { toggleSound(); feedback(); }} />
+            <ToggleRow icon="haptics" label={t("Titreşim")} detail={t("Dokunuşlarda geri bildirim verir.")} value={settings.haptics} onPress={() => updateSettings({ haptics: !settings.haptics })} />
+            <ToggleRow icon="bell" label={t("Bildirimler")} detail={t("Davetler, bekleyen masalar ve günlük hediye.")} value={settings.notifications} onPress={() => void toggleNotifications()} last />
+          </Section>
+
+          <Section title={t("MASA VE KARTLAR")}>
+            <ToggleRow icon="timer" label={t("Süre uyarısı")} detail={t("Son 10 saniyede uyarır.")} value={settings.criticalTimer} onPress={() => toggle('criticalTimer')} />
+            <ToggleRow icon="cards" label={t("Küçük kartlar")} detail={t("Kalabalık elleri daha sıkı gösterir.")} value={settings.compactCards} onPress={() => toggle('compactCards')} />
+            <ToggleRow icon="drag" label={t("Sürükleme ipuçları")} detail={t("Uygun bırakma alanlarını vurgular.")} value={settings.dragHints} onPress={() => toggle('dragHints')} />
+            <ToggleRow icon="reactions" label={t("Tepkiler")} detail={t("Diğer oyuncuların emoji ve hazır yazıları.")} value={settings.showReactions} onPress={() => toggle('showReactions')} last />
+          </Section>
+
+          <Section title={t("DİL")}>
+            <Row icon="language" label={t("Oyun dili")} last accessory={<View accessibilityRole="radiogroup" accessibilityLabel={t('Dil')} style={s.segment}>
+              {(['tr', 'en'] as const).map(item => {
+                const active = settings.language === item;
+                return <Pressable key={item} accessibilityRole="radio" accessibilityState={{ checked: active }} onPress={() => { feedback(); updateSettings({ language: item }); }}
+                  style={[s.segmentItem, active && s.segmentItemActive]}>
+                  <Text style={[s.segmentText, active && s.segmentTextActive]}>{item === 'tr' ? 'Türkçe' : 'English'}</Text>
+                </Pressable>;
+              })}
+            </View>} />
+          </Section>
+        </View>
+
+        <View style={[kit.column, isTablet && kit.columnTablet]}>
+          <Section title={t("SATIN ALMALAR")}>
+            <Row icon="store" label={t("Mağaza")} detail={t("Coin, kart arkaları ve masa çuhaları")} onPress={() => router.push('/store' as Href)} accessory={chevron} last />
+          </Section>
+          <RemoveAdsCard compact />
+
+          <Section title={t("GİZLİLİK VE YASAL")}>
+            <Row icon="privacy" label={t("Gizlilik politikası")} onPress={() => void Linking.openURL(privacyPolicyUrl(language))} accessory={external} />
+            <Row icon="terms" label={t(TERMS_LABEL)} onPress={() => void Linking.openURL(termsUrl(language))} accessory={external} />
+            {adsPrivacyRequired && <Row icon="adChoices" label={t("Reklam tercihlerini yönet")} onPress={() => void manageAdsPrivacyChoices()} accessory={chevron} />}
+            <Row icon="trash" label={t("Hesap ve veri silme talebi")} detail={t("Uygulama dışından silme talebi gönder")} onPress={() => void Linking.openURL(deleteAccountUrl(language))} accessory={external} last />
+          </Section>
+
+          <AccountActions key={auth.user?.id ?? 'signed-out'} />
+        </View>
       </View>
+
       <Text style={s.footer}>{t("AMERİKANO · SÜRÜM {0}", [Constants.expoConfig?.version ?? "—"])}</Text>
     </KeyboardAwareScrollView>
 
-    <Modal visible={accountOpenFor === accountIdentity && (auth.status !== 'signed-in' || auth.recovery)} transparent animationType="slide" onRequestClose={() => setAccountOpenFor(null)}>
+    <Modal supportedOrientations={MODAL_ORIENTATIONS} visible={accountOpenFor === accountIdentity && needsAccount} transparent animationType="slide" onRequestClose={() => setAccountOpenFor(null)}>
       <View style={[s.modalRoot, isTablet && s.modalRootTablet]}>
         <Pressable accessibilityLabel={t("Giriş penceresini kapat")} style={s.modalBackdrop} onPress={() => setAccountOpenFor(null)} />
-        <View style={[s.sheet, isTablet && s.sheetTablet]}><View style={s.sheetHandle} /><KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled"><AuthPanel onClose={() => setAccountOpenFor(null)} /></KeyboardAwareScrollView></View>
+        {/* The sheet sits on the screen edge: keep its last row (account deletion) above the system navigation bar. */}
+        <View style={[s.sheet, !isTablet && { paddingBottom: 30 + insets.bottom, paddingLeft: 22 + insets.left, paddingRight: 22 + insets.right }, isTablet && s.sheetTablet]}><View style={s.sheetHandle} /><KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled"><AuthPanel onClose={() => setAccountOpenFor(null)} /></KeyboardAwareScrollView></View>
       </View>
     </Modal>
   </SafeAreaView>;
 }
 
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: p.canvas },
-  content: { width: '100%', maxWidth: 620, alignSelf: 'center', paddingHorizontal: 22, paddingTop: 10, paddingBottom: 36 },
-  contentTablet: { maxWidth: 1040, paddingHorizontal: 34, paddingTop: 24 },
-  backButton: { alignSelf: 'flex-start', minHeight: 42, justifyContent: 'center', paddingRight: 18 },
-  backText: { color: p.cream, fontSize: 14, fontWeight: '800' },
-  eyebrow: { color: p.gold, fontSize: 10, letterSpacing: 2.4, fontWeight: '900', marginTop: 10 },
-  title: { color: p.cream, fontSize: 34, lineHeight: 39, fontWeight: '900', marginTop: 8 },
-  body: { color: p.muted, fontSize: 14, lineHeight: 21, marginTop: 8, marginBottom: 13 },
-  sectionTitle: { color: p.gold, fontSize: 9, letterSpacing: 2, fontWeight: '900', marginTop: 18, marginBottom: 8 },
-  settingsGrid: {}, settingsGridTablet: { flexDirection: 'row', gap: 22, alignItems: 'flex-start' }, settingsColumn: { flex: 1, minWidth: 0 },
-  card: { borderTopWidth: 1, borderTopColor: p.line },
-  profileCard: { borderTopWidth: 1, borderTopColor: p.line, marginBottom: 15 },
-  deletionLink: { marginTop: 10 },
-  row: { minHeight: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 14, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: p.line },
-  rowCopy: { flex: 1 },
-  rowTitle: { color: p.cream, fontSize: 14, fontWeight: '800' },
-  rowDetail: { color: p.muted, fontSize: 10, lineHeight: 15, marginTop: 4 },
-  switchTrack: { width: 45, height: 27, padding: 3, borderRadius: 14, backgroundColor: '#708077' },
-  switchTrackOn: { backgroundColor: p.gold },
-  switchKnob: { width: 21, height: 21, borderRadius: 11, backgroundColor: p.paper },
-  switchKnobOn: { alignSelf: 'flex-end' },
-  openText: { color: p.gold, fontSize: 11, fontWeight: '900', letterSpacing: 0.7 },
-  primary: { minHeight: 49, borderRadius: 12, backgroundColor: p.gold, alignItems: 'center', justifyContent: 'center', marginTop: 14 },
-  primaryText: { color: p.ink, fontSize: 14, fontWeight: '900' },
-  disabled: { opacity: 0.5 },
-  footer: { color: '#708f7d', fontSize: 8, fontWeight: '800', letterSpacing: 1.4, textAlign: 'center', marginTop: 25 },
+  pressed: { opacity: 0.82, transform: [{ scale: 0.985 }] },
+
+
+  account: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderRadius: 20, backgroundColor: p.surface, borderWidth: 1, borderColor: p.line },
+  accountName: { color: p.cream, fontSize: 17, fontWeight: '900' },
+  accountLink: { color: p.gold, fontSize: 11, fontWeight: '800', marginTop: 5 },
+  primary: { minHeight: 52, borderRadius: 16, backgroundColor: p.gold, alignItems: 'center', justifyContent: 'center' },
+  primaryText: { color: p.ink, fontSize: 15, fontWeight: '900' },
+
+  rowCopy: { flex: 1, minWidth: 0 },
+  rowDetail: { color: p.muted, fontSize: 11, lineHeight: 15, marginTop: 2 },
+
+
+  segment: { flexDirection: 'row', padding: 3, borderRadius: 11, backgroundColor: '#0000002e' },
+  segmentItem: { minHeight: 32, paddingHorizontal: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  segmentItemActive: { backgroundColor: p.cream },
+  segmentText: { color: p.muted, fontSize: 12, fontWeight: '800' },
+  segmentTextActive: { color: p.ink, fontWeight: '900' },
+
+  footer: { color: '#708f7d', fontSize: 9, fontWeight: '800', letterSpacing: 1.4, textAlign: 'center', marginTop: 12 },
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
   modalRootTablet: { justifyContent: 'center', padding: 32 },
   modalBackdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: '#03110bc7' },

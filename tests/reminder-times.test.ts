@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { comebackReminderAt, dailyGiftReminderAt, nextReminderAt } from '../src/notifications/reminder-times.ts';
+import { comebackReminderAt, dailyGiftReminderAt, dailyGiftReminderCopy, nextReminderAt } from '../src/notifications/reminder-times.ts';
 
 test('reminds at the next local evening', () => {
   const morning = new Date(2026, 9, 14, 10, 0);
@@ -29,4 +29,22 @@ test('a claimed gift is reminded only after the UTC day resets', () => {
 test('comeback reminders land on the evening n days later', () => {
   const now = new Date(2026, 9, 14, 23, 30);
   assert.equal(comebackReminderAt(now, 2).getTime(), new Date(2026, 9, 16, 19, 0).getTime());
+});
+
+test('the gift reminder speaks for the streak day it would pay', () => {
+  // Claimed today on day 3: tomorrow evening's reminder offers day 4.
+  const now = new Date(2026, 9, 14, 10, 0);
+  const today = now.toISOString().slice(0, 10);
+  const tomorrow = dailyGiftReminderAt(now, today);
+  assert.deepEqual(dailyGiftReminderCopy(tomorrow, today, 3), { day: 4, coins: 250, kind: 'streak' });
+  // Day 6 claimed: the next reminder is the big prize.
+  assert.deepEqual(dailyGiftReminderCopy(tomorrow, today, 6), { day: 7, coins: 600, kind: 'final' });
+  // A week completed starts again without calling it a streak.
+  assert.deepEqual(dailyGiftReminderCopy(tomorrow, today, 7), { day: 1, coins: 100, kind: 'start' });
+  // Not claimed today after claiming yesterday: this evening keeps the streak going.
+  const yesterday = new Date(Date.parse(`${today}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+  const tonight = dailyGiftReminderAt(now, yesterday);
+  assert.equal(dailyGiftReminderCopy(tonight, yesterday, 2).kind, 'streak');
+  // A broken streak only offers day one.
+  assert.deepEqual(dailyGiftReminderCopy(tonight, '2026-10-01', 5), { day: 1, coins: 100, kind: 'start' });
 });

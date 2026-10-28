@@ -4,6 +4,8 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, 
 import { Platform, Vibration } from 'react-native';
 import { getLanguage, setLanguage } from '@/i18n/language';
 import { validLanguage, type Language } from '@/i18n/translate';
+import { CARD_BACKS, DEFAULT_CARD_BACK, DEFAULT_FELT, FELTS, type CardBackId, type FeltId } from '@/store/catalog';
+import type { GameVariant } from '@/game/types';
 
 type Settings = {
   language: Language;
@@ -13,7 +15,15 @@ type Settings = {
   dragHints: boolean;
   showReactions: boolean;
   notifications: boolean;
+  cardBack: CardBackId;
+  felt: FeltId;
+  /** null until the player picks a game; see selectedVariant. */
+  variant: GameVariant | null;
 };
+
+/** Players abroad rarely know Amerikano, so English starts on classic rummy until a game is picked. */
+export const selectedVariant = (settings: Pick<Settings, 'variant' | 'language'>): GameVariant =>
+  settings.variant ?? (settings.language === 'en' ? 'rummy' : 'amerikano');
 
 type Feedback = 'selection' | 'impact' | 'success' | 'warning' | 'error' | 'turn';
 type SettingsContextValue = {
@@ -22,7 +32,7 @@ type SettingsContextValue = {
   feedback: (kind?: Feedback) => void;
 };
 
-const defaults: Settings = { language: getLanguage(), haptics: true, criticalTimer: true, compactCards: false, dragHints: true, showReactions: true, notifications: true };
+const defaults: Settings = { language: getLanguage(), haptics: true, criticalTimer: true, compactCards: false, dragHints: false, showReactions: true, notifications: true, cardBack: DEFAULT_CARD_BACK, felt: DEFAULT_FELT, variant: null };
 const storageKey = 'amerikano:game-settings:v1';
 const SettingsContext = createContext<SettingsContextValue | null>(null);
 
@@ -37,7 +47,10 @@ export function GameSettingsProvider({ children }: { children: ReactNode }) {
       try {
         const saved = JSON.parse(raw) as Partial<Settings>;
         // Settings saved before English existed have no language and stay Turkish.
-        const next = { ...defaults, ...saved, language: validLanguage(saved.language) };
+        const next = { ...defaults, ...saved, language: validLanguage(saved.language),
+          cardBack: CARD_BACKS.some(item => item.id === saved.cardBack) ? saved.cardBack! : DEFAULT_CARD_BACK,
+          felt: FELTS.some(item => item.id === saved.felt) ? saved.felt! : DEFAULT_FELT,
+          variant: saved.variant === 'rummy' || saved.variant === 'amerikano' || saved.variant === 'contract' ? saved.variant : null };
         setLanguage(next.language);
         setSettings(next);
       } catch { /* Keep safe defaults. */ }

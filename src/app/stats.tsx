@@ -1,10 +1,11 @@
 import { useTranslations } from '@/i18n/language';
 import type { Language } from '@/i18n/translate';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { router, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { kit, ScreenHeader } from '@/components/screen-kit';
 import { palette as p } from '@/constants/palette';
 import { basicRecord, MatchResult, summarizeMatches } from '@/game/player-stats';
 import { loadSinglePlayerStats, useSinglePlayerStats } from '@/game/single-stats';
@@ -47,28 +48,22 @@ export default function StatsScreen() {
   const detailed = useMemo(() => summarizeMatches(history), [history]);
   const singleAverage = single.gamesPlayed ? Math.round(singleState.stats.scoreTotal / single.gamesPlayed) : null;
 
-  return <SafeAreaView style={s.page}>
+  return <SafeAreaView edges={['top', 'bottom']} style={kit.page}>
     <Stack.Screen options={{ headerShown: false }} />
-    <ScrollView contentContainerStyle={[s.content, isTablet && s.contentTablet]} showsVerticalScrollIndicator={false}>
-      <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={s.back}>{t("Geri")}</Text></Pressable>
-
-      <View style={s.heading}>
-        <Text style={s.eyebrow}>{t("İSTATİSTİKLERİM")}</Text>
-        <Text style={s.title}>{t("Masadaki hikâyen.")}</Text>
-        <Text style={s.body}>{t("Galibiyetlerini, skor rekorlarını ve oynadığın maçları tek yerde takip et.")}</Text>
-      </View>
+    <ScrollView contentContainerStyle={[kit.content, isTablet && kit.contentTablet, s.content]} showsVerticalScrollIndicator={false}>
+      <ScreenHeader title={t("İstatistiklerim")} subtitle={t("Galibiyetlerini, skor rekorlarını ve oynadığın maçları tek yerde takip et.")} />
 
       <View style={[s.columns, isWideTablet && s.columnsWide]}>
-        <StatSection title={t("ÇEVRİM İÇİ KARİYER")} subtitle={t("Hesabındaki bütün çevrim içi maçlar")}>
+        <View style={isWideTablet && s.half}><StatSection title={t("ÇEVRİM İÇİ KARİYER")} subtitle={t("Hesabındaki bütün çevrim içi maçlar")}>
           <View style={s.grid}>
             <Metric label={t("MAÇ")} value={online.gamesPlayed} />
             <Metric label={t("GALİBİYET")} value={online.wins} highlight />
             <Metric label={t("MAĞLUBİYET")} value={online.losses} />
             <Metric label={t("KAZANMA ORANI")} value={`%${online.winRate}`} />
           </View>
-        </StatSection>
+        </StatSection></View>
 
-        <StatSection title={t("TEK OYUNCULU")} subtitle={t("Bu cihazda botlara karşı oynadığın oyunlar")}>
+        <View style={isWideTablet && s.half}><StatSection title={t("TEK OYUNCULU")} subtitle={t("Bu cihazda botlara karşı oynadığın oyunlar")}>
           <View style={s.grid}>
             <Metric label={t("OYUN")} value={single.gamesPlayed} />
             <Metric label={t("GALİBİYET")} value={single.wins} highlight />
@@ -77,7 +72,7 @@ export default function StatsScreen() {
             <Metric label={t("EN DÜŞÜK SKOR")} value={scoreValue(singleState.stats.bestScore)} />
             <Metric label={t("ORTALAMA")} value={scoreValue(singleAverage)} />
           </View>
-        </StatSection>
+        </StatSection></View>
       </View>
 
       <StatSection title={t("SKOR REKORLARI")} subtitle={t("Çevrim içi bitirdiğin oyunların skor özeti")}>
@@ -93,7 +88,7 @@ export default function StatsScreen() {
       </StatSection>
 
       <StatSection title={t("SON MAÇLAR")} subtitle={t("En yeni çevrim içi sonuçların")}>
-        {history.slice(0, 8).map(result => <View key={result.id ?? `${result.createdAt}-${result.score}`} style={s.matchRow}>
+        {history.slice(0, 8).map((result, index, shown) => <View key={result.id ?? `${result.createdAt}-${result.score}`} style={[s.matchRow, index < shown.length - 1 && s.divider]}>
           <View style={s.matchPlace}><Text style={s.matchPlaceValue}>{result.place}.</Text><Text style={s.matchPlaceTotal}>/{result.playerCount}</Text></View>
           <View style={s.matchCopy}><Text style={result.won ? s.win : s.loss}>{result.won ? t("GALİBİYET") : t("MAĞLUBİYET")}</Text><Text style={s.matchDate}>{formatDate(result.createdAt, language)}</Text></View>
           <View><Text style={s.matchScore}>{result.score}</Text><Text style={s.matchScoreLabel}>{t("PUAN")}</Text></View>
@@ -108,7 +103,10 @@ export default function StatsScreen() {
 }
 
 function StatSection({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
-  return <View style={s.section}><Text style={s.sectionTitle}>{title}</Text><Text style={s.sectionSubtitle}>{subtitle}</Text>{children}</View>;
+  return <View style={s.section}>
+    <View style={s.sectionHead}><Text style={s.sectionTitle}>{title}</Text><Text style={s.sectionSubtitle}>{subtitle}</Text></View>
+    <View style={s.card}>{children}</View>
+  </View>;
 }
 
 function Metric({ label, value, highlight = false }: { label: string; value: string | number; highlight?: boolean }) {
@@ -128,34 +126,36 @@ function formatDate(value: string, language: Language) {
   return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'tr-TR', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
 }
 
+// Cells and rows draw a bottom line and pull up by one pixel, so the last
+// line hides under the card's edge instead of doubling it.
+const cardRow = { borderBottomWidth: 1, borderBottomColor: p.line, marginBottom: -1 } as const;
+
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: p.canvas },
-  content: { width: '100%', maxWidth: 680, alignSelf: 'center', padding: 24, paddingBottom: 42, gap: 18 },
-  contentTablet: { maxWidth: 1060, paddingHorizontal: 36, paddingTop: 30 },
-  back: { color: p.cream, fontSize: 15, paddingVertical: 10 },
-  heading: { gap: 8, marginVertical: 4 },
-  eyebrow: { color: p.gold, letterSpacing: 3, fontSize: 11, fontWeight: '900' },
-  title: { color: p.cream, fontSize: 36, lineHeight: 42, fontWeight: '900', letterSpacing: -0.8 },
-  body: { color: p.muted, fontSize: 15, lineHeight: 22, maxWidth: 620 },
-  columns: { gap: 18 },
+  content: { maxWidth: 680 },
+  columns: { gap: 14 },
   columnsWide: { flexDirection: 'row', alignItems: 'stretch' },
-  section: { flex: 1, minWidth: 0, borderTopWidth: 1, borderTopColor: p.line, paddingTop: 18, gap: 12 },
-  sectionTitle: { color: p.gold, fontSize: 10, letterSpacing: 1.8, fontWeight: '900' },
-  sectionSubtitle: { color: p.muted, fontSize: 11, lineHeight: 16, marginTop: -7 },
+  section: { minWidth: 0, gap: 8 },
+  // Only side by side sections share the width; stacked, flex would collapse them.
+  half: { flex: 1, minWidth: 0 },
+  sectionHead: { marginLeft: 4, gap: 2, marginTop: 6 },
+  sectionTitle: { color: p.gold, fontSize: 10, letterSpacing: 2, fontWeight: '900' },
+  sectionSubtitle: { color: p.muted, fontSize: 11, lineHeight: 16 },
+  card: { borderRadius: 18, backgroundColor: p.surface, borderWidth: 1, borderColor: p.line, overflow: 'hidden' },
+  divider: { borderBottomWidth: 1, borderBottomColor: p.line },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  metric: { width: '50%', minHeight: 86, alignItems: 'center', justifyContent: 'center', gap: 4, borderBottomWidth: 1, borderBottomColor: p.line },
+  metric: { ...cardRow, width: '50%', minHeight: 86, alignItems: 'center', justifyContent: 'center', gap: 4 },
   metricValue: { color: p.cream, fontSize: 25, fontWeight: '900' },
   metricHighlight: { color: p.gold },
   metricLabel: { color: p.muted, fontSize: 8, letterSpacing: 1.2, fontWeight: '800', textAlign: 'center' },
-  recordGrid: { gap: 10 },
+  recordGrid: {},
   recordGridTablet: { flexDirection: 'row' },
-  record: { flex: 1, minWidth: 0, minHeight: 112, borderBottomWidth: 1, borderBottomColor: p.line, paddingVertical: 14, justifyContent: 'space-between' },
+  record: { ...cardRow, flex: 1, minWidth: 0, minHeight: 104, paddingVertical: 14, paddingHorizontal: 14, justifyContent: 'space-between', gap: 4 },
   recordLabel: { color: p.muted, fontSize: 8, lineHeight: 12, letterSpacing: 1, fontWeight: '900' },
   recordValue: { color: p.cream, fontSize: 30, fontWeight: '900' },
   recordNote: { color: '#819c8c', fontSize: 9, lineHeight: 13 },
-  info: { color: p.muted, fontSize: 11, lineHeight: 17, padding: 12, borderRadius: 12, backgroundColor: '#d9a44110' },
-  matchRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 13, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: p.line },
-  matchPlace: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#ffffff0a', alignItems: 'baseline', justifyContent: 'center', flexDirection: 'row' },
+  info: { color: p.muted, fontSize: 11, lineHeight: 17, padding: 14 },
+  matchRow: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 13, paddingVertical: 10, paddingHorizontal: 14 },
+  matchPlace: { width: 44, alignItems: 'baseline', justifyContent: 'center', flexDirection: 'row' },
   matchPlaceValue: { color: p.cream, fontSize: 18, fontWeight: '900' },
   matchPlaceTotal: { color: p.muted, fontSize: 10 },
   matchCopy: { flex: 1, gap: 5 },
@@ -165,7 +165,7 @@ const s = StyleSheet.create({
   matchScore: { color: p.cream, fontSize: 20, fontWeight: '900', textAlign: 'right' },
   matchScoreLabel: { color: p.muted, fontSize: 7, letterSpacing: 1, textAlign: 'right' },
   empty: { color: p.muted, fontSize: 12, lineHeight: 18, textAlign: 'center', paddingVertical: 20 },
-  errorBox: { borderRadius: 14, borderWidth: 1, borderColor: '#a6404866', padding: 14, gap: 10, alignItems: 'center' },
+  errorBox: { borderRadius: 18, borderWidth: 1, borderColor: '#a6404866', backgroundColor: '#a640481a', padding: 14, gap: 10, alignItems: 'center' },
   error: { color: '#f0aaa4', textAlign: 'center' },
   retry: { color: p.gold, fontWeight: '900', fontSize: 10, letterSpacing: 1 },
   footer: { color: '#708f7d', fontSize: 9, lineHeight: 14, textAlign: 'center', paddingHorizontal: 12 },

@@ -34,7 +34,7 @@ export function describeDebugAction(state: GameState, actorId: string, action: G
     case 'layoff': return `${actor}: ${card(action.cardId)} kartını ${action.meldId} grubuna işledi`;
     case 'replaceJoker': return `${actor}: ${card(action.cardId)} ile Joker aldı`;
     case 'open': return `${actor}: ${action.groups.map(group => `${group.type === 'set' ? 'küt' : 'seri'} [${actionCards(state, actorId, group.cardIds)}]`).join(' + ')} açtı`;
-    case 'finish': return `${actor}: ${action.groups.map(group => `[${actionCards(state, actorId, group.cardIds)}]`).join(' + ')} açıp ${card(action.discardId)} ile bitirdi`;
+    case 'finish': return `${actor}: ${action.groups.map(group => `[${actionCards(state, actorId, group.cardIds)}]`).join(' + ')} açıp ${action.discardId ? `${card(action.discardId)} ile bitirdi` : 'atışsız bitirdi'}`;
     case 'next': return `${actor}: sonraki eli başlattı`;
   }
 }

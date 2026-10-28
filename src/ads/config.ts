@@ -17,7 +17,17 @@ const PRODUCTION_INTERSTITIAL_AD_UNIT_ID = Platform.select<string>({
   default: '',
 });
 
+// Ödüllü video (coin kazan) birimi. Boş kaldığı sürece sürüm derlemesinde
+// ödüllü video bölümü gizlenir; geliştirmede test reklamı kullanılır.
+const PRODUCTION_REWARDED_AD_UNIT_ID = Platform.select<string>({
+  ios: 'ca-app-pub-3342087532137076/3804525316',
+  android: 'ca-app-pub-3342087532137076/8020022362',
+  default: '',
+});
+
 export const ADS_ENABLED = Platform.OS === 'ios' || Platform.OS === 'android';
 
 export const BANNER_AD_UNIT_ID = !__DEV__ && PRODUCTION_BANNER_AD_UNIT_ID ? PRODUCTION_BANNER_AD_UNIT_ID : TestIds.BANNER;
 export const INTERSTITIAL_AD_UNIT_ID = !__DEV__ && PRODUCTION_INTERSTITIAL_AD_UNIT_ID ? PRODUCTION_INTERSTITIAL_AD_UNIT_ID : TestIds.INTERSTITIAL;
+export const REWARDED_AD_UNIT_ID = __DEV__ ? TestIds.REWARDED : PRODUCTION_REWARDED_AD_UNIT_ID;
+export const REWARDED_ADS_ENABLED = ADS_ENABLED && !!REWARDED_AD_UNIT_ID;

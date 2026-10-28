@@ -1,11 +1,14 @@
-import { GameAction } from '../game/types';
+import { GameAction, type GameVariant } from '../game/types';
 import { PrivateGameView } from '../game/view';
+import type { Language } from '../i18n/translate';
 
 export type RoomView = {
   code: string;
   hostId: string;
   status: 'waiting' | 'playing' | 'finished';
   visibility: 'private' | 'public';
+  /** Missing from servers that predate classic rummy. */
+  variant?: GameVariant;
   you: string;
   revision: number;
   entryFee: number;
@@ -23,15 +26,15 @@ export type RoomView = {
   game: PrivateGameView | null;
 };
 export type ClientMessage =
-  | { type: 'create'; name: string; entryFee?: number; economyVersion?: 1 }
-  | { type: 'join'; code: string; name: string; economyVersion?: 1 }
-  | { type: 'matchmake'; name: string; entryFee?: number; economyVersion?: 1 }
+  | { type: 'create'; name: string; entryFee?: number; economyVersion?: number; variant?: GameVariant }
+  | { type: 'join'; code: string; name: string; economyVersion?: number; variants?: GameVariant[] }
+  | { type: 'matchmake'; name: string; entryFee?: number; economyVersion?: number; variant?: GameVariant }
   // Kept while the legacy self-hosted server remains available as a fallback.
   | { type: 'resume'; code: string; token: string }
   | { type: 'ready'; ready: boolean }
-  | { type: 'add-bot' }
+  | { type: 'add-bot'; language?: Language }
   | { type: 'remove-bot' }
-  | { type: 'fill-bots' }
+  | { type: 'fill-bots'; language?: Language }
   | { type: 'start' }
   | { type: 'rematch' }
   | { type: 'reclaim' }
