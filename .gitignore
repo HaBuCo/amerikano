@@ -53,3 +53,6 @@ ios-cert/
 /store
 # Python bytecode
 __pycache__/
+
+# Store screenshots, promo videos and ad creatives (kept locally)
+store-assets/
