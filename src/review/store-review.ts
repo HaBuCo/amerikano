@@ -5,6 +5,7 @@ import { Linking, Platform } from 'react-native';
 import { shouldRequestReview } from './review-policy';
 
 const storageKey = 'amerikano:review-asked-at:v1';
+const roundsKey = 'amerikano:review-rounds:v1';
 const APP_STORE_ID = '6811185692';
 const ANDROID_PACKAGE = 'com.hegionsoft.amerikano';
 
@@ -24,11 +25,21 @@ function markAsked() {
   return AsyncStorage.setItem(storageKey, String(Date.now())).catch(() => undefined);
 }
 
-/** Called once a single-player game ends; shows the native sheet when the policy allows. */
-export async function maybeRequestReview(won: boolean, gamesPlayed: number) {
-  if (!storeReviewSupported) return;
+/** Rounds finished on this device, single-player and online together. */
+async function countRound() {
   try {
-    if (!shouldRequestReview({ won, gamesPlayed, lastAskedAt: await lastAskedAt(), now: Date.now() })) return;
+    const raw = await AsyncStorage.getItem(roundsKey);
+    const rounds = (Number(raw) || 0) + 1;
+    await AsyncStorage.setItem(roundsKey, String(rounds));
+    return rounds;
+  } catch {
+    return 0;
+  }
+}
+
+async function maybeRequestReview(won: boolean, roundsPlayed: number) {
+  try {
+    if (!shouldRequestReview({ won, roundsPlayed, lastAskedAt: await lastAskedAt(), now: Date.now() })) return;
     if (!await StoreReview.isAvailableAsync()) return;
     await markAsked();
     await StoreReview.requestReview();
@@ -37,10 +48,18 @@ export async function maybeRequestReview(won: boolean, gamesPlayed: number) {
 
 let scheduled: ReturnType<typeof setTimeout> | null = null;
 
-/** Asks a little later, whatever screen the player has moved on to by then. */
-export function scheduleReviewRequest(won: boolean, gamesPlayed: number, delayMs: number) {
-  if (scheduled) clearTimeout(scheduled);
-  scheduled = setTimeout(() => { scheduled = null; void maybeRequestReview(won, gamesPlayed); }, delayMs);
+/**
+ * Called once per finished round. `won` marks a good moment (the player went
+ * out, or won the match); the native sheet then appears a little later, on
+ * whatever screen the player has moved on to, when the policy allows.
+ */
+export function noteRoundFinished(won: boolean, delayMs: number) {
+  if (!storeReviewSupported) return;
+  void countRound().then((rounds) => {
+    if (!won) return;
+    if (scheduled) clearTimeout(scheduled);
+    scheduled = setTimeout(() => { scheduled = null; void maybeRequestReview(won, rounds); }, delayMs);
+  });
 }
 
 /** "Rate us" link: opens the store's review page directly, which a button may do. */

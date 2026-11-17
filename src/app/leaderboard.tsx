@@ -137,7 +137,7 @@ const s = StyleSheet.create({
   rowRank: { width: 28, color: p.gold, fontSize: 13, fontWeight: '900' },
   rowCopy: { flex: 1, minWidth: 0, gap: 2 }, rowName: { color: p.cream, fontSize: 13, fontWeight: '800' }, rowMatches: { color: p.muted, fontSize: 10 },
   rowPoints: { color: p.gold, fontWeight: '900', fontSize: 13 }, rowCoin: { fontSize: 12 },
-  myCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#D9A4411a', borderWidth: 1, borderColor: '#d9a44155', borderRadius: 18, padding: 16 },
+  myCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#E8BE701a', borderWidth: 1, borderColor: '#e8be7055', borderRadius: 18, padding: 16 },
   myEyebrow: { color: p.gold, fontSize: 9, letterSpacing: 2, fontWeight: '900' }, myRank: { color: p.cream, fontSize: 30, fontWeight: '900', marginTop: 3 },
   myRight: { alignItems: 'flex-end' }, myPoints: { color: p.gold, fontSize: 20, fontWeight: '900' }, coinSymbol: { fontSize: 16 }, myMatches: { color: p.muted, fontSize: 11, marginTop: 5 },
   emptyCard: { backgroundColor: p.surface, borderRadius: 18, borderWidth: 1, borderColor: p.line, minHeight: 190, padding: 24, alignItems: 'center', justifyContent: 'center', gap: 8 },

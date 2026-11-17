@@ -2,7 +2,7 @@
   "expo": {
     "name": "Amerikano",
     "slug": "amerikano",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "amerikano",
@@ -60,7 +60,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#123D2B",
+          "backgroundColor": "#0F4838",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
@@ -108,7 +108,7 @@
         "expo-notifications",
         {
           "icon": "./assets/images/notification-icon.png",
-          "color": "#D9A441",
+          "color": "#E8BE70",
           "defaultChannel": "default"
         }
       ]

@@ -6,7 +6,7 @@ import { palette as p } from '@/constants/palette';
 import { MODAL_ORIENTATIONS } from '@/constants/orientation';
 
 const useNativeDriver = Platform.OS !== 'web';
-const CONFETTI_COLORS = [p.gold, '#F1C66D', p.cream, '#E05A5A', '#7BE4A5', '#8EC5FF'];
+const CONFETTI_COLORS = [p.gold, '#F3D493', p.cream, '#E05A5A', '#7BE4A5', '#8EC5FF'];
 const SUITS = ['♠', '♥', '♦', '♣'];
 
 type Piece = { x: number; delay: number; duration: number; drift: number; spin: number; size: number; color: string; suit?: string };
@@ -131,11 +131,11 @@ const s = StyleSheet.create({
   confetti: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden', pointerEvents: 'none' },
   strip: { position: 'absolute', top: 0, borderRadius: 2 },
   suit: { position: 'absolute', top: 0, fontWeight: '900' },
-  backdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, backgroundColor: '#03110bdd' },
+  backdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, backgroundColor: '#021a14dd' },
   center: { alignItems: 'center', maxWidth: 460 },
   kicker: { color: p.gold, fontSize: 12, fontWeight: '900', letterSpacing: 5, marginTop: 8 },
   title: { color: p.cream, fontSize: 40, lineHeight: 46, fontWeight: '900', letterSpacing: -1, textAlign: 'center', marginTop: 6 },
-  subtitle: { color: '#C8D7CD', fontSize: 15, lineHeight: 21, textAlign: 'center', marginTop: 8 },
+  subtitle: { color: '#D0DDD6', fontSize: 15, lineHeight: 21, textAlign: 'center', marginTop: 8 },
   prizeRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 18 },
   prize: { color: p.gold, fontSize: 34, fontWeight: '900', fontVariant: ['tabular-nums'] },
   coin: {

@@ -1,12 +1,12 @@
 import { useTranslations } from '@/i18n/language';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { ActivityIndicator, Animated, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
 import { palette as p } from '@/constants/palette';
-import { CARD_HEIGHT, CARD_WIDTH, PlayingCard, SMALL_CARD_HEIGHT, SMALL_CARD_WIDTH, TABLET_CARD_HEIGHT, TABLET_CARD_WIDTH, TABLET_SMALL_CARD_HEIGHT, TABLET_SMALL_CARD_WIDTH } from './playing-card';
+import { PlayingCard } from './playing-card';
 import { PrivateGameView } from '@/game/view';
 import { SUITS } from '@/game/types';
 import type { Card, GameAction, MeldType, Rank, Suit } from '@/game/types';
@@ -19,7 +19,7 @@ import { autoArrangeHand, suggestContractGroups, suggestFinalGroups } from '@/ga
 import { useGameSettings } from '@/settings/game-settings';
 import { feltGradient } from '@/store/catalog';
 import { useEquippedCosmetics } from '@/store/use-cosmetics';
-import { getHandGrid } from '@/game/hand-layout';
+import { getHandLayout, HAND_ROW_GAP, tableCardSizes, type CardDims, type CardSize } from '@/game/hand-layout';
 import { isMeldHidden } from '@/game/meld-visibility';
 import { closestDropTarget, containsDropPoint, isTapDrop } from '@/game/drop-geometry';
 import type { DropPoint, DropRect } from '@/game/drop-geometry';
@@ -47,8 +47,11 @@ type Props = {
   connectionState?: 'online' | 'reconnecting' | 'offline';
   /** Training hands: cards to light up, and no score sheet or celebration at the end. */
   highlightCardIds?: string[]; hideResults?: boolean;
+  /** Online tables: friendship with each human opponent. Bots and the viewer have no entry and get no friend button. */
+  friendStatus?: Record<string, FriendStatus>; onAddFriend?: (playerId: string) => void; friendBusy?: boolean;
   onAction: (a: GameAction) => void; onRematch?: () => void; onForfeit?: () => void; onExit: () => void;
 };
+export type FriendStatus = 'none' | 'outgoing' | 'incoming' | 'friend';
 type Pending = { type: MeldType | null; cardIds: string[] };
 type OpeningAction = Extract<GameAction, { type: 'open' | 'finish' }>;
 type JokerChoice = { action: OpeningAction; groupIndex: number; jokerId: string; rank: Rank; suits: Suit[] };
@@ -61,9 +64,16 @@ const DISCARD_DROP_PADDING = 46;
 // Melds that fit the dragged card grow, so a near miss still lands on them.
 const MELD_DROP_PADDING = 40;
 const HAND_DROP_PADDING = 64;
+// A card let go just past the edge of the hand still counts as moved within the hand.
+const HAND_REORDER_PADDING = 12;
+/** A tray holds a staged compact card (52) in its padding and border; the folded bar matches it. */
+const TRAY_HEIGHT = 67;
+/** The tray row in the upright panel: the tray, its 3-point margins and the panel's 8-point gap. */
+const TRAY_ROW_SPACE = TRAY_HEIGHT + 6 + 8;
+/** Upright screens with less usable height than this set the turn pill beside the piles instead of under them. */
+const SHORT_PORTRAIT = 760;
 // Gold marks the viewer's own melds, so seat colours avoid it.
 const SEAT_COLORS = ['#8CD6B2', '#E2A978', '#E8C8FF', '#9CC9F5', '#F2A0A0', '#C9D98C'];
-const HAND_ROW_GAP = 8;
 
 const TABLE_ICONS = {
   close: { ios: 'xmark', android: 'close', web: 'close' },
@@ -136,26 +146,41 @@ function DragSurface({ active, children, onDragStart, onDrop, onMove, verticalOn
 }) {
   const [movement] = useState(() => new Animated.ValueXY());
   const [dragging, setDragging] = useState(false);
-  const responder = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => active && !verticalOnly,
-    onMoveShouldSetPanResponder: (_, gesture) => active && (verticalOnly
+  // The responder is made once. A new one mid-drag (the table re-renders when a card's glow
+  // fades, a turn ticks, …) would start its gesture from zero and fling or misdrop the card,
+  // so it reads the latest props through a ref instead.
+  const latest = useRef({ active, onDragStart, onDrop, onMove, verticalOnly });
+  useLayoutEffect(() => { latest.current = { active, onDragStart, onDrop, onMove, verticalOnly }; });
+  // Set while a finger holds this surface, so a drag cut short by the card leaving the screen still ends.
+  const held = useRef(false);
+  useEffect(() => () => {
+    if (!held.current) return;
+    held.current = false;
+    latest.current.onDrop({ x: Number.NaN, y: Number.NaN, dx: 0, dy: 0 });
+  }, []);
+  // eslint-disable-next-line react-hooks/refs -- the refs are only read inside the gesture handlers, never while rendering.
+  const [responder] = useState(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => latest.current.active && !latest.current.verticalOnly,
+    onMoveShouldSetPanResponder: (_, gesture) => latest.current.active && (latest.current.verticalOnly
       ? Math.abs(gesture.dy) > 10 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.5
       : Math.abs(gesture.dx) + Math.abs(gesture.dy) > 7),
-    onPanResponderGrant: () => { movement.setValue({ x: 0, y: 0 }); setDragging(true); onDragStart(); },
+    onPanResponderGrant: () => { held.current = true; movement.setValue({ x: 0, y: 0 }); setDragging(true); latest.current.onDragStart(); },
     onPanResponderMove: (_, gesture) => {
       movement.setValue({ x: gesture.dx, y: gesture.dy });
-      onMove?.({ x: gesture.moveX, y: gesture.moveY });
+      latest.current.onMove?.({ x: gesture.moveX, y: gesture.moveY });
     },
     onPanResponderRelease: (_, gesture) => {
-      onDrop({ x: gesture.moveX || gesture.x0 + gesture.dx, y: gesture.moveY || gesture.y0 + gesture.dy, dx: gesture.dx, dy: gesture.dy });
+      held.current = false;
+      latest.current.onDrop({ x: gesture.moveX || gesture.x0 + gesture.dx, y: gesture.moveY || gesture.y0 + gesture.dy, dx: gesture.dx, dy: gesture.dy });
       movement.setValue({ x: 0, y: 0 }); setDragging(false);
     },
     onPanResponderTerminate: () => {
-      onDrop({ x: Number.NaN, y: Number.NaN, dx: 0, dy: 0 });
+      held.current = false;
+      latest.current.onDrop({ x: Number.NaN, y: Number.NaN, dx: 0, dy: 0 });
       movement.setValue({ x: 0, y: 0 }); setDragging(false);
     },
     onPanResponderTerminationRequest: () => false,
-  }), [active, movement, onDragStart, onDrop, onMove, verticalOnly]);
+  }));
   return <Animated.View {...responder.panHandlers} style={[style, {
     zIndex: dragging ? 999 : 1,
     opacity: dragging ? 0.9 : 1,
@@ -165,28 +190,30 @@ function DragSurface({ active, children, onDragStart, onDrop, onMove, verticalOn
 
 type DraggableCardProps = {
   card: Card; index: number; step: number; cardsPerRow: number;
-  cardWidth: number; cardHeight: number; compactCard: boolean; tabletCards: boolean; glow?: boolean;
-  arranging: boolean; gameplayEnabled: boolean; onDragStart: () => void;
-  onReorder: (cardId: string, targetIndex: number) => void;
-  onGameplayDrop: (cardId: string, point: DropPoint) => void;
-  onGameplayMove: (point: { x: number; y: number }) => void;
+  dims: CardDims; glow?: boolean;
+  onDragStart: () => void;
+  /** Where the card would land among the hand's cards if dropped inside the hand. */
+  onDrop: (cardId: string, point: DropPoint, targetIndex: number) => void;
+  onMove: (point: { x: number; y: number }) => void;
 };
 
-function DraggableHandCard({ card, index, step, cardsPerRow, cardWidth, cardHeight, compactCard, tabletCards, glow, arranging, gameplayEnabled, onDragStart, onReorder, onGameplayDrop, onGameplayMove }: DraggableCardProps) {
-  return <DragSurface active={arranging || gameplayEnabled} onDragStart={onDragStart} onMove={arranging ? undefined : onGameplayMove} onDrop={(point) => {
-    if (arranging) {
-      const columnMove = Math.round(point.dx / step);
-      const rowMove = Math.round(point.dy / (cardHeight + 8));
-      onReorder(card.id, index + columnMove + rowMove * cardsPerRow);
-    } else onGameplayDrop(card.id, point);
-  }} style={{ marginLeft: index % cardsPerRow ? step - cardWidth : 0, zIndex: index % cardsPerRow }}>
-    <PlayingCard card={card} small={compactCard} tablet={tabletCards} glow={glow} />
+/** Always draggable: dropped inside the hand it moves there, dropped on the table it is played. */
+function DraggableHandCard({ card, index, step, cardsPerRow, dims, glow, onDragStart, onDrop, onMove }: DraggableCardProps) {
+  return <DragSurface active onDragStart={onDragStart} onMove={onMove} onDrop={(point) => {
+    const columnMove = Math.round(point.dx / step);
+    const rowMove = Math.round(point.dy / (dims.height + HAND_ROW_GAP));
+    onDrop(card.id, point, index + columnMove + rowMove * cardsPerRow);
+  }} style={{ marginLeft: index % cardsPerRow ? step - dims.width : 0, zIndex: index % cardsPerRow }}>
+    <PlayingCard card={card} dims={dims} glow={glow} />
   </DragSurface>;
 }
 
 const ROUND_ADVANCE_DELAY_MS = 6_000;
+const JUST_DRAWN_GLOW_MS = 1_600;
+const NO_CARDS: ReadonlySet<string> = new Set();
 
-function PendingDrawCard({ small, tablet, marginLeft = 0 }: { small: boolean; tablet: boolean; marginLeft?: number }) {
+/** The face-down card that holds the drawn card's place until the real one lands in the hand. */
+function PendingDrawCard({ dims, marginLeft = 0, label }: { dims: CardDims; marginLeft?: number; label?: string }) {
   const { t } = useTranslations();
   const [arrival] = useState(() => new Animated.Value(0));
   useEffect(() => {
@@ -194,9 +221,9 @@ function PendingDrawCard({ small, tablet, marginLeft = 0 }: { small: boolean; ta
     animation.start();
     return () => animation.stop();
   }, [arrival]);
-  return <Animated.View pointerEvents="none" accessibilityLabel={t("Kart çekiliyor…")} accessibilityLiveRegion="polite"
+  return <Animated.View pointerEvents="none" accessibilityLabel={label ?? t("Kart çekiliyor…")} accessibilityLiveRegion="polite"
     style={{ marginLeft, opacity: arrival, transform: [{ translateY: arrival.interpolate({ inputRange: [0, 1], outputRange: [-24, 0] }) }] }}>
-    <PlayingCard hidden small={small} tablet={tablet} />
+    <PlayingCard hidden dims={dims} />
     <View style={StyleSheet.absoluteFill}><ActivityIndicator color={p.gold} style={{ flex: 1 }} /></View>
   </Animated.View>;
 }
@@ -270,13 +297,36 @@ function ReactionBubble({ reaction }: { reaction: { id: string; at: number } }) 
   </View>;
 }
 
+/** A friend button sized for the score sheet; only "add" and "accept" are tappable. */
+function FriendChip({ status, busy, onPress }: { status: FriendStatus; busy?: boolean; onPress: () => void }) {
+  const { t } = useTranslations();
+  const actionable = status === 'none' || status === 'incoming';
+  const label = status === 'friend' ? t("Arkadaşın ✓") : status === 'outgoing' ? t("İstek gönderildi") : status === 'incoming' ? t("İsteğini kabul et") : t("+ Arkadaş ekle");
+  return <Pressable accessibilityRole="button" disabled={!actionable || busy} onPress={onPress}
+    style={({ pressed }) => [s.friendChip, actionable && s.friendChipAction, actionable && busy && s.disabled, pressed && s.friendChipPressed]}>
+    <Text style={[s.friendChipText, actionable && s.friendChipActionText]}>{label}</Text>
+  </Pressable>;
+}
+
+/** Three sizes in the cream settings sheet, styled like its language switch. */
+function CardSizePicker({ value, onChange }: { value: CardSize; onChange: (size: CardSize) => void }) {
+  const { t } = useTranslations();
+  const choices: [CardSize, string][] = [['small', t("Küçük")], ['normal', t("Normal")], ['large', t("Büyük")]];
+  return <View accessibilityRole="radiogroup" accessibilityLabel={t("Kart boyutu")} style={s.sizeChoices}>
+    {choices.map(([size, label]) => <Pressable key={size} accessibilityRole="radio" accessibilityState={{ checked: value === size }} onPress={() => onChange(size)}
+      style={[s.sizeChoice, value === size && s.sizeChoiceActive]}>
+      <Text numberOfLines={1} style={s.sizeChoiceText}>{label}</Text>
+    </Pressable>)}
+  </View>;
+}
+
 function SettingRow({ label, value, onPress }: { label: string; value: boolean; onPress: () => void }) {
   return <Pressable accessibilityRole="switch" accessibilityState={{ checked: value }} onPress={onPress} style={s.settingRow}>
     <Text style={s.settingLabel}>{label}</Text><View style={[s.switchTrack, value && s.switchTrackOn]}><View style={[s.switchKnob, value && s.switchKnobOn]} /></View>
   </Pressable>;
 }
 
-export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, canAdvance = true, canRematch = false, error, coinResult, debugText, playerMeta, botControlled = false, connectionState, onReclaim, onOpenTutorial, onReact, reactions, reactionsReady = true, canUndo = false, onUndo, highlightCardIds, hideResults = false, onAction, onRematch, onForfeit, onExit }: Props) {
+export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, canAdvance = true, canRematch = false, error, coinResult, debugText, playerMeta, botControlled = false, connectionState, onReclaim, onOpenTutorial, onReact, reactions, reactionsReady = true, canUndo = false, onUndo, highlightCardIds, hideResults = false, friendStatus, onAddFriend, friendBusy, onAction, onRematch, onForfeit, onExit }: Props) {
   const { t, localizeMessage, language } = useTranslations();
   const [pendingState, setPendingState] = useState<{ key: string; groups: Pending[] }>({ key: '', groups: [] });
   const [notice, setNotice] = useState('');
@@ -287,14 +337,19 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
   const [helpOpen, setHelpOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [friendCardId, setFriendCardId] = useState<string | null>(null);
   const [handAreaWidth, setHandAreaWidth] = useState(0);
+  // The melds' visible height plus the hand's, measured together (see heightBudget).
+  const [sharedHeight, setSharedHeight] = useState(0);
   const [traysOpenKey, setTraysOpenKey] = useState('');
-  const [arranging, setArranging] = useState(false);
   const [activeSlotIndex, setActiveSlotIndex] = useState(0);
   const [jokerChoice, setJokerChoice] = useState<JokerChoice | null>(null);
   const [activeDrag, setActiveDrag] = useState<'hand' | 'stock' | 'discard' | 'staged' | 'arranging' | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [rejectedMeld, setRejectedMeld] = useState<{ key: string; id: string } | null>(null);
+  // Closed melds leave the table; this list folds them back in on request.
+  const [closedOpen, setClosedOpen] = useState(false);
+  const revealClosed = useRef(false);
   const [advance, setAdvance] = useState<{ roundIndex: number; seconds: number } | null>(null);
   const dropNodes = useRef<Record<string, Measurable | null>>({});
   const dropRects = useRef<Record<string, DropRect>>({});
@@ -329,7 +384,31 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
   const [handOrder, setHandOrder] = useState(() => me.hand.map((card) => card.id));
   const loadedOrderKey = useRef('');
   const current = game.players[game.currentPlayerIndex];
-  const drawPending = Boolean(pendingDraw && blocked && game.phase === 'draw' && current.id === viewerId);
+  // From tapping the stock until the card is in hand, one face-down card keeps its place: first while
+  // the draw travels to the server, then while the face-up card is offered to the other players.
+  // Without it the card appeared, vanished during the offer, and only then landed.
+  const drawHeldForClaim = game.phase === 'claim' && current.id === viewerId;
+  const drawPending = drawHeldForClaim || Boolean(pendingDraw && blocked && game.phase === 'draw' && current.id === viewerId);
+  // Cards that just landed in the hand glow briefly, so it is clear what the draw (or a taken offer) brought.
+  const [justDrawn, setJustDrawn] = useState<ReadonlySet<string>>(NO_CARDS);
+  const handBeforeDraw = useRef<string[] | null>(null);
+  const justDrawnTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(justDrawnTimer.current), []);
+  useEffect(() => {
+    if (game.phase === 'draw' || game.phase === 'claim') {
+      handBeforeDraw.current ??= handSignature ? handSignature.split('|') : [];
+      return;
+    }
+    const before = handBeforeDraw.current;
+    handBeforeDraw.current = null;
+    if (game.phase !== 'play' || !before) return;
+    const known = new Set(before);
+    const arrived = handSignature ? handSignature.split('|').filter(id => !known.has(id)) : [];
+    if (!arrived.length) return;
+    setJustDrawn(new Set(arrived));
+    clearTimeout(justDrawnTimer.current);
+    justDrawnTimer.current = setTimeout(() => setJustDrawn(NO_CARDS), JUST_DRAWN_GLOW_MS);
+  }, [game.phase, handSignature]);
   const pendingKey = `${game.roundIndex}:${game.turnCount}:${current.id}:${game.phase}`;
   const pending = pendingState.key === pendingKey ? pendingState.groups : [];
   const myTurn = current.id === viewerId && !blocked && !botControlled;
@@ -367,46 +446,33 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
   const winners = game.players.filter(player => player.score === Math.min(...game.players.map(pl => pl.score)));
   const sortedPlayers = [...game.players].sort((a, b) => a.score - b.score);
   const scoreHistory = game.scoreHistory ?? [];
+  const meldHidden = (meld: (typeof game.melds)[number]) => isMeldHidden(
+    meld,
+    game.turnCount,
+    game.phase,
+    game.players.find(player => player.id === meld.ownerId)?.openedTurn,
+  );
   const visibleMelds = game.melds
     .map((meld, index) => ({ meld, index }))
-    .filter(({ meld }) => !isMeldHidden(
-      meld,
-      game.turnCount,
-      game.phase,
-      game.players.find(player => player.id === meld.ownerId)?.openedTurn,
-    ));
+    .filter(({ meld }) => !meldHidden(meld));
+  const closedMelds = game.melds.filter(meldHidden);
   const nextContract = nextContractForRound(game);
   // Size the hand from every card it holds, staged ones included: staging a
   // card must not drop the hand to one row and slide the buttons under a finger.
   const handCount = me.hand.length + (drawPending ? 1 : 0);
-  const handGrid = getHandGrid(handCount, width, settings.compactCards);
-  const tableWidth = Math.min(width, 1180);
-  const landscape = width > height;
-  // A phone on its side is wide but short; only a tall landscape screen gets tablet cards.
-  const tabletLandscape = width >= 700 && landscape && height >= 600;
-  const phoneLandscape = landscape && !tabletLandscape;
-  // A sideways phone has little height: smaller hand cards keep the table in view.
-  const autoCompactHand = handGrid.compact || phoneLandscape;
-  const handCardWidth = tabletLandscape
-    ? autoCompactHand ? TABLET_SMALL_CARD_WIDTH : TABLET_CARD_WIDTH
-    : autoCompactHand ? SMALL_CARD_WIDTH : CARD_WIDTH;
-  const handCardHeight = tabletLandscape
-    ? autoCompactHand ? TABLET_SMALL_CARD_HEIGHT : TABLET_CARD_HEIGHT
-    : autoCompactHand ? SMALL_CARD_HEIGHT : CARD_HEIGHT;
-  // The hand shares its panel with the player info and, in landscape, the tray
-  // column; measure the real area once laid out and estimate until then.
-  const handWidth = (handAreaWidth || (landscape ? tableWidth - (tabletLandscape ? 480 : 300) : tableWidth)) - 32;
-  const singleRowStep = handCount > 1 ? (handWidth - handCardWidth) / (handCount - 1) : handCardWidth;
-  // Landscape keeps the hand on one row while the cards stay readable; penalty
-  // draws can make a hand unusually large, so fall back to the two-row grid then.
-  const cardsPerRow = landscape && singleRowStep >= (phoneLandscape ? 16 : 22) ? Math.max(1, handCount) : handGrid.cardsPerRow;
-  const step = cardsPerRow <= 1
-    ? handCardWidth
-    : Math.max(18, Math.min(tabletLandscape ? autoCompactHand ? 50 : 57 : autoCompactHand ? 41 : 46, (handWidth - handCardWidth) / (cardsPerRow - 1)));
+  // Upright, the melds and the hand share the height under the piles. With
+  // melds on the table, keep a row of them in view, so a player who has not
+  // opened can check what plays before discarding; the hand steps down a size
+  // when it would crowd them out. The two heights always add up to the same,
+  // so the hand's size never feeds back into its own budget.
+  const portrait = width <= height;
+  const minMeldArea = tableCardSizes(settings.cardSize, false, height).meld.height + 34;
+  const heightBudget = portrait && game.melds.length > 0 && sharedHeight > 0 ? sharedHeight - minMeldArea : undefined;
+  const handLayout = getHandLayout({ cardCount: handCount, screenWidth: width, screenHeight: height, handAreaWidth, cardSize: settings.cardSize, heightBudget });
+  const { landscape, tabletLandscape, phoneLandscape, cardsPerRow, step } = handLayout;
+  const handCard = handLayout.card;
+  const { pile: pileCard, meld: meldCard } = tableCardSizes(settings.cardSize, tabletLandscape, height);
   const rows = Array.from({ length: Math.ceil(cards.length / cardsPerRow) }, (_, i) => cards.slice(i * cardsPerRow, i * cardsPerRow + cardsPerRow));
-  // Keep the rows the whole hand needs, even while some of its cards sit in trays.
-  const reservedRows = Math.max(1, Math.ceil(handCount / cardsPerRow));
-  const handMinHeight = reservedRows * handCardHeight + (reservedRows - 1) * HAND_ROW_GAP;
 
   // Follow phase changes during render so the celebration shows on the same frame.
   // The match is decided the moment the last deal ends, so the win is celebrated
@@ -500,7 +566,6 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
     let active = true;
     if (loadedOrderKey.current !== orderKey) {
       loadedOrderKey.current = orderKey;
-      setArranging(false);
       void loadHandOrder(orderKey).then((saved) => {
         if (active) setHandOrder(reconcileHandOrder(saved, me.hand));
       });
@@ -526,9 +591,24 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
 
   function reorderCard(cardId: string, targetIndex: number) {
     endDrag();
-    const next = moveCardToIndex(arrangedHand.map((card) => card.id), cardId, targetIndex);
+    // The index counts the cards in view; staged cards keep their place in the saved order.
+    const visible = cards.map((card) => card.id);
+    const moved = moveCardToIndex(visible, cardId, targetIndex);
+    if (moved.every((id, index) => id === visible[index])) return;
+    let nextVisible = 0;
+    const next = arrangedHand.map((card) => stagedIds.has(card.id) ? card.id : moved[nextVisible++]);
     setHandOrder(next);
     void saveHandOrder(orderKey, next);
+  }
+
+  // One gesture for both jobs: inside the hand a card changes place (at any time, even on
+  // others' turns); anywhere else it is played, as long as it is the viewer's turn to play.
+  function dropFromHand(cardId: string, point: DropPoint, targetIndex: number) {
+    if (!Number.isFinite(point.x)) return endDrag();
+    if (isTapDrop(point)) return playing ? dropHandCard(cardId, point) : endDrag();
+    if (isInside('hand-cards', point, HAND_REORDER_PADDING)) return reorderCard(cardId, targetIndex);
+    if (playing) return dropHandCard(cardId, point);
+    endDrag();
   }
 
   function measureDropZones(onlyKeys?: Set<string>) {
@@ -551,6 +631,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
       dropRects.current[key] = { x, y, width: measuredWidth, height: measuredHeight };
     });
   }, []);
+  // The hand's card area: a card let go inside it changes place instead of being played.
+  const handCardsRef = useCallback((node: Measurable | null) => registerDropZone('hand-cards', node), [registerDropZone]);
 
   // Picking up a hand card can rearrange the table (lay-off mode); measure
   // every target in its new place. Dropping the card stops any edge scrolling.
@@ -620,6 +702,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
     measureDropZones(kind === 'stock' || kind === 'discard' ? new Set(['hand']) : undefined);
     setActiveDrag(kind);
     setActiveCardId(cardId ?? null);
+    // A just-drawn card that is picked up has been found; its glow would only fade under the finger.
+    if (cardId && justDrawn.has(cardId)) { clearTimeout(justDrawnTimer.current); setJustDrawn(NO_CARDS); }
     playSound('tap');
     feedback('selection');
   }
@@ -994,15 +1078,6 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
     else if (drawing) act({ type: 'draw', source });
   }
 
-  function toggleArrange() {
-    playSound('tap');
-    if (!arranging && pending.some(group => group.cardIds.length)) {
-      setNotice(t("Elini dizmeden önce hazırladığın grupları geri al."));
-      return;
-    }
-    setNotice(''); setArranging((current) => !current);
-  }
-
   function autoArrange() {
     setNotice('');
     const next = autoArrangeHand(me.hand, {
@@ -1012,7 +1087,6 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
       style,
     });
     setPending([]);
-    setArranging(false);
     setHandOrder(next);
     void saveHandOrder(orderKey, next);
     playSound('shuffle');
@@ -1067,9 +1141,15 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
   // The discard hint takes the turn pill's place under the pile while it shows;
   // the pill only turns invisible so nothing below it moves.
   const discardHintVisible = game.discardFaceDown || activeDrag === 'hand';
-  const showTrays = playing && !arranging && !openedThisTurn && !layOffOnly;
+  const showTrays = playing && !openedThisTurn && !layOffOnly;
   const seatColor = (playerId: string) => SEAT_COLORS[Math.max(0, game.players.findIndex(pl => pl.id === playerId)) % SEAT_COLORS.length];
-  const turnText = drawPending ? t("Kart çekiliyor…") : blocked ? t("Bekleniyor…") : game.phase === 'claim' ? claiming ? t("Açık kart kararı") : t("{0} düşünüyor…", [claimPlayer?.name ?? t("Oyuncu")]) : myTurn ? drawing ? t("Sıra sende · Çek") : t("Sıra sende · Oyna") : t("{0} oynuyor…", [current.name]);
+  // During the offer everyone sees who is deciding on the face-up card; the drawer also sees their card is on its way.
+  const claimerName = claimPlayer?.name ?? t("Oyuncu");
+  const turnText = drawHeldForClaim ? t("Kartın geliyor · {0} karar veriyor", [claimerName])
+    : drawPending ? t("Kart çekiliyor…") : blocked ? t("Bekleniyor…")
+    : game.phase === 'claim' ? claiming ? t("Açık kart kararı") : t("{0} açık kartı düşünüyor…", [claimerName])
+    : myTurn ? drawing ? t("Sıra sende · Çek") : t("Sıra sende · Oyna") : t("{0} oynuyor…", [current.name]);
+  const pendingLabel = drawHeldForClaim ? t("Kartın geliyor; açık kart diğer oyunculara soruluyor") : undefined;
   const openReactions = () => { feedback(); setMenuOpen(false); setReactionsOpen(true); };
   const sendReaction = (reactionId: string) => {
     feedback();
@@ -1100,13 +1180,20 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
     <Text style={s.connectionText}>{connectionState === 'reconnecting' ? t("Bağlanıyor") : t("Çevrim dışı")}</Text>
   </View>;
 
+  const friendCardPlayer = friendCardId ? game.players.find(pl => pl.id === friendCardId) : undefined;
+  const friendCardStatus = friendCardId && onAddFriend ? friendStatus?.[friendCardId] : undefined;
+  const friendCardMeta = friendCardId ? playerMeta?.[friendCardId] : undefined;
+
   const avatarSize = phoneLandscape ? 32 : 40;
   const seats = opponents.map(pl => {
     const isCurrent = current.id === pl.id;
     const meta = playerMeta?.[pl.id];
     const status = meta?.botControlled ? t("bot yönetiyor") : meta?.connected === false ? t("çevrim dışı") : '';
     const missed = meta?.missedTurns ? `${meta.missedTurns}/3` : '';
-    return <View key={pl.id}
+    // Real opponents open a small player card for adding them as a friend.
+    const friendable = Boolean(onAddFriend && friendStatus?.[pl.id]);
+    return <Pressable key={pl.id} disabled={!friendable} onPress={() => setFriendCardId(pl.id)}
+      accessibilityRole={friendable ? 'button' : undefined} accessibilityHint={friendable ? t("Oyuncu kartını açar") : undefined}
       accessibilityLabel={t("{0}, {1} kart, {2} puan{3}", [pl.name, game.handCounts[pl.id], pl.score, isCurrent ? t(", sıra bu oyuncuda") : ''])}
       style={[landscape ? s.seatRow : s.seat, landscape && isCurrent && s.seatRowActive, !isCurrent && s.seatIdle]}>
       {/* Plain round borders only: Android can draw a fill or shadow behind them as a square. */}
@@ -1127,29 +1214,30 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
         {!!status && <Text numberOfLines={1} style={s.seatStatus}>{status}</Text>}
       </View>
       {settings.showReactions && reactions?.[pl.id] && <ReactionBubble reaction={reactions[pl.id]} />}
-    </View>;
+    </Pressable>;
   });
 
   const piles = <View style={s.piles}>
     <DragSurface active={drawing && game.stockCount > 0} onDragStart={() => beginDrag('stock')} onDrop={(point) => dropPile('stock', point)}>
       <View style={s.stock}>
         {/* A neat stack: up to two cards peek out below the top one, thinning as the stock runs low. */}
-        {game.stockCount > 2 && <View style={[s.stockLayer, { left: 6, top: 6 }]}><PlayingCard hidden small tablet={tabletLandscape} /></View>}
-        {game.stockCount > 1 && <View style={[s.stockLayer, { left: 3, top: 3 }]}><PlayingCard hidden small tablet={tabletLandscape} /></View>}
-        {game.stockCount ? <PlayingCard hidden small tablet={tabletLandscape} /> : <View style={[s.empty, tabletLandscape && s.emptyTablet]} />}
+        {game.stockCount > 2 && <View style={[s.stockLayer, { left: 6, top: 6 }]}><PlayingCard hidden dims={pileCard} /></View>}
+        {game.stockCount > 1 && <View style={[s.stockLayer, { left: 3, top: 3 }]}><PlayingCard hidden dims={pileCard} /></View>}
+        {game.stockCount ? <PlayingCard hidden dims={pileCard} /> : <View style={[s.empty, { width: pileCard.width, height: pileCard.height }]} />}
         {game.stockCount > 0 && <Text style={s.stockCount}>{game.stockCount}</Text>}
       </View>
     </DragSurface>
     <DropZoneView dropKey="discard" onNode={registerDropZone} style={[s.discard, discardReady && s.discardReady, activeDrag === 'hand' && s.discardDropActive]}>
       <DragSurface active={(drawing || claiming) && Boolean(game.discard.length) && !game.discardFaceDown} onDragStart={() => beginDrag('discard')} onDrop={(point) => dropPile('discard', point)}>
-        {game.discardFaceDown ? <PlayingCard hidden small tablet={tabletLandscape} /> : game.discard.length ? <PlayingCard card={game.discard.at(-1)} small tablet={tabletLandscape} /> : <View style={[s.empty, tabletLandscape && s.emptyTablet]} />}
+        {game.discardFaceDown ? <PlayingCard hidden dims={pileCard} /> : game.discard.length ? <PlayingCard card={game.discard.at(-1)} dims={pileCard} /> : <View style={[s.empty, { width: pileCard.width, height: pileCard.height }]} />}
       </DragSurface>
       {discardHintVisible && <Text numberOfLines={1} style={s.pileLabel}>{game.discardFaceDown ? t("BİTİŞ KARTI · KAPALI") : t("KARTI BURAYA AT")}</Text>}
     </DropZoneView>
   </View>;
 
-  const turnPill = !claiming && <View style={[s.turnPill, turnHighlighted && s.turnPillMine, discardHintVisible && s.invisible]}>
-    <Text numberOfLines={1} style={[s.turnText, turnHighlighted && s.turnTextMine]}>{turnText}</Text>
+  const shortPortrait = portrait && height - safeArea.top - safeArea.bottom < SHORT_PORTRAIT;
+  const turnPill = !claiming && <View style={[s.turnPill, shortPortrait && s.turnPillSide, turnHighlighted && s.turnPillMine, discardHintVisible && s.invisible]}>
+    <Text numberOfLines={shortPortrait ? 2 : 1} style={[s.turnText, turnHighlighted && s.turnTextMine]}>{turnText}</Text>
     <TurnCountdown deadline={game.turnDeadline} warningEnabled={settings.criticalTimer} tickEnabled={myTurn || claiming} onUrgent={() => { if (myTurn || claiming) feedback('warning'); }} onTick={() => playSound('tick')} />
   </View>;
 
@@ -1168,25 +1256,47 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
     </View>}
   </>;
 
-  const meldsView = visibleMelds.length > 0 ? <View style={[s.melds, landscape && s.meldsLandscape]}>
+  const meldLabel = (m: (typeof game.melds)[number]) =>
+    `${game.players.find(pl => pl.id === m.ownerId)?.name ?? ''} · ${m.type === 'set' ? t("Küt") : t("Seri")}`;
+  const meldRow = (m: (typeof game.melds)[number]) => {
+    const meldRank = m.cards.find(card => !card.isJoker)?.rank;
+    const owner = game.players.find(pl => pl.id === m.ownerId);
+    return <View style={s.meldRow}>
+      <View style={[s.meldOwner, { backgroundColor: m.ownerId === viewerId ? '#F3D493' : seatColor(m.ownerId) }]}><Text style={s.meldOwnerText}>{m.ownerId === viewerId ? '★' : (owner?.name ?? '?').slice(0, 1).toLocaleUpperCase(language)}</Text></View>
+      <View style={s.meldCards}>{m.cards.map((c, i) => <View key={c.id} style={[s.meldCard, { marginLeft: i ? meldCard.step - meldCard.width : 0 }]}>
+        <PlayingCard card={c} dims={meldCard} />
+        {c.isJoker && meldRank && m.jokerAssignments?.[c.id] && <Text style={s.jokerBadge}>{suitSymbol[m.jokerAssignments[c.id]]}{meldRank}</Text>}
+      </View>)}</View>
+    </View>;
+  };
+  const meldsView = visibleMelds.length > 0 || closedMelds.length > 0 ? <View style={[s.melds, landscape && s.meldsLandscape]}>
     {visibleMelds.map(({ meld: m }) => {
-      const meldRank = m.cards.find(card => !card.isJoker)?.rank;
       // Finding the right meld is part of the game: only the optional drag hint gives it away.
       const accepted = settings.dragHints && activeDrag === 'hand' && fitsMeld(m.id);
       const rejected = rejectedMeld?.key === pendingKey && rejectedMeld.id === m.id;
-      const owner = game.players.find(pl => pl.id === m.ownerId);
       return <DropZoneView key={m.id} dropKey={`meld:${m.id}`} onNode={registerDropZone}
-        accessibilityLabel={`${owner?.name ?? ''} · ${m.type === 'set' ? t("Küt") : t("Seri")}`}
+        accessibilityLabel={meldLabel(m)}
         style={[s.meld, accepted && s.meldValid, rejected && s.meldInvalid]}>
-        <View style={s.meldRow}>
-          <View style={[s.meldOwner, { backgroundColor: m.ownerId === viewerId ? '#F1C66D' : seatColor(m.ownerId) }]}><Text style={s.meldOwnerText}>{m.ownerId === viewerId ? '★' : (owner?.name ?? '?').slice(0, 1).toLocaleUpperCase(language)}</Text></View>
-          <View style={s.meldCards}>{m.cards.map((c, i) => <View key={c.id} style={[s.meldCard, { marginLeft: i ? -19 : 0 }]}>
-            <PlayingCard card={c} compact tablet={tabletLandscape} />
-            {c.isJoker && meldRank && m.jokerAssignments?.[c.id] && <Text style={s.jokerBadge}>{suitSymbol[m.jokerAssignments[c.id]]}{meldRank}</Text>}
-          </View>)}</View>
-        </View>
+        {meldRow(m)}
       </DropZoneView>;
     })}
+    {/* Closed melds take no more cards, so they fold away, only to be looked at. */}
+    {closedMelds.length > 0 && <View style={[s.closedMelds, landscape && s.closedMeldsLandscape]}>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: closedOpen }} hitSlop={8}
+        onPress={() => { feedback('selection'); revealClosed.current = !closedOpen; setClosedOpen(!closedOpen); }}
+        style={({ pressed }) => [s.closedToggle, pressed && s.pressed]}>
+        <Text style={s.closedToggleText}>{t("Kapanan perler · {0}", [closedMelds.length])}</Text>
+        <Text style={s.closedToggleText}>{closedOpen ? '▴' : '▾'}</Text>
+      </Pressable>
+      {/* Unfolding scrolls the table down, so the closed melds do not open out of sight. */}
+      {closedOpen && <View onLayout={() => {
+        if (!revealClosed.current) return;
+        revealClosed.current = false;
+        meldScrollRef.current?.scrollToEnd({ animated: true });
+      }} style={[s.melds, landscape && s.meldsLandscape]}>
+        {closedMelds.map(m => <View key={m.id} accessibilityLabel={meldLabel(m)} style={[s.meld, s.meldClosed]}>{meldRow(m)}</View>)}
+      </View>}
+    </View>}
   </View> : null;
 
   const hasStaged = pending.some(group => group.cardIds.length);
@@ -1227,7 +1337,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
   </DropZonePressable>;
 
   // After going down in contract rummy the tray space explains how play goes on.
-  const layOffHint = layOffOnly && playing && !arranging && !openedThisTurn ? <View style={s.trayBar}>
+  const layOffHint = layOffOnly && playing && !openedThisTurn ?<View style={s.trayBar}>
     <Text numberOfLines={1} style={s.trayBarHint}>{t("Kartı masadaki bir gruba dokun veya sürükle")}</Text>
     <Text numberOfLines={1} style={s.trayBarTask}>{t("Yeni grup açılmaz · uymayan kartı açık kart alanına at")}</Text>
   </View> : null;
@@ -1264,30 +1374,33 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
   </ScrollView>;
 
   // Notices float above the panel instead of pushing the hand around.
-  const handMessages = (!!(notice || error) || arranging) && <View pointerEvents="none" style={s.toastWrap}>
-    {!!(notice || error) && <Text accessibilityLiveRegion="polite" style={s.notice}>{localizeMessage(error || notice)}</Text>}
-    {arranging && <Text accessibilityLiveRegion="polite" style={s.arrangeHint}>{t("Kartı tutup istediğin konuma sürükle ve bırak.")}</Text>}
+  const handMessages = !!(notice || error) && <View pointerEvents="none" style={s.toastWrap}>
+    <Text accessibilityLiveRegion="polite" style={s.notice}>{localizeMessage(error || notice)}</Text>
   </View>;
 
-  const handCards = <ScrollView onLayout={(event) => setHandAreaWidth(Math.round(event.nativeEvent.layout.width))} scrollEnabled={!activeDrag} removeClippedSubviews={false} style={[s.handCards, tabletLandscape && s.handCardsTablet]} contentContainerStyle={s.handScroll}>
-    <View style={[s.rows, { minHeight: handMinHeight }]}>{rows.map((row, index) => <View key={index} style={s.cardRow}>
+  const handCards = <ScrollView ref={handCardsRef as unknown as React.Ref<ScrollView>} onLayout={(event) => setHandAreaWidth(Math.round(event.nativeEvent.layout.width))} scrollEnabled={!activeDrag} removeClippedSubviews={false} style={[s.handCards, { maxHeight: handLayout.maxHeight }]} contentContainerStyle={s.handScroll}>
+    <View style={[s.rows, { minHeight: handLayout.minHeight }]}>{rows.map((row, index) => <View key={index} style={s.cardRow}>
       {row.map((c, i) => <DraggableHandCard key={c.id} card={c} index={index * cardsPerRow + i} step={step} cardsPerRow={cardsPerRow}
-        cardWidth={handCardWidth} cardHeight={handCardHeight} compactCard={autoCompactHand} tabletCards={tabletLandscape} glow={highlighted.has(c.id)} arranging={arranging} gameplayEnabled={playing} onDragStart={() => beginDrag(arranging ? 'arranging' : 'hand', c.id)} onReorder={reorderCard} onGameplayDrop={dropHandCard} onGameplayMove={dragMove} />)}
-      {drawPending && index === rows.length - 1 && row.length < cardsPerRow && <PendingDrawCard small={autoCompactHand} tablet={tabletLandscape} marginLeft={row.length ? step - handCardWidth : 0} />}
+        dims={handCard} glow={highlighted.has(c.id) || justDrawn.has(c.id)} onDragStart={() => beginDrag(playing ? 'hand' : 'arranging', c.id)} onDrop={dropFromHand} onMove={dragMove} />)}
+      {drawPending && index === rows.length - 1 && row.length < cardsPerRow && <PendingDrawCard dims={handCard} marginLeft={row.length ? step - handCard.width : 0} label={pendingLabel} />}
     </View>)}</View>
-    {drawPending && cards.length % cardsPerRow === 0 && <View style={s.cardRow}><PendingDrawCard small={autoCompactHand} tablet={tabletLandscape} /></View>}
+    {drawPending && cards.length % cardsPerRow === 0 && <View style={s.cardRow}><PendingDrawCard dims={handCard} label={pendingLabel} /></View>}
   </ScrollView>;
 
   const meInfo = <View style={[s.meInfo, tabletLandscape && s.meInfoLandscape]}>
     <Text numberOfLines={1} style={s.meName}>{me.name}</Text>
-    <Text numberOfLines={1} style={s.meStats}>{me.hand.length} {t("kart")} · {me.score} {t("puan")}{myMissedTurns ? t(" · {0}/3 süre kaçtı", [myMissedTurns]) : ''}</Text>
+    {/* The tablet's side column is narrow: each stat gets its own line instead of an ellipsis. */}
+    {tabletLandscape ? <>
+      <Text numberOfLines={1} style={s.meStats}>{me.hand.length} {t("kart")}</Text>
+      <Text numberOfLines={1} style={s.meStats}>{me.score} {t("puan")}</Text>
+      {!!myMissedTurns && <Text numberOfLines={2} style={s.meStats}>{t("{0}/3 süre kaçtı", [myMissedTurns])}</Text>}
+    </> : <Text numberOfLines={1} style={s.meStats}>{me.hand.length} {t("kart")} · {me.score} {t("puan")}{myMissedTurns ? t(" · {0}/3 süre kaçtı", [myMissedTurns]) : ''}</Text>}
     {settings.showReactions && reactions?.[viewerId] && <ReactionBubble reaction={reactions[viewerId]} />}
   </View>;
 
   const handTools = <View style={s.handTools}>
     {onUndo && <ToolChip icon="undo" label={t("Geri al")} disabled={!canUndo} onPress={onUndo} />}
     <ToolChip icon="auto" tint={p.gold} label={t("Akıllı diz")} disabled={Boolean(activeDrag)} onPress={autoArrange} />
-    <ToolChip icon={arranging ? 'check' : 'arrange'} active={arranging} label={arranging ? t("Bitti") : t("Elle diz")} onPress={toggleArrange} />
   </View>;
   const meStatsLine = `${me.hand.length} ${t("kart")} · ${me.score} ${t("puan")}${myMissedTurns ? t(" · {0}/3 süre kaçtı", [myMissedTurns]) : ''}`;
 
@@ -1295,7 +1408,17 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
     ref: meldScrollRef, scrollEnabled: !activeDrag, style: s.fill, scrollEventThrottle: 16,
     onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => { meldScroll.current.y = event.nativeEvent.contentOffset.y; },
     onContentSizeChange: (_width: number, contentHeight: number) => { meldScroll.current.contentHeight = contentHeight; },
-    onLayout: (event: LayoutChangeEvent) => { meldScroll.current.viewHeight = event.nativeEvent.layout.height; },
+    onLayout: (event: LayoutChangeEvent) => {
+      const viewHeight = event.nativeEvent.layout.height;
+      meldScroll.current.viewHeight = viewHeight;
+      // The claim prompt passes in a moment; measuring it would resize the hand twice.
+      if (claiming) return;
+      // This handler comes from the render that produced the layout, so its hand
+      // height is the one on screen. The trays show only on your turn: count
+      // their row as taken either way, or the hand would change size every turn.
+      const shared = Math.round(viewHeight + handLayout.height - (trays ? 0 : TRAY_ROW_SPACE));
+      setSharedHeight(previous => Math.abs(previous - shared) > 1 ? shared : previous);
+    },
   };
 
   const handPanelActive = activeDrag === 'stock' || activeDrag === 'discard' || activeDrag === 'staged';
@@ -1325,7 +1448,10 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
         const detail = over ? game.roundResult?.entries.find((entry) => entry.playerId === pl.id) : undefined;
         const score = scoreSummary(detail, pl.score);
         return <View key={pl.id} style={s.scoreBlock}>
-          <View style={s.score}><Text style={s.scoreName}>{i + 1}. {pl.name}</Text><View style={s.scoreTotal}><Text style={s.scoreTotalLabel}>{t("TOPLAM SKOR")}</Text><Text style={s.scoreValue}>{score.totalAfter}</Text></View></View>
+          <View style={s.score}><View style={s.scoreNameColumn}>
+            <Text style={s.scoreName}>{i + 1}. {pl.name}</Text>
+            {onAddFriend && friendStatus?.[pl.id] && <FriendChip status={friendStatus[pl.id]} busy={friendBusy} onPress={() => onAddFriend(pl.id)} />}
+          </View><View style={s.scoreTotal}><Text style={s.scoreTotalLabel}>{t("TOPLAM SKOR")}</Text><Text style={s.scoreValue}>{score.totalAfter}</Text></View></View>
           {detail && <>
             <Text style={s.penalty}>{score.penalty + score.playableDiscardPenalty === 0 ? t("Bu el: ceza yok · Önceki toplam: {0}", [score.totalBefore]) : t("Bu el: +{0} ceza{1} · Önceki toplam: {2}", [score.penalty + score.playableDiscardPenalty, score.playableDiscardPenalty ? t(" · İşlek atma: +{0}", [score.playableDiscardPenalty]) : '', score.totalBefore])}{score.cutBonus ? t(" · Tam kesim: −{0}", [score.cutBonus]) : ''}</Text>
             {detail.cards.length > 0 && <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.remainingCards}>
@@ -1359,7 +1485,8 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
     </View> : <>
       <View style={s.seats}>{seats}</View>
       {/* The piles stay put so the discard target never scrolls away; only the melds scroll. */}
-      <View style={s.tableFixed}>{piles}{turnPill}{notices}</View>
+      {/* A short phone sets the turn pill beside the piles: the row under them belongs to the melds. */}
+      <View style={s.tableFixed}>{shortPortrait ? <View style={s.pilesRow}>{piles}{turnPill}</View> : <>{piles}{turnPill}</>}{notices}</View>
       <DropZoneView dropKey="scroll:melds" onNode={registerDropZone} style={s.tableScroll}><ScrollView {...meldScrollProps} contentContainerStyle={s.table}>{meldsView}</ScrollView></DropZoneView>
     </>}
     {activeDrag === 'hand' && playing && <DropZoneView dropKey="cancel" onNode={registerDropZone} pointerEvents="none" style={[s.cancelZone, { top: safeArea.top }]}>
@@ -1385,9 +1512,10 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
           </View>
           {handTools}
         </View>
-        {/* The trays get the full width; the open button sits under them as a slim bar. */}
-        {trays && <View style={s.trayRow}>{trays}</View>}
-        {openButton && <View style={s.openRow}>{openButton}</View>}
+        {/* The open button rides beside the trays: a row of its own would take
+            the height the table needs to show its melds before you discard. */}
+        {trays ? <View style={s.trayRow}>{trays}{openButton && <View style={s.openSide}>{openButton}</View>}</View>
+          : openButton && <View style={s.openRow}>{openButton}</View>}
         {handCards}
 
       </>}
@@ -1410,6 +1538,27 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
       {onForfeit && <Pressable style={s.forfeitButton} onPress={onForfeit}><Text style={s.forfeitText}>{t("Kalıcı ayrıl · oyun devam etsin")}</Text></Pressable>}
       <Pressable style={s.resultButtonSecondary} onPress={() => setExitOpen(false)}><Text style={s.resultButtonSecondaryText}>{t("Oynamaya devam et")}</Text></Pressable>
     </View></View></Modal>
+    <Modal supportedOrientations={MODAL_ORIENTATIONS} visible={Boolean(friendCardPlayer && friendCardStatus)} transparent animationType="fade" onRequestClose={() => setFriendCardId(null)}>
+      <Pressable style={[s.backdrop, modalInsets]} onPress={() => setFriendCardId(null)}><Pressable style={[s.sheet, s.friendCard]}>
+        {friendCardPlayer && friendCardStatus && <>
+          {friendCardMeta?.avatarKey
+            ? <View style={s.friendCardAvatar}><PlayerAvatar avatarKey={friendCardMeta.avatarKey} size={72} /></View>
+            : <View style={[s.initialAvatar, s.friendCardAvatar, { width: 72, height: 72, borderRadius: 36, backgroundColor: seatColor(friendCardPlayer.id) }]}>
+              <Text style={[s.initialAvatarText, { fontSize: 30 }]}>{friendCardPlayer.name.slice(0, 1).toLocaleUpperCase(language)}</Text>
+            </View>}
+          <Text style={s.resultTitle} numberOfLines={1}>{friendCardPlayer.name}</Text>
+          <Text style={s.resultCaption}>{friendCardStatus === 'friend' ? t("{0} zaten arkadaşın.", [friendCardPlayer.name])
+            : friendCardStatus === 'outgoing' ? t("Arkadaşlık isteğin gönderildi. Kabul edince arkadaş listende görünecek.")
+            : friendCardStatus === 'incoming' ? t("{0} sana arkadaşlık isteği gönderdi.", [friendCardPlayer.name])
+            : t("Arkadaş olursanız çevrim içi olduğunu görür, onu masana davet edebilirsin.")}</Text>
+          {(friendCardStatus === 'none' || friendCardStatus === 'incoming') && <Pressable accessibilityRole="button" disabled={friendBusy}
+            style={[s.resultButton, friendBusy && s.disabled]} onPress={() => onAddFriend?.(friendCardPlayer.id)}>
+            <Text style={s.actionText}>{friendCardStatus === 'incoming' ? t("İsteğini kabul et") : t("Arkadaş ekle")}</Text>
+          </Pressable>}
+          <Pressable style={s.resultButtonSecondary} onPress={() => setFriendCardId(null)}><Text style={s.resultButtonSecondaryText}>{t("Kapat")}</Text></Pressable>
+        </>}
+      </Pressable></Pressable>
+    </Modal>
     <Modal supportedOrientations={MODAL_ORIENTATIONS} visible={Boolean(jokerChoice)} transparent animationType="fade" onRequestClose={() => setJokerChoice(null)}><View style={[s.backdrop, modalInsets]}><View style={s.sheet}>
       <Text style={s.resultTitle}>{t("Joker hangi kart?")}</Text>
       <Text style={s.resultCaption}>{t("Bu seçim sabit kalır. Jokeri yalnızca seçtiğin tam kartla değiştiren oyuncu geri alabilir.")}</Text>
@@ -1440,7 +1589,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
       <SettingRow label={t("Ses efektleri")} value={soundEnabled} onPress={() => { toggleSound(); feedback(); }} />
       <SettingRow label={t("Titreşim")} value={settings.haptics} onPress={() => updateSettings({ haptics: !settings.haptics })} />
       <SettingRow label={t("Son 10 saniye uyarısı")} value={settings.criticalTimer} onPress={() => { feedback(); updateSettings({ criticalTimer: !settings.criticalTimer }); }} />
-      <SettingRow label={t("Eldeki kartları küçült")} value={settings.compactCards} onPress={() => { feedback(); updateSettings({ compactCards: !settings.compactCards }); }} />
+      <View style={s.settingRow}><Text style={s.settingLabel}>{t("Kart boyutu")}</Text><CardSizePicker value={settings.cardSize} onChange={(cardSize) => { feedback(); updateSettings({ cardSize }); }} /></View>
       <SettingRow label={t("Sürükleme ipuçları")} value={settings.dragHints} onPress={() => { feedback(); updateSettings({ dragHints: !settings.dragHints }); }} />
       <SettingRow label={t("Tepkileri göster")} value={settings.showReactions} onPress={() => { feedback(); updateSettings({ showReactions: !settings.showReactions }); }} />
       <Text style={s.settingsSectionTitle}>{t("YASAL VE GİZLİLİK")}</Text>
@@ -1495,7 +1644,7 @@ export function GameTable({ game, viewerId, modeLabel, blocked, pendingDraw, can
 const s = StyleSheet.create({
   settingsScroll: { flexGrow: 0 },
   settingsScrollContent: { paddingBottom: 8 },
-  page: { flex: 1, width: '100%', maxWidth: 1180, alignSelf: 'center', backgroundColor: '#0A2A1D', experimental_backgroundImage: 'radial-gradient(ellipse 120% 75% at 50% 32%, #1F6E4B 0%, #124A33 48%, #0A2A1D 100%)' },
+  page: { flex: 1, width: '100%', maxWidth: 1180, alignSelf: 'center', backgroundColor: '#072A22', experimental_backgroundImage: 'radial-gradient(ellipse 120% 75% at 50% 32%, #1B6450 0%, #0F4838 48%, #072A22 100%)' },
   pressed: { opacity: 0.8, transform: [{ scale: 0.96 }] },
   fill: { flex: 1 },
   disabled: { opacity: 0.35 },
@@ -1506,13 +1655,13 @@ const s = StyleSheet.create({
   iconButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   roundPill: { flexShrink: 1, alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.25)' },
   roundText: { color: p.cream, fontSize: 13, fontWeight: '900', letterSpacing: 0.2 },
-  roundTask: { color: '#F1C66D' },
+  roundTask: { color: '#F3D493' },
   roundDots: { flexDirection: 'row', gap: 3 },
-  roundDot: { width: 8, height: 4, borderRadius: 2, backgroundColor: 'rgba(248,241,223,0.2)' },
-  roundDotDone: { backgroundColor: '#F1C66D' },
+  roundDot: { width: 8, height: 4, borderRadius: 2, backgroundColor: 'rgba(248,242,232,0.2)' },
+  roundDotDone: { backgroundColor: '#F3D493' },
   roundDotCurrent: { backgroundColor: p.cream },
   connectionPill: { alignSelf: 'center', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 4, marginBottom: 2 },
-  connectionWaiting: { backgroundColor: '#d9a44140' }, connectionOffline: { backgroundColor: '#a6404860' },
+  connectionWaiting: { backgroundColor: '#e8be7040' }, connectionOffline: { backgroundColor: '#a6404860' },
   connectionText: { color: p.cream, fontSize: 11, fontWeight: '800' },
 
   seats: { flexDirection: 'row', justifyContent: 'space-around', paddingHorizontal: 10, paddingTop: 2, paddingBottom: 0 },
@@ -1523,12 +1672,12 @@ const s = StyleSheet.create({
   avatarHalo: { borderWidth: 3, borderColor: 'transparent', position: 'relative' },
   avatarHaloActive: { borderColor: 'rgba(241,198,109,0.35)' },
   avatarRing: { borderWidth: 3, borderColor: 'transparent' },
-  avatarRingActive: { borderColor: '#F1C66D' },
+  avatarRingActive: { borderColor: '#F3D493' },
   openedBadge: { position: 'absolute', left: -2, bottom: -2, width: 20, height: 20, borderRadius: 10, backgroundColor: '#3FB57E', alignItems: 'center', justifyContent: 'center' },
   seatCopy: { alignItems: 'center', gap: 0, maxWidth: '100%' },
   seatCopyRow: { flexShrink: 1, gap: 1 },
   seatName: { color: p.cream, fontSize: 12, fontWeight: '800' },
-  seatStats: { color: 'rgba(248,241,223,0.72)', fontSize: 11, fontWeight: '700' },
+  seatStats: { color: 'rgba(248,242,232,0.72)', fontSize: 11, fontWeight: '700' },
   seatStatsWarn: { color: '#FFD7B0' },
   initialAvatar: { alignItems: 'center', justifyContent: 'center' },
   initialAvatarText: { color: '#10251B', fontWeight: '900' },
@@ -1544,16 +1693,18 @@ const s = StyleSheet.create({
   piles: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 22, paddingTop: 4, paddingBottom: 6 },
   stock: { position: 'relative', paddingRight: 6, paddingBottom: 6 },
   stockLayer: { position: 'absolute' },
-  stockCount: { position: 'absolute', right: -6, bottom: -4, minWidth: 28, textAlign: 'center', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10, overflow: 'hidden', backgroundColor: '#0A2A1D', color: p.cream, fontSize: 11, fontWeight: '900' },
+  stockCount: { position: 'absolute', right: -6, bottom: -4, minWidth: 28, textAlign: 'center', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10, overflow: 'hidden', backgroundColor: '#072A22', color: p.cream, fontSize: 11, fontWeight: '900' },
   discard: { alignItems: 'center', borderRadius: 11, padding: 4 },
   discardReady: { backgroundColor: 'rgba(241,198,109,0.18)', boxShadow: '0 0 24px rgba(241,198,109,0.55)' },
   discardDropActive: { backgroundColor: 'rgba(241,198,109,0.35)' },
-  pileLabel: { position: 'absolute', bottom: -18, width: 150, textAlign: 'center', color: '#F1C66D', fontSize: 9, letterSpacing: 0.8, fontWeight: '900' },
-  empty: { width: SMALL_CARD_WIDTH, height: SMALL_CARD_HEIGHT, borderRadius: 7, backgroundColor: 'rgba(0,0,0,0.2)' },
-  emptyTablet: { width: TABLET_SMALL_CARD_WIDTH, height: TABLET_SMALL_CARD_HEIGHT },
+  pileLabel: { position: 'absolute', bottom: -18, width: 150, textAlign: 'center', color: '#F3D493', fontSize: 9, letterSpacing: 0.8, fontWeight: '900' },
+  empty: { borderRadius: 7, backgroundColor: 'rgba(0,0,0,0.2)' },
 
   turnPill: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 36, paddingHorizontal: 16, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.28)' },
-  turnPillMine: { backgroundColor: '#F1C66D', boxShadow: '0 6px 22px rgba(241,198,109,0.45)' },
+  // Beside the piles the pill takes what width is left and wraps a long status to a second line.
+  turnPillSide: { flexShrink: 1, paddingHorizontal: 12 },
+  pilesRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14, paddingBottom: 8 },
+  turnPillMine: { backgroundColor: '#F3D493', boxShadow: '0 6px 22px rgba(241,198,109,0.45)' },
   turnText: { color: '#E8D0A1', fontSize: 13, fontWeight: '800', flexShrink: 1, paddingVertical: 8, textAlign: 'center' },
   turnTextMine: { color: p.ink, fontWeight: '900' },
   timer: { minWidth: 26, height: 26, paddingHorizontal: 6, borderRadius: 13, backgroundColor: '#0B2419', alignItems: 'center', justifyContent: 'center' },
@@ -1569,9 +1720,9 @@ const s = StyleSheet.create({
   claimTitle: { color: p.cream, fontSize: 15, fontWeight: '900', textAlign: 'center' },
   claimCaption: { color: '#FFD7B0', fontSize: 12, fontWeight: '700', textAlign: 'center' },
   claimActions: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
-  claimPass: { minHeight: 44, minWidth: 104, paddingHorizontal: 16, borderRadius: 14, backgroundColor: 'rgba(248,241,223,0.1)', alignItems: 'center', justifyContent: 'center' },
+  claimPass: { minHeight: 44, minWidth: 104, paddingHorizontal: 16, borderRadius: 14, backgroundColor: 'rgba(248,242,232,0.1)', alignItems: 'center', justifyContent: 'center' },
   claimPassText: { color: p.cream, fontSize: 14, fontWeight: '800' },
-  claimTake: { minHeight: 44, minWidth: 104, paddingHorizontal: 22, borderRadius: 14, backgroundColor: '#F1C66D', alignItems: 'center', justifyContent: 'center' },
+  claimTake: { minHeight: 44, minWidth: 104, paddingHorizontal: 22, borderRadius: 14, backgroundColor: '#F3D493', alignItems: 'center', justifyContent: 'center' },
   claimTakeText: { color: p.ink, fontSize: 14, fontWeight: '900' },
 
   melds: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', gap: 8, paddingBottom: 4 },
@@ -1579,6 +1730,11 @@ const s = StyleSheet.create({
   meld: { padding: 5, borderRadius: 12, borderWidth: 1.5, borderColor: 'transparent', backgroundColor: 'rgba(0,0,0,0.22)', gap: 4 },
   meldValid: { borderColor: 'rgba(120,214,160,0.75)' },
   meldInvalid: { backgroundColor: 'rgba(196,68,68,0.3)' },
+  meldClosed: { opacity: 0.8 },
+  closedMelds: { width: '100%', alignItems: 'center', gap: 8 },
+  closedMeldsLandscape: { alignItems: 'flex-start' },
+  closedToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 30, paddingHorizontal: 12, borderRadius: 15, borderWidth: 1, borderColor: 'rgba(232,190,112,0.28)', backgroundColor: 'rgba(0,0,0,0.18)' },
+  closedToggleText: { color: p.muted, fontSize: 12, fontWeight: '800' },
   meldRow: { flexDirection: 'row', alignItems: 'center' },
   meldOwner: { position: 'absolute', left: -9, bottom: -9, zIndex: 2, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#0E3324' },
   meldOwnerText: { color: '#10251B', fontSize: 9, fontWeight: '900' },
@@ -1586,69 +1742,68 @@ const s = StyleSheet.create({
   jokerBadge: { position: 'absolute', left: 3, right: 3, bottom: 3, borderRadius: 4, paddingVertical: 2, backgroundColor: '#071d17e8', color: p.gold, fontSize: 9, fontWeight: '900', textAlign: 'center', overflow: 'hidden' },
 
   reactionLayer: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 5 },
-  reactionBubbleEmoji: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: p.paper, boxShadow: '0 6px 16px rgba(0,0,0,0.45), 0 0 0 2px #D9A441' },
-  reactionBubble: { maxWidth: '100%', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, backgroundColor: p.paper, boxShadow: '0 6px 16px rgba(0,0,0,0.45), 0 0 0 2px #D9A441' },
+  reactionBubbleEmoji: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: p.paper, boxShadow: '0 6px 16px rgba(0,0,0,0.45), 0 0 0 2px #E8BE70' },
+  reactionBubble: { maxWidth: '100%', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, backgroundColor: p.paper, boxShadow: '0 6px 16px rgba(0,0,0,0.45), 0 0 0 2px #E8BE70' },
   reactionEmoji: { fontSize: 28 }, reactionPhrase: { color: p.ink, fontSize: 12, fontWeight: '800', textAlign: 'center' },
   reactionBackdrop: { flex: 1, backgroundColor: '#0006', justifyContent: 'flex-end' },
-  reactionSheet: { width: '100%', maxWidth: 520, alignSelf: 'center', borderRadius: 26, borderWidth: 1, borderColor: 'rgba(217,164,65,0.35)', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 18, gap: 14, boxShadow: '0 10px 30px rgba(0,0,0,0.5)' },
-  reactionHandle: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: 'rgba(248,241,223,0.25)' },
+  reactionSheet: { width: '100%', maxWidth: 520, alignSelf: 'center', borderRadius: 26, borderWidth: 1, borderColor: 'rgba(232,190,112,0.35)', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 18, gap: 14, boxShadow: '0 10px 30px rgba(0,0,0,0.5)' },
+  reactionHandle: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: 'rgba(248,242,232,0.25)' },
   reactionEmojiRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, padding: 6, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.06)' },
-  reactionEmojiButton: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' }, reactionEmojiPressed: { backgroundColor: 'rgba(217,164,65,0.25)', transform: [{ scale: 1.15 }] }, reactionEmojiLarge: { fontSize: 32 },
+  reactionEmojiButton: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' }, reactionEmojiPressed: { backgroundColor: 'rgba(232,190,112,0.25)', transform: [{ scale: 1.15 }] }, reactionEmojiLarge: { fontSize: 32 },
   reactionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
-  reactionPhraseButton: { minHeight: 40, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(217,164,65,0.55)', backgroundColor: 'rgba(217,164,65,0.08)', alignItems: 'center', justifyContent: 'center' }, reactionPhrasePressed: { backgroundColor: p.gold },
+  reactionPhraseButton: { minHeight: 40, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(232,190,112,0.55)', backgroundColor: 'rgba(232,190,112,0.08)', alignItems: 'center', justifyContent: 'center' }, reactionPhrasePressed: { backgroundColor: p.gold },
   reactionPhraseText: { color: p.cream, fontSize: 13, fontWeight: '700' }, reactionCaption: { color: p.muted, fontSize: 12, textAlign: 'center' },
   cancelZone: { position: 'absolute', top: 0, left: 0, right: 0, height: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0d3327f2', boxShadow: '0 4px 18px rgba(0,0,0,0.4)' },
   cancelZoneText: { color: p.gold, fontSize: 12, fontWeight: '900' },
 
   panel: { flexShrink: 0, gap: 8, paddingTop: 12, paddingBottom: 8, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: '#0B2419', boxShadow: '0 -12px 40px rgba(0,0,0,0.45)', overflow: 'visible' },
   panelLandscape: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
-  panelDropActive: { backgroundColor: '#123527', boxShadow: '0 -12px 40px rgba(0,0,0,0.45), 0 -2px 0 #D9A441' },
+  panelDropActive: { backgroundColor: '#123527', boxShadow: '0 -12px 40px rgba(0,0,0,0.45), 0 -2px 0 #E8BE70' },
   trayRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14 },
   trayScroll: { flexGrow: 1, flexShrink: 1 }, trays: { gap: 8, alignItems: 'center', paddingVertical: 3, paddingHorizontal: 2 },
   slot: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 6, paddingHorizontal: 8, borderRadius: 16, borderWidth: 1.5, borderColor: 'transparent', backgroundColor: 'rgba(241,198,109,0.08)' },
-  slotSelected: { backgroundColor: 'rgba(241,198,109,0.2)', borderColor: '#D9A441' },
+  slotSelected: { backgroundColor: 'rgba(241,198,109,0.2)', borderColor: '#E8BE70' },
   slotValid: { backgroundColor: 'rgba(63,181,126,0.28)', borderColor: 'rgba(143,227,180,0.7)' },
   slotInvalid: { backgroundColor: 'rgba(196,68,68,0.3)' },
   slotCards: { flexDirection: 'row', alignItems: 'center', minHeight: 52 },
-  slotGhost: { width: 22, height: 52, borderRadius: 5, backgroundColor: 'rgba(248,241,223,0.1)' },
+  slotGhost: { width: 22, height: 52, borderRadius: 5, backgroundColor: 'rgba(248,242,232,0.1)' },
   slotGhostTablet: { width: 28, height: 65 },
   slotGhostSpaced: { marginLeft: 4 },
   slotCopy: { gap: 1 },
   slotLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   slotClear: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center' },
-  trayBar: { flexGrow: 1, flexShrink: 1, minHeight: 67, marginVertical: 3, justifyContent: 'center', gap: 2, paddingHorizontal: 14, borderRadius: 16, borderWidth: 1.5, borderColor: 'transparent', backgroundColor: 'rgba(241,198,109,0.08)' },
+  trayBar: { flexGrow: 1, flexShrink: 1, minHeight: TRAY_HEIGHT, marginVertical: 3, justifyContent: 'center', gap: 2, paddingHorizontal: 14, borderRadius: 16, borderWidth: 1.5, borderColor: 'transparent', backgroundColor: 'rgba(241,198,109,0.08)' },
   trayBarTablet: { minHeight: 80 },
-  trayBarDrop: { borderColor: '#D9A441', backgroundColor: 'rgba(241,198,109,0.18)' },
+  trayBarDrop: { borderColor: '#E8BE70', backgroundColor: 'rgba(241,198,109,0.18)' },
   trayBarHint: { color: p.cream, fontSize: 13, fontWeight: '800' },
-  trayBarTask: { color: '#F1C66D', fontSize: 11, fontWeight: '800' },
+  trayBarTask: { color: '#F3D493', fontSize: 11, fontWeight: '800' },
   slotLabel: { color: p.cream, fontSize: 12, fontWeight: '800', maxWidth: 70 },
-  slotCount: { color: '#F1C66D', fontSize: 11, fontWeight: '800' },
+  slotCount: { color: '#F3D493', fontSize: 11, fontWeight: '800' },
   slotCountInvalid: { color: '#ffb4b4' },
-  openButton: { minHeight: 40, paddingHorizontal: 16, borderRadius: 13, backgroundColor: '#F1C66D', alignItems: 'center', justifyContent: 'center' },
+  openButton: { minHeight: 40, paddingHorizontal: 16, borderRadius: 13, backgroundColor: '#F3D493', alignItems: 'center', justifyContent: 'center' },
   openRow: { paddingHorizontal: 14 },
+  openSide: { flexShrink: 0, alignSelf: 'stretch', justifyContent: 'center', marginVertical: 3, maxWidth: '45%' },
   openButtonText: { color: p.ink, fontSize: 14, fontWeight: '900' },
   handColumn: { flex: 1, minWidth: 0 },
   sideColumn: { width: 220, gap: 6 }, sideColumnTablet: { width: 320 },
-  handCards: { maxHeight: 210, overflow: 'visible' },
-  handCardsTablet: { maxHeight: 260 },
+  handCards: { overflow: 'visible' },
   handScroll: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 2, flexGrow: 1, justifyContent: 'center' },
   rows: { gap: HAND_ROW_GAP }, cardRow: { flexDirection: 'row' },
   panelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingHorizontal: 16 },
   meInline: { flexShrink: 1, position: 'relative', minHeight: 32, justifyContent: 'center' },
-  toolChip: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 32, paddingHorizontal: 10, borderRadius: 16, backgroundColor: 'rgba(248,241,223,0.08)' },
+  toolChip: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 32, paddingHorizontal: 10, borderRadius: 16, backgroundColor: 'rgba(248,242,232,0.08)' },
   toolChipText: { color: p.cream, fontSize: 12, fontWeight: '800' },
   toolChipTextActive: { color: p.ink },
   meInfo: { flexShrink: 1, gap: 1, position: 'relative' }, meInfoLandscape: { width: 90 },
   meName: { color: p.cream, fontSize: 15, fontWeight: '900' },
-  meStats: { color: 'rgba(248,241,223,0.65)', fontSize: 12, fontWeight: '700' },
+  meStats: { color: 'rgba(248,242,232,0.65)', fontSize: 12, fontWeight: '700' },
   handTools: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6 },
   sideFooter: { flexDirection: 'row', justifyContent: 'flex-end' },
   topBarCompact: { marginTop: -4, marginBottom: -4 },
-  toolButton: { width: 46, height: 46, borderRadius: 15, backgroundColor: 'rgba(248,241,223,0.08)', alignItems: 'center', justifyContent: 'center' },
-  toolButtonActive: { backgroundColor: '#F1C66D' },
+  toolButton: { width: 46, height: 46, borderRadius: 15, backgroundColor: 'rgba(248,242,232,0.08)', alignItems: 'center', justifyContent: 'center' },
+  toolButtonActive: { backgroundColor: '#F3D493' },
   toastWrap: { position: 'absolute', left: 16, right: 16, bottom: '100%', marginBottom: 10, alignItems: 'center', gap: 6, zIndex: 20 },
   notice: { color: '#FFE2B8', fontSize: 12, fontWeight: '700', textAlign: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14, overflow: 'hidden', backgroundColor: 'rgba(11,36,25,0.94)' },
-  arrangeHint: { color: p.gold, fontSize: 12, fontWeight: '700', textAlign: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14, overflow: 'hidden', backgroundColor: 'rgba(11,36,25,0.94)' },
   invisible: { opacity: 0 },
   actionText: { color: p.cream, fontSize: 13, fontWeight: '700' },
   menuMode: { color: '#80602b', fontSize: 10, letterSpacing: 1.4, fontWeight: '900', textAlign: 'center' },
@@ -1658,7 +1813,12 @@ const s = StyleSheet.create({
   sheetSideInfo: { width: 230, justifyContent: 'center', gap: 10 }, sheet: { width: '100%', maxWidth: 480, maxHeight: '88%', alignSelf: 'center', backgroundColor: '#f5eedf', borderRadius: 23, padding: 25, gap: 14 },
   resultIcon: { textAlign: 'center', color: '#997431', fontSize: 36 }, resultTitle: { color: '#142c22', fontWeight: '800', fontSize: 25, textAlign: 'center' }, resultCaption: { color: '#59675f', fontSize: 13, lineHeight: 20, textAlign: 'center' },
   resultList: { flexGrow: 0 }, resultListSide: { flexGrow: 1, flexShrink: 1, flexBasis: 0 }, resultListContent: { gap: 8 }, scoreBlock: { borderBottomWidth: 1, borderColor: '#d5cdbb', paddingBottom: 8 },
-  score: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 }, scoreName: { color: '#253a2e', fontSize: 15 },
+  score: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10, paddingVertical: 6 }, scoreName: { color: '#253a2e', fontSize: 15 },
+  scoreNameColumn: { flex: 1, minWidth: 0, alignItems: 'flex-start', gap: 5 },
+  friendChip: { minHeight: 30, paddingHorizontal: 11, borderRadius: 15, borderWidth: 1, borderColor: '#d5cdbb', alignItems: 'center', justifyContent: 'center' },
+  friendChipAction: { backgroundColor: '#143e2c', borderColor: '#143e2c' }, friendChipPressed: { opacity: 0.7 },
+  friendChipText: { color: '#59675f', fontSize: 12, fontWeight: '800' }, friendChipActionText: { color: p.cream },
+  friendCard: { maxWidth: 360, alignItems: 'stretch' }, friendCardAvatar: { alignSelf: 'center' },
   scoreTotal: { alignItems: 'flex-end' }, scoreTotalLabel: { color: '#7b7568', fontSize: 8, letterSpacing: 0.8, fontWeight: '800' }, scoreValue: { fontWeight: '900', color: '#80602b', fontSize: 20 },
   historyTable: { borderWidth: 1, borderColor: '#d5cdbb', borderRadius: 12, overflow: 'hidden', marginBottom: 4 },
   historyRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 8 }, historyRowAlt: { backgroundColor: '#ece4d1' },
@@ -1672,6 +1832,10 @@ const s = StyleSheet.create({
   jokerChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: 9 }, jokerChoiceButton: { minWidth: '47%', flexGrow: 1, minHeight: 68, borderWidth: 1, borderColor: '#9d9584', borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 2, backgroundColor: '#fffaf0' },
   jokerChoiceSymbol: { color: '#17251e', fontSize: 24, fontWeight: '900' }, jokerChoiceRed: { color: '#b33b3b' }, jokerChoiceText: { color: '#253a2e', fontSize: 13, fontWeight: '800' },
   settingRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderColor: '#d5cdbb' }, settingLabel: { color: '#253a2e', fontSize: 14, fontWeight: '700' },
+  sizeChoices: { flexDirection: 'row', flexShrink: 1, padding: 3, borderRadius: 12, backgroundColor: '#0000002e' },
+  sizeChoice: { minHeight: 36, paddingHorizontal: 10, justifyContent: 'center', borderRadius: 9, flexShrink: 1 },
+  sizeChoiceActive: { backgroundColor: p.gold },
+  sizeChoiceText: { color: p.ink, fontSize: 12, fontWeight: '800' },
   switchTrack: { width: 43, height: 25, padding: 3, borderRadius: 13, backgroundColor: '#a9a398' }, switchTrackOn: { backgroundColor: '#2f7454' }, switchKnob: { width: 19, height: 19, borderRadius: 10, backgroundColor: '#fff' }, switchKnobOn: { alignSelf: 'flex-end' },
   settingsSectionTitle: { color: '#80602b', fontSize: 9, letterSpacing: 1.4, fontWeight: '900', marginTop: 8 },
   settingsLinks: { borderWidth: 1, borderColor: '#d5cdbb', borderRadius: 12, overflow: 'hidden' },
@@ -1679,7 +1843,7 @@ const s = StyleSheet.create({
   settingsLinkText: { color: '#253a2e', fontSize: 12, fontWeight: '800' }, settingsLinkAction: { color: '#80602b', fontSize: 10, fontWeight: '900' },
   helpTask: { padding: 13, borderRadius: 12, backgroundColor: '#e8ddc6', gap: 4 }, helpTaskLabel: { color: '#80602b', fontSize: 9, letterSpacing: 1.5, fontWeight: '900' }, helpTaskTitle: { color: '#253a2e', fontSize: 18, fontWeight: '900' },
   helpScroll: { flexGrow: 0 }, helpContent: { gap: 12 }, helpLine: { color: '#59675f', fontSize: 13, lineHeight: 20 }, helpStrong: { color: '#253a2e', fontWeight: '900' },
-  debugEntry: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#b9914e55', backgroundColor: '#d9a44112', borderRadius: 12, padding: 12 },
+  debugEntry: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#b9914e55', backgroundColor: '#e8be7012', borderRadius: 12, padding: 12 },
   debugEntryTitle: { color: '#253a2e', fontSize: 14, fontWeight: '900' }, debugEntryCaption: { color: '#59675f', fontSize: 11, marginTop: 2 },
   debugSheet: { maxWidth: 620, maxHeight: '88%' }, debugScroll: { width: '100%', maxHeight: 520, borderRadius: 12, backgroundColor: '#102b22' },
   debugContent: { padding: 14 }, debugText: { color: '#dbe9df', fontSize: 12, lineHeight: 19 },

@@ -24,11 +24,17 @@ import {
 
 type Mode = 'sign-in' | 'sign-up' | 'forgot' | 'new-password';
 
-export function AuthPanel({ entry = false, onClose }: { entry?: boolean; onClose?: () => void }) {
+/**
+ * `entry` is the first screen: it opens on the sign-in choices alone and shows the
+ * e-mail form only when asked, so the screen fits without scrolling.
+ * `onFormChange` tells the screen when a form is open and needs the room.
+ */
+export function AuthPanel({ entry = false, onClose, onFormChange }: { entry?: boolean; onClose?: () => void; onFormChange?: (open: boolean) => void }) {
   const { t } = useTranslations();
   const auth = useAuth();
   const incomingUrl = Linking.useLinkingURL();
   const [mode, setMode] = useState<Mode>(auth.status === 'anonymous' ? 'sign-up' : 'sign-in');
+  const [emailStep, setEmailStep] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -40,6 +46,8 @@ export function AuthPanel({ entry = false, onClose }: { entry?: boolean; onClose
   }, [incomingUrl]);
 
   const activeMode: Mode = auth.recovery ? 'new-password' : mode;
+  const choosing = entry && !emailStep && (activeMode === 'sign-in' || activeMode === 'sign-up');
+  useEffect(() => { onFormChange?.(!choosing); }, [choosing, onFormChange]);
   const passwordMatches = password === confirmPassword;
   const needsConfirmation = activeMode === 'sign-up' || activeMode === 'new-password';
   const validEmail = /\S+@\S+\.\S+/.test(email);
@@ -100,12 +108,46 @@ export function AuthPanel({ entry = false, onClose }: { entry?: boolean; onClose
     </View>;
   }
 
-  return <View style={s.panel}>
-    <PanelHeader
+  const socialButtons = <View style={s.socialRow}>
+    {Platform.OS === 'ios' && <AppleAuthentication.AppleAuthenticationButton
+      buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+      // On the dark felt of the first screen the light button sits with the cream Google one.
+      buttonStyle={choosing ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+      cornerRadius={choosing ? 14 : 13}
+      style={[s.appleButton, choosing && s.entrySocial]}
+      onPress={() => void signInWithApple()}
+    />}
+    <Pressable accessibilityRole="button" disabled={auth.busy || !googleSignInConfigured} style={[s.googleButton, choosing && s.entryGoogle, (auth.busy || !googleSignInConfigured) && s.disabled]} onPress={() => void signInWithGoogle()}>
+      <Text style={[s.googleText, choosing && s.entryGoogleText]}>{t("Google ile devam et")}</Text>
+    </Pressable>
+  </View>;
+
+  // Playing comes first: no account stands between a new player and the first game.
+  // Accounts are offered afterwards, once there is progress worth keeping.
+  if (choosing) {
+    return <View style={[s.panel, s.panelEntry]}>
+      <Pressable accessibilityRole="button" disabled={auth.busy} onPress={() => void continueAnonymously()}
+        style={({ pressed }) => [s.playNow, auth.busy && s.disabled, pressed && s.pressed]}>
+        <Text style={s.playNowText}>{t("Hemen Oyna")}</Text>
+      </Pressable>
+      <View style={s.entryOr}><View style={s.entryOrLine} /><Text style={s.entryOrText}>{t("veya hesabınla")}</Text><View style={s.entryOrLine} /></View>
+      {socialButtons}
+      <Pressable accessibilityRole="button" disabled={auth.busy} hitSlop={6} style={[s.entryEmail, auth.busy && s.disabled]}
+        onPress={() => { clearAuthError(); setEmailStep(true); }}>
+        <Text style={s.entryEmailText}>{t("E-posta ile devam et")}</Text>
+      </Pressable>
+      <Messages />
+    </View>;
+  }
+
+  // On the entry screen the tabs head the e-mail form; the header only names the parola steps.
+  const entryEmailForm = entry && (activeMode === 'sign-in' || activeMode === 'sign-up');
+  return <View style={[s.panel, entry && s.panelEntry]}>
+    {!entryEmailForm && <PanelHeader
       eyebrow={entry ? t("MASAYA HOŞ GELDİN") : auth.status === 'anonymous' ? t("MİSAFİR PROFİLİ") : t("HESAP")}
-      title={activeMode === 'forgot' ? t("Parolanı yenile.") : activeMode === 'new-password' ? t("Yeni parolanı belirle.") : entry ? t("Nasıl devam etmek istersin?") : t("İlerlemeni güvenceye al.")}
+      title={activeMode === 'forgot' ? t("Parolanı yenile.") : activeMode === 'new-password' ? t("Yeni parolanı belirle.") : t("İlerlemeni güvenceye al.")}
       onClose={onClose}
-    />
+    />}
     {(activeMode === 'sign-in' || activeMode === 'sign-up') && <>
       <View style={s.tabs}>
         <Pressable accessibilityRole="tab" accessibilityState={{ selected: activeMode === 'sign-in' }} onPress={() => changeMode('sign-in')} style={[s.tab, activeMode === 'sign-in' && s.tabActive]}>
@@ -115,38 +157,30 @@ export function AuthPanel({ entry = false, onClose }: { entry?: boolean; onClose
           <Text style={[s.tabText, activeMode === 'sign-up' && s.tabTextActive]}>{t("Kayıt ol")}</Text>
         </Pressable>
       </View>
-      <Text style={s.body}>{activeMode === 'sign-in'
-        ? t("Kaldığın masaya dönmek için hesabınla giriş yap.")
-        : auth.status === 'anonymous'
-          ? t("Misafir ilerlemen kaybolmadan hesabına aktarılır.")
-          : t("Profilini ve ilerlemeni farklı cihazlarda da koru.")}</Text>
-      <View style={s.socialRow}>
-        {Platform.OS === 'ios' && <AppleAuthentication.AppleAuthenticationButton
-          buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-          buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-          cornerRadius={13}
-          style={s.appleButton}
-          onPress={() => void signInWithApple()}
-        />}
-        <Pressable accessibilityRole="button" disabled={auth.busy || !googleSignInConfigured} style={[s.googleButton, (auth.busy || !googleSignInConfigured) && s.disabled]} onPress={() => void signInWithGoogle()}>
-          <Text style={s.googleText}>{t("Google ile devam et")}</Text>
-        </Pressable>
-      </View>
-      <View style={s.orRow}><View style={s.orLine} /><Text style={s.orText}>{t("veya e-posta")}</Text><View style={s.orLine} /></View>
+      {!entry && <>
+        <Text style={s.body}>{activeMode === 'sign-in'
+          ? t("Kaldığın masaya dönmek için hesabınla giriş yap.")
+          : auth.status === 'anonymous'
+            ? t("Misafir ilerlemen kaybolmadan hesabına aktarılır.")
+            : t("Profilini ve ilerlemeni farklı cihazlarda da koru.")}</Text>
+        {socialButtons}
+        <View style={s.orRow}><View style={s.orLine} /><Text style={s.orText}>{t("veya e-posta")}</Text><View style={s.orLine} /></View>
+      </>}
     </>}
 
+    {/* The entry screen has no room for labels; its placeholders name each field instead. */}
     {activeMode !== 'new-password' && <>
-      <Text style={s.label}>{t("E-POSTA")}</Text>
+      {!entry && <Text style={s.label}>{t("E-POSTA")}</Text>}
       <TextInput accessibilityLabel={t("E-posta")} style={s.input} placeholder={t("ornek@eposta.com")} placeholderTextColor={p.muted}
         autoCapitalize="none" autoCorrect={false} keyboardType="email-address" value={email} onChangeText={setEmail} />
     </>}
     {activeMode !== 'forgot' && <>
-      <Text style={s.label}>{t("PAROLA")}</Text>
-      <TextInput accessibilityLabel={activeMode === 'new-password' ? t("Yeni parola") : t("Parola")} style={s.input} placeholder={t("En az 6 karakter")} placeholderTextColor={p.muted}
+      {!entry && <Text style={s.label}>{t("PAROLA")}</Text>}
+      <TextInput accessibilityLabel={activeMode === 'new-password' ? t("Yeni parola") : t("Parola")} style={s.input} placeholder={entry ? t("Parola (en az 6 karakter)") : t("En az 6 karakter")} placeholderTextColor={p.muted}
         secureTextEntry autoCapitalize="none" value={password} onChangeText={setPassword} />
     </>}
     {needsConfirmation && <>
-      <Text style={s.label}>{t("PAROLA TEKRAR")}</Text>
+      {!entry && <Text style={s.label}>{t("PAROLA TEKRAR")}</Text>}
       <TextInput accessibilityLabel={t("Parola tekrar")} style={s.input} placeholder={t("Parolanı yeniden yaz")} placeholderTextColor={p.muted}
         secureTextEntry autoCapitalize="none" value={confirmPassword} onChangeText={setConfirmPassword} />
       {!!confirmPassword && !passwordMatches && <Text style={s.validation}>{t("Parolalar aynı değil.")}</Text>}
@@ -183,11 +217,9 @@ export function AuthPanel({ entry = false, onClose }: { entry?: boolean; onClose
 
     <Messages />
 
-    {entry && (activeMode === 'sign-in' || activeMode === 'sign-up') && (
-      <Pressable accessibilityRole="button" disabled={auth.busy} hitSlop={8} style={[s.guestLink, auth.busy && s.disabled]} onPress={() => void continueAnonymously()}>
-        <Text style={s.guestLinkText}>{t("Anonim olarak devam et")}</Text>
-      </Pressable>
-    )}
+    {entryEmailForm && <Pressable accessibilityRole="button" onPress={() => { clearAuthError(); setEmailStep(false); }}>
+      <Text style={s.link}>{t("Diğer giriş seçenekleri")}</Text>
+    </Pressable>}
   </View>;
 }
 
@@ -212,6 +244,7 @@ function Messages() {
 
 const s = StyleSheet.create({
   panel: { width: '100%', gap: 13 },
+  panelEntry: { gap: 10 },
   header: { flexDirection: 'row', alignItems: 'flex-start', gap: 16 },
   headerCopy: { flex: 1, gap: 7 },
   eyebrow: { color: p.gold, letterSpacing: 2, fontSize: 10, fontWeight: '900' },
@@ -239,8 +272,17 @@ const s = StyleSheet.create({
   white: { color: p.cream, fontSize: 15, fontWeight: '800' },
   link: { color: p.gold, fontSize: 13, paddingVertical: 5, textAlign: 'center', fontWeight: '700' },
   divider: { height: 1, backgroundColor: p.line, marginVertical: 2 },
-  guestLink: { alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 10, marginTop: 4 },
-  guestLinkText: { color: p.muted, fontSize: 12, opacity: 0.75 },
+  // First screen: one gold call to play, quieter account choices below it.
+  playNow: { minHeight: 58, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: p.gold, boxShadow: '0 10px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.35)' },
+  playNowText: { color: p.canvas, fontSize: 18, fontWeight: '900', letterSpacing: 0.4 },
+  entryOr: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 2 },
+  entryOrLine: { flex: 1, height: 1, backgroundColor: 'rgba(181,200,190,0.22)' },
+  entryOrText: { color: p.muted, fontSize: 12, fontWeight: '600' },
+  entrySocial: { height: 50 },
+  entryGoogle: { minHeight: 50, borderRadius: 14, backgroundColor: p.cream },
+  entryGoogleText: { color: p.canvas, fontWeight: '800' },
+  entryEmail: { alignSelf: 'center', minHeight: 40, paddingHorizontal: 14, justifyContent: 'center' },
+  entryEmailText: { color: p.cream, fontSize: 15, fontWeight: '700' },
   member: { padding: 14, borderRadius: 18, borderWidth: 1, borderColor: p.line, backgroundColor: p.surface, flexDirection: 'row', alignItems: 'center', gap: 12 },
   memberCopy: { flex: 1, gap: 3 },
   savedBadge: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5, backgroundColor: '#2d8b6533' },

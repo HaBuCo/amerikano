@@ -29,7 +29,7 @@ function SeatTile({ seat, isYou, isHost, tileWidth }: { seat: Seat; isYou: boole
   const statusLabel = !seat.connected ? t("Yeniden bağlanıyor") : seat.ready ? t("✓ Hazır") : t("Bekleniyor");
   return <View style={[s.seat, s.seatFilled, { width: tileWidth }, isYou && s.seatYou]}>
     <PlayerAvatar avatarKey={seat.avatarKey} size={36} />
-    <Text numberOfLines={1} style={s.seatName}>{seat.name}{seat.isBot ? t(" · BOT") : isHost ? ' ♛' : ''}</Text>
+    <Text numberOfLines={1} style={s.seatName}>{seat.name}{isHost ? ' ♛' : ''}</Text>
     <Text numberOfLines={1} style={[s.seatStatus, seat.ready && seat.connected && s.seatStatusReady]}>{isYou ? t("SEN") : statusLabel}</Text>
   </View>;
 }
@@ -71,7 +71,7 @@ const s = StyleSheet.create({
   seatsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center', width: '100%' },
   seat: { borderRadius: 14, minHeight: 92, alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 10, paddingHorizontal: 6 },
   seatFilled: { backgroundColor: '#ffffff0d', borderWidth: 1, borderColor: p.line },
-  seatYou: { borderColor: p.gold, backgroundColor: '#d9a44120' },
+  seatYou: { borderColor: p.gold, backgroundColor: '#e8be7020' },
   seatEmpty: { borderWidth: 1.5, borderColor: p.line, borderStyle: 'dashed' },
   seatAvatarEmpty: { width: 36, height: 36, borderRadius: 18, borderWidth: 1.5, borderColor: p.line, borderStyle: 'dashed' },
   seatName: { color: p.cream, fontSize: 13, fontWeight: '700', maxWidth: '100%' },

@@ -37,7 +37,7 @@ async function ensureChannel() {
   await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
     name: 'Amerikano',
     importance: Notifications.AndroidImportance.HIGH,
-    lightColor: '#D9A441',
+    lightColor: '#E8BE70',
   });
 }
 

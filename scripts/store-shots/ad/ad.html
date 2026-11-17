@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Amerikano reklam filmi</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { overflow:hidden; background:#071D14; }
+#stage { position:relative; overflow:hidden; font-variant-numeric:lining-nums;
+  background:radial-gradient(ellipse 92% 62% at 50% 45%, #22744F 0%, #155138 40%, #0C3123 74%, #071D14 100%); }
+#bg, #cam, #fx { position:absolute; inset:0; }
+#cam { transform-origin:50% 46%; }
+.ray { position:absolute; left:-46px; top:-1700px; width:92px; height:3400px;
+  background:linear-gradient(180deg, rgba(255,227,154,0) 8%, rgba(255,227,154,.034) 36%, rgba(255,227,154,0) 50%, rgba(255,227,154,.034) 64%, rgba(255,227,154,0) 92%); }
+#rays { position:absolute; width:0; height:0; }
+.suit-bg { position:absolute; font-family:'Segoe UI Symbol'; color:#F8F1DF; opacity:.05; line-height:1; }
+#glow { position:absolute; border-radius:50%;
+  background:radial-gradient(circle, rgba(246,213,126,.26) 0%, rgba(217,164,65,.09) 42%, rgba(217,164,65,0) 70%); }
+#vignette { position:absolute; inset:0; background:radial-gradient(ellipse 100% 80% at 50% 46%, rgba(0,0,0,0) 56%, rgba(0,0,0,.46) 100%); }
+#grain { position:absolute; left:0; top:0; width:100%; height:100%; opacity:.07; mix-blend-mode:overlay; }
+.dust { position:absolute; left:0; top:0; border-radius:50%; background:radial-gradient(circle, #FFEFC0 0%, rgba(243,206,106,.7) 38%, rgba(243,206,106,0) 72%); }
+
+/* Cards */
+.card { position:absolute; left:0; top:0; width:320px; height:448px; transform-origin:50% 50%; transform-style:preserve-3d; }
+.face { position:absolute; inset:0; border-radius:20px; overflow:hidden; backface-visibility:hidden; background:#fff; }
+.face img { width:100%; height:100%; display:block; }
+.face.back { transform:rotateY(180deg); }
+
+/* Type */
+.abs { position:absolute; text-align:center; transform-origin:50% 50%; white-space:nowrap; }
+.disp { font-family:Georgia; font-weight:700; color:#F8F1DF; line-height:1.06; text-shadow:0 .04em .2em rgba(0,0,0,.55); }
+.gold { background:linear-gradient(180deg, #FFEFBC 6%, #F3CE6A 46%, #C48D2C 100%); -webkit-background-clip:text; background-clip:text; color:transparent;
+  text-shadow:none; filter:drop-shadow(0 5px 14px rgba(0,0,0,.55)); }
+.sub { font-family:'Segoe UI'; font-weight:600; color:#EEF3EA; line-height:1.15; text-shadow:0 2px 14px rgba(0,0,0,.6); }
+.brand { font-family:Georgia; font-weight:700; color:#E2B351; letter-spacing:.42em; margin-right:-.42em; }
+.kicker { display:inline-block; padding:.3em .81em .34em .95em; border-radius:99px; border:3px solid #E2B351; background:rgba(7,29,20,.55);
+  font-family:'Segoe UI'; font-weight:700; color:#F3CE6A; letter-spacing:.14em; }
+.done { display:inline-flex; align-items:center; gap:.34em; padding:.22em .8em .28em; border-radius:99px; background:linear-gradient(180deg,#F6D57E,#D9A441);
+  font-family:'Segoe UI'; font-weight:800; color:#123D2B; box-shadow:0 10px 34px rgba(243,206,106,.4); line-height:1.2; }
+.spark { position:absolute; left:0; top:0; border-radius:50%; background:radial-gradient(circle, #FFF6D8 0%, #F3CE6A 45%, rgba(243,206,106,0) 72%); }
+
+/* Phone */
+.phone { position:absolute; left:0; top:0; transform-origin:50% 50%; }
+.phone .body { position:absolute; inset:0; background:linear-gradient(145deg,#3A403D 0%,#121614 22%,#070908 60%,#202523 100%);
+  box-shadow:0 50px 100px rgba(0,0,0,.55), 0 16px 34px rgba(0,0,0,.45), inset 0 0 0 2px rgba(255,255,255,.12), inset 0 0 0 6px #050605; }
+.phone .scr { position:absolute; overflow:hidden; }
+.phone .cam { position:absolute; border-radius:50%; background:#020303; box-shadow:inset 0 0 0 2px #1a201d; z-index:5; }
+.phone .layer { position:absolute; left:0; width:100%; overflow:hidden; }
+.phone .layer img { position:absolute; display:block; max-width:none; }
+.phone .glare { position:absolute; pointer-events:none; z-index:6;
+  background:linear-gradient(118deg, rgba(255,255,255,.12) 0%, rgba(255,255,255,.035) 26%, rgba(255,255,255,0) 40%); }
+.ring { position:absolute; border:5px solid #FFE08A; box-shadow:0 0 26px rgba(255,224,138,.85), inset 0 0 18px rgba(255,224,138,.4); }
+.tap { position:absolute; left:0; top:0; border-radius:50%; background:radial-gradient(circle, rgba(255,255,255,.8) 0%, rgba(255,255,255,.3) 45%, rgba(255,255,255,0) 70%); }
+
+/* Ways to play */
+.chip { position:absolute; display:flex; align-items:center; gap:.42em; padding:0 .6em 0 11px; border-radius:999px; background:rgba(7,29,20,.88);
+  border:3px solid rgba(226,179,81,.72); box-shadow:0 18px 40px rgba(0,0,0,.45);
+  font-family:'Segoe UI'; font-weight:700; color:#F8F1DF; white-space:nowrap; transform-origin:50% 50%; }
+.chip .ic { flex:none; border-radius:50%; background:linear-gradient(180deg,#F8DD8D,#D9A441); display:flex; align-items:center; justify-content:center; color:#123D2B;
+  box-shadow:inset 0 -3px 0 rgba(0,0,0,.15); }
+.chip .ic svg { width:58%; height:58%; }
+
+/* Contract counter */
+.plaque { position:absolute; left:0; top:0; border-radius:56px; background:linear-gradient(180deg, rgba(12,42,30,.92), rgba(7,29,20,.92)); border:3px solid rgba(226,179,81,.6);
+  box-shadow:0 30px 70px rgba(0,0,0,.5), inset 0 0 0 9px rgba(226,179,81,.07); transform-origin:50% 50%; }
+.plaque .lab { position:absolute; left:0; right:0; text-align:center; font-family:'Segoe UI'; font-weight:800; color:#C9A55A; letter-spacing:.32em; text-indent:.32em; }
+.plaque .num { position:absolute; left:0; right:0; text-align:center; font-family:Georgia; font-weight:700; line-height:1; white-space:nowrap; }
+.plaque .num .n { display:inline-block; background:linear-gradient(180deg, #FFEFBC 6%, #F3CE6A 46%, #C48D2C 100%); -webkit-background-clip:text; background-clip:text; color:transparent;
+  filter:drop-shadow(0 6px 16px rgba(0,0,0,.5)); transform-origin:50% 62%; }
+.plaque .num .of { color:rgba(248,241,223,.5); }
+.plaque .ct { position:absolute; left:50%; padding:.18em .8em .24em; border-radius:99px; background:rgba(248,241,223,.1); border:2px solid rgba(248,241,223,.22);
+  font-family:'Segoe UI'; font-weight:700; color:#F8F1DF; white-space:nowrap; }
+.plaque .ct.final { background:linear-gradient(180deg,#F6D57E,#D9A441); color:#123D2B; border-color:transparent; box-shadow:0 0 44px rgba(243,206,106,.55); }
+.plaque .bar { position:absolute; display:flex; gap:8px; }
+.plaque .bar i { flex:1; border-radius:6px; background:rgba(248,241,223,.16); }
+.plaque .bar i.on { background:linear-gradient(90deg,#E2B351,#FFEFBC); box-shadow:0 0 12px rgba(243,206,106,.5); }
+
+/* End card */
+.icon { position:absolute; overflow:hidden; box-shadow:0 26px 70px rgba(0,0,0,.6), 0 0 0 3px rgba(243,206,106,.5); transform-origin:50% 50%; }
+.icon img { width:100%; height:100%; display:block; }
+.iconGlow { position:absolute; border-radius:50%; background:radial-gradient(circle, rgba(246,213,126,.5) 0%, rgba(217,164,65,.14) 44%, rgba(217,164,65,0) 70%); }
+.btn { display:inline-flex; align-items:center; justify-content:center; border-radius:99px; position:relative; overflow:hidden;
+  background:linear-gradient(180deg,#F8DD8D 0%,#E2B351 55%,#C48D2C 100%); box-shadow:0 18px 44px rgba(0,0,0,.45), 0 0 54px rgba(243,206,106,.4);
+  font-family:'Segoe UI'; font-weight:800; color:#0F3524; }
+.shine { position:absolute; top:-30px; bottom:-30px; width:150px; background:linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.75), rgba(255,255,255,0)); }
+.conf { position:absolute; left:0; top:0; border-radius:2px; }
+
+#sweep { position:absolute; left:0; width:380px; transform:skewX(-14deg);
+  background:linear-gradient(90deg, rgba(255,231,170,0), rgba(255,231,170,.16), rgba(255,240,205,.3), rgba(255,231,170,.16), rgba(255,231,170,0)); mix-blend-mode:screen; }
+#safe { position:absolute; inset:0; pointer-events:none; z-index:999; display:none; }
+#safe div { position:absolute; background:rgba(255,0,80,.2); border:2px dashed rgba(255,0,80,.8); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg">
+    <div id="rays"></div>
+    <div id="glow"></div>
+    <canvas id="grain"></canvas>
+    <div id="vignette"></div>
+  </div>
+  <div id="cam"></div>
+  <div id="fx"><div id="sweep"></div></div>
+  <div id="safe"></div>
+</div>
+
+<script>
+/* The whole film is one pure function of time: renderAt(t) never reads a clock,
+   so every frame can be drawn in any order, by any worker, in any of the four formats. */
+const qs = new URLSearchParams(location.search);
+const A = qs.get('assets') || '../../../assets';
+const SA = qs.get('store') || '../../../store-assets';
+const SIZES = { '9x16': [1080, 1920], '4x5': [1080, 1350], '1x1': [1080, 1080], '16x9': [1920, 1080] };
+const FMT = SIZES[qs.get('fmt')] ? qs.get('fmt') : '9x16';
+const [W, H] = SIZES[FMT];
+const WIDE = W > H;
+const stage = document.getElementById('stage');
+for (const e of [document.documentElement, document.body, stage]) { e.style.width = W + 'px'; e.style.height = H + 'px'; }
+const cam = document.getElementById('cam');
+const bg = document.getElementById('bg');
+
+/* 120 BPM: a beat is half a second and every cut lands on one. The film is 15 s;
+   the end card runs one more second so the 6 s bumper (hook + end card) can be cut from the same frames. */
+const T = { hook: 0, play: 2.5, gorev: 6, modes: 8, ders: 10.5, cta: 12.5, end: 15, bumper: 16 };
+const CUTS = [T.play, T.gorev, T.modes, T.ders, T.cta];
+const BEAT = .5;
+
+/* ───────────── Layouts: one per format. Text tops and sizes in px, phone and card centres in px. ───────────── */
+const LAYOUTS = {
+  '9x16': {
+    tx: 540, tw: 1000,
+    lockup: { y: 146, icon: 56, font: 28, word: true },
+    hook: { kicker: [226, 34], lines: [[298, 164, 'Amerikano', 'gold'], [478, 100, 'artık cebinde!']],
+      phone: { x: 540, y: 1190, h: 1000 }, fan: { cx: 540, cy: 1528, w: 252, span: 600, spread: 22, lift: 62 } },
+    play: { lines: [[232, 100, [0]], [346, 100, [1]], [460, 122, [2]]],
+      melds: { xs: [298, 782], ys: [780, 1092], w: 152, gap: 80 }, hand: { cx: 540, cy: 1492, w: 200, span: 860, spread: 22, lift: 72 }, done: [1330, 58] },
+    gorev: { lines: [[236, 124, '12 el,'], [374, 98, 'her elde yeni görev', 'gold']], plaque: { x: 540, y: 980, w: 780, h: 660 } },
+    modes: { lines: [[232, 100, 'Nasıl istersen'], [346, 120, 'öyle oyna', 'gold']],
+      phone: { x: 540, y: 1080, h: 1000 }, chips: { x: 540, ys: [905, 1057, 1209], w: 690, h: 128, font: 54 } },
+    ders: { kicker: [226, 34], lines: [[304, 106, 'Oynayarak öğren', 'gold'], [436, 62, '12 kısa ders', 'sub']], phone: { x: 540, y: 1030, h: 960 } },
+    cta: { icon: [352, 300], brand: [696, 106], btn: [852, 690, 140, 72], stores: [1032, 48],
+      fans: [{ cx: 540, cy: 1500, w: 252, span: 560, spread: 22, lift: 60, n: 5, r: 0, from: [0, 640] }] },
+    safe: [[0, 1440, 1080, 480], [944, 880, 136, 560]],
+  },
+  '4x5': {
+    tx: 540, tw: 1000,
+    lockup: { x: 30, y: 28, icon: 58 },
+    hook: { kicker: [44, 30], lines: [[112, 140, 'Amerikano', 'gold'], [264, 86, 'artık cebinde!']],
+      phone: { x: 540, y: 885, h: 820 }, fan: { cx: 540, cy: 1136, w: 212, span: 500, spread: 22, lift: 52 } },
+    play: { lines: [[50, 84, [0, 1]], [146, 104, [2]]],
+      melds: { xs: [298, 782], ys: [460, 740], w: 132, gap: 70 }, hand: { cx: 540, cy: 1138, w: 176, span: 840, spread: 22, lift: 62 }, done: [1050, 50] },
+    gorev: { lines: [[50, 108, '12 el,'], [172, 84, 'her elde yeni görev', 'gold']], plaque: { x: 540, y: 775, w: 720, h: 610 } },
+    modes: { lines: [[46, 88, 'Nasıl istersen'], [146, 104, 'öyle oyna', 'gold']],
+      phone: { x: 540, y: 850, h: 860 }, chips: { x: 540, ys: [668, 802, 936], w: 650, h: 116, font: 50 } },
+    ders: { kicker: [44, 30], lines: [[112, 104, 'Oynayarak öğren', 'gold'], [236, 54, '12 kısa ders', 'sub']], phone: { x: 540, y: 868, h: 836 } },
+    cta: { icon: [132, 250], brand: [414, 94], btn: [556, 630, 126, 64], stores: [714, 44],
+      fans: [{ cx: 540, cy: 1136, w: 218, span: 500, spread: 22, lift: 54, n: 5, r: 0, from: [0, 560] }] },
+    safe: [],
+  },
+  '1x1': {
+    tx: 540, tw: 1020,
+    lockup: { x: 26, y: 24, icon: 52 },
+    hook: { kicker: [34, 26], lines: [[96, 118, 'Amerikano', 'gold'], [222, 72, 'artık cebinde!']],
+      phone: { x: 540, y: 706, h: 700 }, fan: { cx: 540, cy: 932, w: 178, span: 440, spread: 22, lift: 44 } },
+    play: { lines: [[36, 70, [0, 1]], [118, 86, [2]]],
+      melds: { xs: [300, 780], ys: [345, 578], w: 112, gap: 60 }, hand: { cx: 540, cy: 908, w: 150, span: 800, spread: 22, lift: 50 }, done: [836, 44] },
+    gorev: { lines: [[36, 92, '12 el,'], [140, 72, 'her elde yeni görev', 'gold']], plaque: { x: 540, y: 640, w: 640, h: 560 } },
+    modes: { lines: [[34, 74, 'Nasıl istersen'], [118, 88, 'öyle oyna', 'gold']],
+      phone: { x: 540, y: 684, h: 760 }, chips: { x: 540, ys: [548, 666, 784], w: 600, h: 106, font: 46 } },
+    ders: { kicker: [34, 26], lines: [[94, 92, 'Oynayarak öğren', 'gold'], [200, 48, '12 kısa ders', 'sub']], phone: { x: 540, y: 698, h: 730 } },
+    cta: { icon: [80, 220], brand: [326, 84], btn: [450, 560, 116, 58], stores: [596, 40],
+      fans: [{ cx: 540, cy: 928, w: 178, span: 440, spread: 22, lift: 44, n: 5, r: 0, from: [0, 460] }] },
+    safe: [],
+  },
+  '16x9': {
+    tx: 520, tw: 1000,
+    lockup: { x: 64, y: 48, icon: 58, font: 28, word: true, left: true },
+    hook: { kicker: [290, 30], lines: [[364, 160, 'Amerikano', 'gold'], [540, 100, 'artık cebinde!']],
+      phone: { x: 1420, y: 560, h: 940 }, fan: { cx: 1420, cy: 888, w: 224, span: 560, spread: 22, lift: 50 } },
+    play: { lines: [[300, 104, [0]], [414, 104, [1]], [528, 124, [2]]],
+      melds: { xs: [1185, 1655], ys: [262, 540], w: 140, gap: 74 }, hand: { cx: 1420, cy: 905, w: 172, span: 760, spread: 20, lift: 56 }, done: [850, 50] },
+    gorev: { lines: [[296, 150, '12 el,'], [478, 108, 'her elde', 'gold'], [596, 108, 'yeni görev', 'gold']], plaque: { x: 1420, y: 540, w: 780, h: 720 } },
+    modes: { lines: [[214, 108, 'Nasıl istersen'], [334, 124, 'öyle oyna', 'gold']],
+      phone: { x: 1440, y: 560, h: 940 }, chips: { x: 520, ys: [564, 694, 824], w: 680, h: 116, font: 52 } },
+    ders: { kicker: [292, 32], lines: [[370, 132, 'Oynayarak', 'gold'], [512, 132, 'öğren', 'gold'], [680, 60, '12 kısa ders', 'sub']], phone: { x: 1440, y: 560, h: 940 } },
+    cta: { icon: [106, 250], brand: [388, 104], btn: [536, 660, 134, 68], stores: [704, 46],
+      fans: [{ cx: 296, cy: 650, w: 222, span: 290, spread: 16, lift: 30, n: 3, r: -10, from: [-640, 0] },
+             { cx: 1624, cy: 650, w: 222, span: 290, spread: 16, lift: 30, n: 3, r: 10, from: [640, 0] }] },
+    safe: [[0, 900, 760, 180], [1580, 880, 340, 130]],
+  },
+};
+const L = LAYOUTS[FMT];
+
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, u) => a + (b - a) * u;
+const E = {
+  linear: u => u,
+  outCubic: u => 1 - Math.pow(1 - u, 3),
+  inCubic: u => u * u * u,
+  inOutCubic: u => u < .5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2,
+  outBack: u => { const c = 1.70158; return 1 + (c + 1) * Math.pow(u - 1, 3) + c * Math.pow(u - 1, 2); },
+  outBackBig: u => { const c = 2.6; return 1 + (c + 1) * Math.pow(u - 1, 3) + c * Math.pow(u - 1, 2); },
+};
+const prog = (t, a, d, e = E.linear) => e(clamp((t - a) / d));
+
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+
+function mk(tag, cls, css, html, parent = cam) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (css) e.style.cssText = css;
+  if (html !== undefined) e.innerHTML = html;
+  parent.appendChild(e);
+  return e;
+}
+
+/* Sound cues are written next to the motion they belong to; audio.py reads them. */
+const CUES = [];
+const cue = (t, s, g = 1, pan = 0) => CUES.push({ t: +t.toFixed(3), s, g, pan: +pan.toFixed(3) });
+
+if (qs.get('safe')) {
+  const box = document.getElementById('safe');
+  box.style.display = 'block';
+  L.safe.forEach(([x, y, w, h]) => mk('div', '', `left:${x}px;top:${y}px;width:${w}px;height:${h}px`, undefined, box));
+}
+
+/* ───────────── Background ───────────── */
+{
+  const rays = document.getElementById('rays');
+  rays.style.left = `${W / 2}px`; rays.style.top = `${H * .45}px`;
+  for (let i = 0; i < 12; i++) mk('div', 'ray', `transform:rotate(${i * 15}deg)`, undefined, rays);
+  const glow = document.getElementById('glow'), gs = Math.min(W, H) * .93;
+  Object.assign(glow.style, { left: `${W / 2 - gs / 2}px`, top: `${H * .45 - gs / 2}px`, width: `${gs}px`, height: `${gs}px` });
+  const canvas = document.getElementById('grain');
+  canvas.width = W / 2; canvas.height = H / 2;
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(canvas.width, canvas.height);
+  const r = rng(77);
+  for (let i = 0; i < img.data.length; i += 4) { const v = 96 + r() * 64; img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255; }
+  ctx.putImageData(img, 0, 0);
+  document.getElementById('sweep').style.cssText += `top:-300px;height:${H + 600}px`;
+}
+const unit = Math.min(W, H) / 1080;
+const suitsBg = [['♠', .06, .1, 340], ['♥', .92, .2, 300], ['♦', .08, .72, 320], ['♣', .92, .64, 340], ['♥', .24, .44, 200], ['♠', .78, .92, 280]].map(([s, x, y, size], i) => {
+  size *= unit;
+  return { e: mk('div', 'suit-bg', `left:${x * W - size / 2}px;top:${y * H - size / 2}px;font-size:${size}px`, s, bg), i };
+});
+const dustRng = rng(1234);
+const dust = Array.from({ length: Math.max(26, Math.round(40 * W * H / (1080 * 1920))) }, () => {
+  const size = 5 + dustRng() * 13;
+  return { e: mk('div', 'dust', `width:${size}px;height:${size}px`, undefined, bg), x: dustRng() * W, y: dustRng() * H, v: 22 + dustRng() * 60, p: dustRng() * 6.28, w: 1 + dustRng() * 3, drift: dustRng() * 30 };
+});
+
+/* ───────────── Cards ───────────── */
+const CARDS = [];
+function cardFile(code) {
+  if (code === 'JK') return 'joker';
+  const suit = { s: 'spades', h: 'hearts', d: 'diamonds', c: 'clubs' }[code.slice(-1)];
+  const rank = code.slice(0, -1);
+  return `${{ A: 'ace', K: 'king', Q: 'queen', J: 'jack' }[rank] || rank}-${suit}`;
+}
+const src = code => `${A}/cards/${cardFile(code)}.png`;
+class Card {
+  constructor(code, init, on = 0, off = 99) {
+    Object.assign(this, { code, on, off, moves: [] });
+    this.init = { x: W / 2, y: H / 2, w: 200, r: 0, f: 0, z: 20, lift: .1, o: 1, glow: 0, ...init };
+    this.e = mk('div', 'card', '', `<div class="face front"><img src="${src(code)}" decoding="sync"></div><div class="face back"><img src="${A}/cards/back.png" decoding="sync"></div>`);
+    this.faces = [this.e.children[0], this.e.children[1]];
+    CARDS.push(this);
+  }
+  go(t0, dur, to, ease = E.outCubic) { this.moves.push({ t0, dur, to, ease }); return this; }
+  state(t) { return stateAt(this.init, this.moves, t); }
+  draw(t) {
+    if (t < this.on || t >= this.off) { this.e.style.visibility = 'hidden'; return; }
+    const s = this.state(t);
+    const st = this.e.style;
+    st.visibility = s.o <= .002 ? 'hidden' : 'visible';
+    st.opacity = clamp(s.o);
+    st.zIndex = Math.round(s.z);
+    st.transform = `translate(${s.x - 160}px,${s.y - 224}px) perspective(1900px) rotateZ(${s.r}deg) rotateY(${s.f * 180}deg) scale(${s.w / 320})`;
+    const lift = clamp(s.lift), g = clamp(s.glow);
+    const sh = `0 ${6 + lift * 46}px ${16 + lift * 72}px rgba(0,0,0,${.42 + lift * .12}), 0 1px 3px rgba(0,0,0,.4)` + (g > .01 ? `, 0 0 0 ${5 * g}px rgba(255,226,140,${g}), 0 0 ${70 * g}px ${22 * g}px rgba(243,206,106,${.72 * g})` : '');
+    this.faces[0].style.boxShadow = sh; this.faces[1].style.boxShadow = sh;
+  }
+}
+/* Moves must be added in time order; a later move interrupts an earlier one wherever it has reached. */
+function stateAt(init, moves, t) {
+  const s = { ...init };
+  for (let i = 0; i < moves.length; i++) {
+    const a = moves[i];
+    if (t < a.t0) break;
+    const end = i + 1 < moves.length ? Math.min(t, moves[i + 1].t0) : t;
+    const u = a.ease(clamp((end - a.t0) / a.dur));
+    for (const k in a.to) { if (k === 'z') s.z = a.to.z; else s[k] = s[k] + (a.to[k] - s[k]) * u; }
+  }
+  return s;
+}
+function fan(i, n, o) {
+  const { cx, cy, w, spread = 22, span, lift = 60, z = 22, r = 0 } = o;
+  const u = n > 1 ? (i - (n - 1) / 2) / ((n - 1) / 2) : 0;
+  return { x: cx + u * span / 2, y: cy + Math.pow(Math.abs(u), 1.7) * lift, r: r + u * spread, w, z: z + i, lift: .08, f: 0, glow: 0 };
+}
+const layout = (cards, t0, dur, o, ease = E.outCubic) => cards.forEach((c, i) => c.go(t0, dur, fan(i, cards.length, o), ease));
+
+/* Anything else that moves: phones and the contract counter. */
+const MOVERS = [];
+class Mover {
+  constructor(e, w, h, init, on = -9, off = 99) {
+    Object.assign(this, { e, w, h, on, off, moves: [], wobble: null });
+    this.init = { x: 0, y: 0, s: 1, r: 0, rx: 0, ry: 0, o: 1, ...init };
+    MOVERS.push(this);
+  }
+  go(t0, dur, to, ease = E.outCubic) { this.moves.push({ t0, dur, to, ease }); return this; }
+  draw(t) {
+    if (t < this.on || t >= this.off) { this.e.style.visibility = 'hidden'; return; }
+    const s = stateAt(this.init, this.moves, t);
+    const w = this.wobble ? this.wobble(t) : {};
+    const st = this.e.style;
+    st.visibility = s.o <= .002 ? 'hidden' : 'visible';
+    st.opacity = clamp(s.o);
+    st.transform = `translate(${s.x - this.w / 2}px,${s.y - this.h / 2}px) perspective(2600px) rotateX(${s.rx + (w.rx || 0)}deg) rotateY(${s.ry + (w.ry || 0)}deg) rotateZ(${s.r + (w.r || 0)}deg) scale(${s.s})`;
+  }
+}
+
+/* ───────────── The real app screens, cut from the 1.2 store screenshots ───────────── */
+const CROP = { x: 72, y: 337, w: 1176, h: 2453, iw: 1320 };   // the screen inside store-assets/v1.2/tr/ios-6.9/*.png
+const STRIP = 98;                                              // a status-bar strip above it, in the same pixels
+const SCREEN_ASPECT = CROP.w / (CROP.h + STRIP);
+const BEZEL = .036;
+const SCREEN_BG = { '01-home': '#0B2D21', '02-table': '#0A2A1D', '03-lesson': '#0A2A1D' };
+function makePhone(h, names) {
+  const sh = h / (1 + 2 * BEZEL * SCREEN_ASPECT), sw = sh * SCREEN_ASPECT, b = BEZEL * sw;
+  const w = sw + 2 * b, s = sw / CROP.w, sr = sw * .12, strip = STRIP * s, camD = sw * .042;
+  const e = mk('div', 'phone', `width:${w}px;height:${h}px;z-index:10`);
+  e.innerHTML = `<div class="body" style="border-radius:${sr + b}px"></div>
+    <div class="scr" style="left:${b}px;top:${b}px;width:${sw}px;height:${sh}px;border-radius:${sr}px;background:${SCREEN_BG[names[0]]}">
+      <div class="cam" style="left:${sw / 2 - camD / 2}px;top:${strip / 2 - camD / 2}px;width:${camD}px;height:${camD}px"></div>
+      ${names.map(n => `<div class="layer" data-n="${n}" style="top:${strip}px;height:${CROP.h * s}px;background:${SCREEN_BG[n]}"><img src="${SA}/v1.2/tr/ios-6.9/${n}.png" decoding="sync" style="width:${CROP.iw * s}px;left:${-CROP.x * s}px;top:${-CROP.y * s}px"></div>`).join('')}
+    </div>
+    <div class="glare" style="left:${b}px;top:${b}px;width:${sw}px;height:${sh}px;border-radius:${sr}px"></div>`;
+  const layers = Object.fromEntries([...e.querySelectorAll('.layer')].map(l => [l.dataset.n, l]));
+  return { e, w, h, s, sw, sh, layers };
+}
+
+/* ───────────── Text: show between two times, with a pop in and a quick lift out ───────────── */
+const SHOW = [];
+function shown(e, tIn, tOut, o = {}) {
+  e.style.visibility = 'hidden';
+  SHOW.push({ e, tIn, tOut, dy: 70, dOut: -46, inDur: .3, outDur: .14, from: .93, ease: E.outBack, base: '', ...o });
+  return e;
+}
+function drawShown(t) {
+  for (const s of SHOW) {
+    if (t < s.tIn || t >= s.tOut + s.outDur) { s.e.style.visibility = 'hidden'; continue; }
+    const a = prog(t, s.tIn, s.inDur * .6, E.outCubic), b = s.ease(clamp((t - s.tIn) / s.inDur)), c = prog(t, s.tOut, s.outDur, E.inCubic);
+    s.e.style.visibility = 'visible';
+    s.e.style.opacity = a * (1 - c);
+    s.e.style.transform = `${s.base} translateY(${lerp(s.dy, 0, b) + s.dOut * c}px) scale(${lerp(s.from, 1, b)})`;
+  }
+}
+const column = `left:${L.tx - L.tw / 2}px;width:${L.tw}px;`;
+function lineEl(top, size, html, cls) {
+  const kind = cls === 'sub' ? 'sub' : 'disp' + (cls === 'gold' ? ' gold' : '');
+  return mk('div', `abs ${kind}`, `${column}top:${top}px;font-size:${size}px;z-index:60`, html);
+}
+const kickerEl = ([top, size], text) => mk('div', 'abs', `${column}top:${top}px;z-index:60`, `<span class="kicker" style="font-size:${size}px">${text}</span>`);
+const pillEl = (x, top, size, html, z = 58) => mk('div', 'abs', `left:${x - 400}px;width:800px;top:${top}px;z-index:${z}`, `<span class="done" style="font-size:${size}px">${html}</span>`);
+
+/* ───────────── Brand, small, through the middle of the film ───────────── */
+const lk = L.lockup;
+const lockup = mk('div', '', `position:absolute;z-index:70;display:flex;align-items:center;gap:${lk.icon * .3}px;top:${lk.y}px;` +
+  (lk.word && !lk.left ? `left:0;width:${W}px;justify-content:center` : `left:${lk.x}px`),
+  `<img src="${A}/images/icon.png" decoding="sync" style="width:${lk.icon}px;height:${lk.icon}px;border-radius:${lk.icon * .23}px;box-shadow:0 4px 14px rgba(0,0,0,.45)">` +
+  (lk.word ? `<span class="brand" style="font-size:${lk.font}px">AMERİKANO</span>` : ''));
+
+/* ───────────── 1. Hook: Amerikano is in your pocket ───────────── */
+const H1 = L.hook;
+const hookOut = T.play - .2;
+shown(kickerEl(H1.kicker, 'TÜRKİYE’NİN SEVDİĞİ KART OYUNU'), -1, hookOut, { dy: 0, from: 1 });
+const hookLines = H1.lines.map(([top, size, html, cls]) => shown(lineEl(top, size, html, cls), -1, hookOut, { dy: 0, from: 1, dOut: -70 }));
+const hookTitle = hookLines[0];
+const P1 = makePhone(H1.phone.h, ['02-table']);
+// Centre height that puts a phone of height h fully below the frame.
+const below = h => H + h * .55 + 80;
+const phoneHook = new Mover(P1.e, P1.w, P1.h, { x: H1.phone.x, y: H1.phone.y + 46, s: .965 }, -9, T.play + .2);
+// Starts one frame in: the very first frame is the preview image and must be sharp.
+phoneHook.go(1 / 30, .55, { y: H1.phone.y, s: 1 }, E.outCubic);
+phoneHook.go(T.play - .26, .34, { y: below(P1.h), s: .9 }, E.inCubic);
+phoneHook.wobble = t => ({ ry: Math.sin(t * 1.4) * 3.2 - (WIDE ? 7 : 0), rx: 3 });
+const hookCodes = ['Jd', 'Qd', 'Kd', 'As', 'JK'];
+const hookCards = hookCodes.map((code, i) => {
+  const open = fan(i, 5, H1.fan), u = (i - 2) / 2;
+  const c = new Card(code, { ...open, x: H1.fan.cx + u * H1.fan.span * .34, y: open.y + 24, r: u * 14, w: H1.fan.w * .95, z: 30 + (i === 2 ? 5 : i), lift: .55 }, 0, T.gorev + .1);
+  c.go(1 / 30, .42, { x: open.x, y: open.y, r: open.r, w: open.w }, E.outBack);
+  return c;
+});
+cue(0, 'deal', .75);
+cue(.04, 'card-place-2', .45, -.2);
+
+/* ───────────── 2. Play: open a set, lay a run, go out ───────────── */
+const P = L.play;
+const playOut = T.gorev - .15;
+const SEGS = [['Küt aç,', T.play], ['seri diz,', 3.75], ['elini bitir!', 4.75, true]];
+P.lines.forEach(([top, size, idx]) => {
+  const line = mk('div', 'abs disp', `${column}top:${top}px;font-size:${size}px;z-index:60`);
+  idx.forEach((k, j) => {
+    const [text, tIn, gold] = SEGS[k];
+    if (j > 0) line.appendChild(document.createTextNode(' '));
+    shown(mk('span', gold ? 'gold' : '', 'display:inline-block', text, line), tIn, playOut, { dy: 46 });
+  });
+});
+const handCodes = ['4h', '5h', '6h', '7s', '7h', '7d', '2c', 'Jd', 'Qd', 'Kd', 'As', 'Ac', 'JK'];
+let dealt = 0;
+const hand = handCodes.map((code, i) => {
+  const target = fan(i, handCodes.length, P.hand);
+  const k = hookCodes.indexOf(code);
+  if (k >= 0) {
+    const c = hookCards[k];
+    c.go(T.play - .2, .36, { ...target, lift: .1 }, E.inOutCubic);
+    return c;
+  }
+  const n = dealt++, t0 = T.play + n * .036;
+  const c = new Card(code, { x: target.x + (i - 6) * 12, y: H + 280, w: P.hand.w, r: (i - 6) * 3, f: 1, z: 22 + i, lift: .5 }, T.play - .01, T.gorev + .1);
+  c.go(t0, .32, target, E.outCubic);
+  cue(t0 + .2, `card-place-${1 + n % 4}`, .36, (i - 6) / 14);
+  return c;
+});
+cue(T.play + .02, 'riffle', .4);
+const byCode = code => hand.find(c => c.code === code);
+const mp = P.melds;
+const slot = (k, i) => ({ x: mp.xs[k % 2] + (i - 1) * mp.gap, y: mp.ys[k >> 1] + Math.abs(i - 1) * 5, w: mp.w, r: (i - 1) * 4, z: 40 + k * 3 + i, lift: .22, f: 0 });
+let inHand = hand.slice();
+function pull(codes, k, t0, step = .08, flight = .3) {
+  const cards = codes.map(byCode);
+  cards.forEach((c, i) => {
+    const t = t0 + i * step, s = c.state(t - .1);
+    c.go(t - .1, .1, { y: s.y - P.hand.w * .32, glow: .8, z: 46 + i }, E.outCubic);
+    c.go(t, flight, { ...slot(k, i), glow: .25 }, E.outBack);
+    cue(t + flight * .72, `card-place-${1 + (i + k) % 4}`, .9, (slot(k, i).x / W - .5) * .8);
+  });
+  inHand = inHand.filter(c => !cards.includes(c));
+  layout(inHand, t0 + .02, .24, P.hand);
+  return cards;
+}
+const glowDown = (cards, t) => cards.forEach(c => { c.go(t, .12, { glow: 1, w: mp.w * 1.04 }); c.go(t + .12, .34, { glow: .3, w: mp.w }); });
+const pillTop = k => mp.ys[k >> 1] + mp.w * .7 + 18;
+const pillSize = Math.round(mp.w * .27);
+const kut = pull(['7s', '7h', '7d'], 0, 3.05);
+glowDown(kut, 3.5);
+shown(pillEl(mp.xs[0], pillTop(0), pillSize, '✓ Küt'), 3.5, playOut, { dy: 26, from: .7, inDur: .24, ease: E.outBackBig });
+cue(3.5, 'meld-2', .7); cue(3.5, 'chime:E6,A6', .5);
+const seri = pull(['4h', '5h', '6h'], 1, 3.85);
+glowDown(seri, 4.3);
+shown(pillEl(mp.xs[1], pillTop(1), pillSize, '✓ Seri'), 4.3, playOut, { dy: 26, from: .7, inDur: .24, ease: E.outBackBig });
+cue(4.3, 'meld-2', .7); cue(4.3, 'chime:E6,G6', .5);
+const run2 = pull(['Jd', 'Qd', 'Kd'], 2, 4.86, .05, .26);
+const set2 = pull(['As', 'Ac', 'JK'], 3, 4.92, .05, .26);
+glowDown([...run2, ...set2], 5.2);
+// The last card goes face down: the hand is out.
+const last = byCode('2c');
+{
+  const s = last.state(5.2);
+  last.go(5.2, .1, { y: s.y - 70, glow: .6 }, E.outCubic);
+  last.go(5.3, .3, { x: WIDE ? W + 220 : W * .5 + P.hand.span * .62 + 260, y: s.y - H * .16, r: 34, f: 1, glow: 0 }, E.inCubic);
+  cue(5.32, 'card-draw-2', .85, .5);
+}
+const doneAt = 5.46;
+shown(pillEl(P.hand.cx, P.done[0] - P.done[1] * .7, P.done[1], '✓ El bitti!', 62), doneAt, playOut, { dy: 30, from: .5, inDur: .3, ease: E.outBackBig });
+cue(doneAt, 'chime:A5,E6', .85); cue(doneAt, 'meld-1', .5);
+const sparkRng = rng(99);
+const sparks = Array.from({ length: 22 }, () => ({ e: mk('div', 'spark', `z-index:61;width:${14 + sparkRng() * 14}px;height:${14 + sparkRng() * 14}px`), a: sparkRng() * 6.283, v: 240 + sparkRng() * 360 }));
+[...kut, ...seri, ...run2, ...set2].forEach(c => { const s = c.state(playOut); c.go(playOut, .18, { y: s.y - 140, o: 0 }, E.inCubic); });
+
+/* ───────────── 3. Twelve deals, a new contract every time ───────────── */
+const G = L.gorev;
+const gorevOut = T.modes - .15;
+G.lines.forEach(([top, size, html, cls], i) => shown(lineEl(top, size, html, cls), T.gorev + i * .05, gorevOut));
+const CONTRACTS = ['3’lü küt', '3’lü seri', '2 × 3’lü küt', '2 × 3’lü seri', '3’lü küt + seri', '4’lü küt', '4’lü seri', '2 × 4’lü küt', '2 × 4’lü seri', '4’lü küt + seri', '5’li seri', 'Final · Elden bit'];
+const pl = G.plaque, pk = pl.w / 780;
+const plaque = mk('div', 'plaque', `width:${pl.w}px;height:${pl.h}px;z-index:50`,
+  `<div class="lab" style="top:${pl.h * .08}px;font-size:${40 * pk}px">EL</div>
+   <div class="num" style="top:${pl.h * .15}px;font-size:${270 * pk}px"><span class="n">1</span><span class="of" style="font-size:${84 * pk}px">/12</span></div>
+   <div class="ct" style="top:${pl.h * .63}px;font-size:${56 * pk}px">${CONTRACTS[0]}</div>
+   <div class="bar" style="left:${pl.w * .1}px;right:${pl.w * .1}px;top:${pl.h * .85}px;height:${18 * pk}px">${'<i></i>'.repeat(12)}</div>`);
+const plNum = plaque.querySelector('.n'), plCt = plaque.querySelector('.ct'), plBars = [...plaque.querySelectorAll('.bar i')];
+const plaqueM = new Mover(plaque, pl.w, pl.h, { x: pl.x, y: pl.y, s: .6, o: 0 }, T.gorev - .02, T.modes + .05);
+plaqueM.go(T.gorev + .06, .36, { s: 1, o: 1 }, E.outBackBig);
+plaqueM.go(gorevOut - .02, .18, { s: .86, o: 0 }, E.inCubic);
+// The count speeds up towards the final deal.
+const stepAt = n => T.gorev + .22 + 1.15 * Math.pow((n - 1) / 11, .7);
+for (let n = 2; n <= 12; n++) cue(stepAt(n), 'tick', .3 + .45 * n / 12, ((n % 2) - .5) * .3);
+cue(stepAt(12), 'chime:C6,F6', .8); cue(stepAt(12), 'meld-1', .5);
+let plLast = '';
+
+/* ───────────── 4. Bots, online tables or friends ───────────── */
+const Md = L.modes, D = L.ders;
+const modesOut = T.ders - .15;
+Md.lines.forEach(([top, size, html, cls], i) => shown(lineEl(top, size, html, cls), T.modes + i * .05, modesOut));
+const P2 = makePhone(Md.phone.h, ['01-home', '03-lesson']);
+const phone2 = new Mover(P2.e, P2.w, P2.h, { x: Md.phone.x, y: below(P2.h), s: .94, r: WIDE ? 0 : -3 }, T.modes - .03, T.cta + .3);
+phone2.go(T.modes - .02, .5, { y: Md.phone.y, s: 1, r: 0 }, E.outCubic);
+phone2.go(T.ders - .1, .42, { x: D.phone.x, y: D.phone.y, s: D.phone.h / Md.phone.h }, E.inOutCubic);
+phone2.go(T.cta - .24, .32, { y: below(P2.h), s: .9 }, E.inCubic);
+phone2.wobble = t => ({ ry: Math.sin(t * 1.2 + 1) * 2.6 - (WIDE ? 7 : 0), rx: 2 });
+const ICONS = {
+  robot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="8" width="15" height="11.5" rx="3"/><path d="M12 8V4.6"/><circle cx="12" cy="3.4" r="1.2"/><circle cx="9.3" cy="13.4" r="1.25" fill="currentColor" stroke="none"/><circle cx="14.7" cy="13.4" r="1.25" fill="currentColor" stroke="none"/><path d="M9.8 16.6h4.4M2.4 12.4v3.4M21.6 12.4v3.4"/></svg>',
+  globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3.4 9h17.2M3.4 15h17.2"/><path d="M12 3c2.6 2.6 3.8 5.6 3.8 9s-1.2 6.4-3.8 9c-2.6-2.6-3.8-5.6-3.8-9S9.4 5.6 12 3z"/></svg>',
+  people: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.2" r="3.3"/><path d="M2.8 20.2c0-3.6 2.8-6.2 6.2-6.2s6.2 2.6 6.2 6.2"/><circle cx="17.2" cy="9.2" r="2.6"/><path d="M16.4 14.3c2.9.3 5 2.5 5 5.9"/></svg>',
+};
+const chipSpec = Md.chips;
+[['robot', 'Botlara karşı'], ['globe', 'Online masalar'], ['people', 'Arkadaşlarınla']].forEach(([icon, label], i) => {
+  const d = chipSpec.h - 22;
+  const e = mk('div', 'chip', `left:${chipSpec.x - chipSpec.w / 2}px;top:${chipSpec.ys[i] - chipSpec.h / 2}px;width:${chipSpec.w}px;height:${chipSpec.h}px;font-size:${chipSpec.font}px;z-index:58`,
+    `<span class="ic" style="width:${d}px;height:${d}px">${ICONS[icon]}</span><span>${label}</span>`);
+  const tIn = T.modes + .34 + i * .24;
+  shown(e, tIn, modesOut, { dy: 44, from: .72, inDur: .3, ease: E.outBackBig });
+  cue(tIn + .02, 'tap', .9, (i - 1) * .25);
+});
+
+/* ───────────── 5. Learn by playing: the real lesson screen ───────────── */
+const dersOut = T.cta - .15;
+shown(kickerEl(D.kicker, 'KURALLARI BİLMİYOR MUSUN?'), T.ders, dersOut, { dy: 40 });
+D.lines.forEach(([top, size, html, cls], i) => shown(lineEl(top, size, html, cls), T.ders + .06 + i * .06, dersOut));
+const lesson = P2.layers['03-lesson'], home = P2.layers['01-home'];
+const BUTTON = { x: 42, y: 2045, w: 1091, h: 130 };              // "Masaya aç" in the cropped screen
+const ringPad = 16;
+const ring = mk('div', 'ring', `left:${(BUTTON.x - ringPad) * P2.s}px;top:${(BUTTON.y - ringPad) * P2.s}px;width:${(BUTTON.w + ringPad * 2) * P2.s}px;height:${(BUTTON.h + ringPad * 2) * P2.s}px;border-radius:${(BUTTON.h / 2 + ringPad) * P2.s}px`, undefined, lesson);
+const press = mk('div', '', `position:absolute;left:${BUTTON.x * P2.s}px;top:${BUTTON.y * P2.s}px;width:${BUTTON.w * P2.s}px;height:${BUTTON.h * P2.s}px;border-radius:${BUTTON.h / 2 * P2.s}px;background:#fff`, undefined, lesson);
+const tap = mk('div', 'tap', '', undefined, lesson);
+const tapAt = 11.5, tapX = (BUTTON.x + BUTTON.w * .62) * P2.s, tapY = (BUTTON.y + BUTTON.h / 2) * P2.s;
+cue(T.ders + .02, 'card-draw-1', .5, .3);
+cue(tapAt, 'tap', 1, .1);
+cue(tapAt + .1, 'meld-2', .55);
+
+/* ───────────── 6. End card ───────────── */
+const C = L.cta;
+const cIn = T.cta;
+const [iconTop, iconSize] = C.icon;
+const iconGlow = mk('div', 'iconGlow', `left:${W / 2 - iconSize * 1.35}px;top:${iconTop + iconSize / 2 - iconSize * 1.35}px;width:${iconSize * 2.7}px;height:${iconSize * 2.7}px;z-index:30`);
+shown(iconGlow, cIn, 99, { dy: 0, from: .4, inDur: .5, ease: E.outCubic });
+const icon = mk('div', 'icon', `left:${W / 2 - iconSize / 2}px;top:${iconTop}px;width:${iconSize}px;height:${iconSize}px;border-radius:${iconSize * .23}px;z-index:60`, `<img src="${A}/images/icon.png" decoding="sync">`);
+shown(icon, cIn, 99, { dy: 30, from: .4, inDur: .36, ease: E.outBackBig });
+shown(mk('div', 'abs disp gold', `left:0;width:${W}px;top:${C.brand[0]}px;font-size:${C.brand[1]}px;letter-spacing:.09em;text-indent:.09em;z-index:60`, 'AMERİKANO'), cIn + .08, 99);
+const [btnTop, btnW, btnH, btnFont] = C.btn;
+const btnWrap = mk('div', 'abs', `left:0;width:${W}px;top:${btnTop}px;z-index:60`, `<div class="btn" style="width:${btnW}px;height:${btnH}px;font-size:${btnFont}px">Ücretsiz indir<div class="shine"></div></div>`);
+shown(btnWrap, cIn + .26, 99, { dy: 50, from: .8, ease: E.outBackBig, inDur: .32 });
+const btn = btnWrap.querySelector('.btn'), btnShine = btnWrap.querySelector('.shine');
+shown(mk('div', 'abs sub', `left:0;width:${W}px;top:${C.stores[0]}px;font-size:${C.stores[1]}px;color:#DDE7DA;z-index:60`, 'App Store · Google Play'), cIn + .4, 99, { dy: 30 });
+cue(cIn + .02, 'chime:C6,G6', .9);
+cue(cIn + .3, 'card-place-4', .5);
+const ctaCodes = ['Jd', 'Qd', 'Kd', 'As', 'JK'];
+C.fans.forEach((spec, f) => {
+  const codes = spec.n === 5 ? ctaCodes : f === 0 ? ['7h', 'As', 'JK'] : ['Jd', 'Qd', 'Kd'];
+  codes.forEach((code, i) => {
+    const p = fan(i, spec.n, spec), mid = (spec.n - 1) / 2;
+    new Card(code, { ...p, x: p.x + spec.from[0], y: p.y + spec.from[1], z: 30 + (i === mid ? 5 : i), lift: .4 }, cIn)
+      .go(cIn + .1 + Math.abs(i - mid) * .05, .42, { x: p.x, y: p.y }, E.outBack);
+  });
+});
+const confRng = rng(4242);
+const confColors = ['#F3CE6A', '#F8F1DF', '#C94343', '#3FBF83', '#E2B351', '#FFEFBC'];
+const confetti = Array.from({ length: WIDE ? 110 : 84 }, () => {
+  const w = 10 + confRng() * 12, h = 14 + confRng() * 18;
+  const angle = -Math.PI / 2 + (confRng() - .5) * (WIDE ? 3.1 : 2.7), speed = (900 + confRng() * 1900) * (WIDE ? 1.15 : unit * (H / W > 1.5 ? 1 : .8));
+  return { e: mk('div', 'conf', `width:${w}px;height:${h}px;background:${confColors[Math.floor(confRng() * confColors.length)]};z-index:55`), vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, r0: confRng() * 360, w: (confRng() - .5) * 900, ph: confRng() * 6.28, fl: 5 + confRng() * 9 };
+});
+
+/* Whooshes on every cut; audio.py draws them. */
+CUTS.forEach(t => cue(t - .04, 'whoosh', 1));
+
+/* ───────────── The frame function ───────────── */
+function renderAt(t) {
+  // Background life
+  document.getElementById('rays').style.transform = `rotate(${t * 2.4}deg)`;
+  const beat = t / BEAT, pulse = Math.exp(-5 * (beat - Math.floor(beat)));
+  const glow = document.getElementById('glow');
+  glow.style.opacity = .78 + .22 * pulse;
+  glow.style.transform = `scale(${1 + .03 * pulse})`;
+  suitsBg.forEach(({ e, i }) => { e.style.transform = `translateY(${-t * (5 + i * 2)}px) rotate(${Math.sin(t * .5 + i) * 3}deg)`; });
+  dust.forEach(d => {
+    const y = ((d.y - d.v * t) % H + H) % H;
+    d.e.style.transform = `translate(${d.x + Math.sin(t * .8 + d.p) * d.drift}px,${y}px)`;
+    d.e.style.opacity = .22 + .55 * (0.5 + .5 * Math.sin(t * d.w + d.p));
+  });
+
+  // Camera: a small kick on each cut, then a slow push in.
+  let last = 0; for (const c of CUTS) if (t >= c) last = c;
+  const local = t - last;
+  const kick = last === 0 ? 0 : .03 * Math.exp(-local * 9);
+  cam.style.transform = `scale(${1 + kick + local * .006})`;
+
+  // Gold sweep on each cut.
+  const sweep = document.getElementById('sweep');
+  let sw = -1; for (const c of CUTS) if (t >= c - .1 && t < c + .16) sw = (t - (c - .1)) / .26;
+  sweep.style.visibility = sw < 0 ? 'hidden' : 'visible';
+  if (sw >= 0) sweep.style.transform = `translateX(${lerp(-800, W + 420, sw)}px) skewX(-14deg)`;
+
+  // Brand lockup between the hook and the end card.
+  const lv = prog(t, T.play + .1, .2) * (1 - prog(t, T.cta - .22, .14));
+  lockup.style.opacity = lv; lockup.style.visibility = lv > 0 ? 'visible' : 'hidden';
+
+  drawShown(t);
+  MOVERS.forEach(m => m.draw(t));
+  CARDS.forEach(c => c.draw(t));
+
+  // Shine across the hook title.
+  const shine = prog(t, .3, .8, E.inOutCubic);
+  hookTitle.style.backgroundImage = `linear-gradient(105deg, rgba(255,255,255,0) ${shine * 150 - 34}%, rgba(255,255,255,.95) ${shine * 150 - 22}%, rgba(255,255,255,0) ${shine * 150 - 10}%), linear-gradient(180deg, #FFEFBC 6%, #F3CE6A 46%, #C48D2C 100%)`;
+
+  // "Hand out" sparks
+  const sp = t - doneAt;
+  sparks.forEach(s => {
+    if (sp < 0 || sp > .7) { s.e.style.visibility = 'hidden'; return; }
+    const d = s.v * (1 - Math.exp(-sp * 6)) / 6 * 6 * unit;
+    s.e.style.visibility = 'visible';
+    s.e.style.opacity = 1 - prog(sp, .3, .4);
+    s.e.style.transform = `translate(${P.hand.cx + Math.cos(s.a) * d - 10}px,${P.done[0] + Math.sin(s.a) * d * .7 - 10}px) scale(${1 - prog(sp, .2, .5) * .6})`;
+  });
+
+  // Contract counter
+  let n = 1; for (let j = 2; j <= 12; j++) if (t >= stepAt(j)) n = j;
+  const label = `${n}|${CONTRACTS[n - 1]}`;
+  if (label !== plLast) {
+    plNum.textContent = n; plCt.textContent = CONTRACTS[n - 1];
+    plCt.classList.toggle('final', n === 12);
+    plBars.forEach((b, j) => b.classList.toggle('on', j < n));
+    plLast = label;
+  }
+  const since = t - stepAt(n);
+  plNum.style.transform = `scale(${1 + (n === 12 ? .3 : .16) * Math.exp(-Math.max(0, since) * (n === 12 ? 10 : 26))})`;
+  plCt.style.transform = `translateX(-50%) scale(${1 + .08 * Math.exp(-Math.max(0, since) * 22)})`;
+  const fin = t >= stepAt(12) ? Math.exp(-(t - stepAt(12)) * 3) : 0;
+  plaque.style.borderColor = `rgba(243,206,106,${.6 + .4 * fin})`;
+  plaque.style.boxShadow = `0 30px 70px rgba(0,0,0,.5), inset 0 0 0 9px rgba(226,179,81,.07), 0 0 ${90 * fin}px rgba(243,206,106,${.6 * fin})`;
+
+  // The phone moves from the home screen to the lesson, then the button is tapped.
+  const slide = prog(t, T.ders - .04, .34, E.inOutCubic);
+  home.style.transform = `translateX(${-P2.sw * .3 * slide}px)`;
+  home.style.filter = slide > 0 ? `brightness(${1 - .45 * slide})` : '';
+  lesson.style.transform = `translateX(${P2.sw * (1 - slide)}px)`;
+  // Inside a phone, never set visibility to 'visible': that would show through a hidden phone. '' inherits it.
+  lesson.style.visibility = slide > 0 ? '' : 'hidden';
+  home.style.visibility = slide < 1 ? '' : 'hidden';
+  const ringOn = prog(t, 10.92, .16) * (1 - prog(t, tapAt + .3, .2));
+  ring.style.opacity = ringOn * (.65 + .35 * Math.sin((t - 10.92) * 9));
+  ring.style.transform = `scale(${1 + .03 * Math.sin((t - 10.92) * 9)})`;
+  ring.style.visibility = ringOn > 0 ? '' : 'hidden';
+  const tp = t - tapAt;
+  const tapD = 260 * P2.s * (.3 + .7 * prog(tp, 0, .4, E.outCubic));
+  tap.style.visibility = tp >= -.12 && tp < .45 ? '' : 'hidden';
+  tap.style.opacity = tp < 0 ? prog(tp, -.12, .12) : 1 - prog(tp, .1, .35);
+  tap.style.transform = `translate(${tapX - tapD / 2}px,${tapY - tapD / 2}px)`;
+  tap.style.width = tap.style.height = `${tapD}px`;
+  press.style.opacity = tp >= 0 ? .45 * Math.exp(-tp * 7) : 0;
+
+  // End card life
+  const bp = t > cIn + .6 ? Math.exp(-4.5 * (beat - Math.floor(beat))) : 0;
+  btn.style.transform = `scale(${1 + .025 * bp})`;
+  const sh = (((t - cIn - .75) % 1.5) + 1.5) % 1.5;
+  btnShine.style.transform = `translateX(${lerp(-180, btnW + 100, clamp(sh / .55))}px) skewX(-20deg)`;
+  btnShine.style.visibility = t > cIn + .75 ? 'visible' : 'hidden';
+  const iconSwing = t > cIn ? Math.sin((t - cIn) * 1.6) * 1.4 : 0;
+  SHOW.find(x => x.e === icon).base = `rotate(${iconSwing}deg)`;
+  const ox = W / 2, oy = iconTop + iconSize / 2;
+  confetti.forEach(c => {
+    const a = t - cIn;
+    if (a < 0 || a > 1.9) { c.e.style.visibility = 'hidden'; return; }
+    const k = 3.1, f = (1 - Math.exp(-k * a)) / k;
+    const x = ox + c.vx * f, y = oy + c.vy * f + .5 * 1500 * a * a;
+    c.e.style.visibility = 'visible';
+    c.e.style.opacity = 1 - prog(a, 1.25, .6);
+    c.e.style.transform = `translate(${x}px,${y}px) rotate(${c.r0 + c.w * a}deg) scaleX(${Math.cos(c.ph + c.fl * a)})`;
+  });
+}
+window.renderAt = renderAt;
+window.CUES = CUES;
+window.FILM = { fmt: FMT, width: W, height: H, end: T.end, bumper: T.bumper, hookEnd: T.play, ctaStart: T.cta };
+window.ready = Promise.all([...document.images].map(i => i.decode().catch(() => { throw new Error('image: ' + i.src); }))).then(() => document.fonts.ready).then(() => { renderAt(+qs.get('t') || 0); return true; });
+</script>
+</body>
+</html>

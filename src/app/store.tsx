@@ -187,7 +187,7 @@ export default function StoreScreen() {
             <View style={[s.showcaseCard, { width: backWidth, height: backWidth * 1.4 },
               isEquipped && { boxShadow: `0 0 0 2px ${item.accent}, 0 10px 26px ${item.accent}55` }]}>
               <CardBack id={item.id} />
-              {!owned && <View style={s.lock}>{item.price === 'premium' ? <Text style={s.lockText}>♛</Text> : <AppIcon name="privacy" size={13} color="#F1C66D" />}</View>}
+              {!owned && <View style={s.lock}>{item.price === 'premium' ? <Text style={s.lockText}>♛</Text> : <AppIcon name="privacy" size={13} color="#F3D493" />}</View>}
             </View>
             <Text style={[s.showcaseName, { color: item.accent }]} numberOfLines={1}>{t(item.name)}</Text>
             {cosmeticAction('card-back', item.id, item.price, isEquipped)}
@@ -234,8 +234,8 @@ export default function StoreScreen() {
 }
 
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: '#07211A' },
-  glow: { position: 'absolute', top: 0, left: 0, right: 0, height: 420, pointerEvents: 'none', experimental_backgroundImage: 'radial-gradient(ellipse 90% 70% at 50% 0%, #1F6E4B 0%, #0E3A2A 45%, #07211A 100%)' },
+  page: { flex: 1, backgroundColor: '#062720' },
+  glow: { position: 'absolute', top: 0, left: 0, right: 0, height: 420, pointerEvents: 'none', experimental_backgroundImage: 'radial-gradient(ellipse 90% 70% at 50% 0%, #1B6450 0%, #0D4032 45%, #062720 100%)' },
   // The kit's gap spaces the blocks; a section title sits closer to what it labels.
   content: { gap: 0 },
   pressed: { opacity: 0.85, transform: [{ scale: 0.97 }] },
@@ -253,7 +253,7 @@ const s = StyleSheet.create({
   toastOk: { backgroundColor: '#14513a', borderWidth: 1, borderColor: '#A9F3CD66' },
   toastOkText: { color: '#C9FBE1', fontSize: 13, fontWeight: '800' },
 
-  starter: { marginTop: 20, borderRadius: 22, padding: 18, paddingTop: 22, overflow: 'hidden', borderWidth: 1, borderColor: '#F1C66D88', backgroundColor: '#2E220C',
+  starter: { marginTop: 20, borderRadius: 22, padding: 18, paddingTop: 22, overflow: 'hidden', borderWidth: 1, borderColor: '#F3D49388', backgroundColor: '#2E220C',
     experimental_backgroundImage: 'linear-gradient(135deg, #4A3712 0%, #23190A 55%, #120D06 100%)', boxShadow: '0 14px 34px rgba(0,0,0,0.45)' },
   premium: { marginTop: 26, borderRadius: 22, padding: 18, paddingTop: 22, overflow: 'hidden', borderWidth: 1, borderColor: '#E8C8FF66', backgroundColor: '#2A1140',
     experimental_backgroundImage: 'linear-gradient(135deg, #4B2470 0%, #2A1140 55%, #14081F 100%)', boxShadow: '0 14px 34px rgba(0,0,0,0.45)' },
@@ -273,7 +273,7 @@ const s = StyleSheet.create({
   swatch: { width: 34, height: 22, borderRadius: 6, borderWidth: 1, borderColor: '#E8C8FF66' },
 
   priceButton: { alignSelf: 'stretch', minHeight: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 12, paddingHorizontal: 10, backgroundColor: p.gold,
-    experimental_backgroundImage: 'linear-gradient(180deg, #F6D57E 0%, #D9A441 100%)', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' },
+    experimental_backgroundImage: 'linear-gradient(180deg, #F6D57E 0%, #E8BE70 100%)', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' },
   priceButtonWide: { minHeight: 50, borderRadius: 14, marginTop: 18 },
   priceButtonPremium: { backgroundColor: '#D9B8F2', experimental_backgroundImage: 'linear-gradient(180deg, #F3E0FF 0%, #C99BEA 100%)' },
   priceText: { color: p.ink, fontSize: 15, fontWeight: '900' },
@@ -295,7 +295,7 @@ const s = StyleSheet.create({
   pack: { flexBasis: '46%', flexGrow: 1, alignItems: 'center', borderRadius: 18, padding: 14, paddingTop: 18, borderWidth: 1, borderColor: '#ffffff1a', backgroundColor: '#123F2E',
     experimental_backgroundImage: 'linear-gradient(180deg, #1A4B37 0%, #0D2C20 100%)' },
   packTablet: { flexBasis: '22%' },
-  packFeatured: { borderColor: '#D9A441aa', boxShadow: '0 0 0 1px #D9A44155, 0 10px 24px rgba(217,164,65,0.18)' },
+  packFeatured: { borderColor: '#E8BE70aa', boxShadow: '0 0 0 1px #E8BE7055, 0 10px 24px rgba(232,190,112,0.18)' },
   packBadge: { position: 'absolute', top: -1, alignSelf: 'center', paddingHorizontal: 10, paddingVertical: 3, borderBottomLeftRadius: 8, borderBottomRightRadius: 8, backgroundColor: p.gold },
   packBadgeText: { color: p.ink, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
   packArt: { width: 96, height: 96, marginTop: 2 },
@@ -307,7 +307,7 @@ const s = StyleSheet.create({
   showcase: { alignItems: 'center', gap: 8, paddingVertical: 6 },
   showcaseCard: { borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: '#00000066', boxShadow: '0 8px 18px rgba(0,0,0,0.45)' },
   lock: { position: 'absolute', right: 6, bottom: 6, width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000000aa' },
-  lockText: { color: '#F1C66D', fontSize: 12 },
+  lockText: { color: '#F3D493', fontSize: 12 },
   showcaseName: { fontSize: 13, fontWeight: '900', marginTop: 4 },
 
   feltGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
@@ -329,7 +329,7 @@ const s = StyleSheet.create({
   emeraldPill: { backgroundColor: '#80E8BE1f' },
   emeraldPillText: { color: '#80E8BE' },
   coinPrice: { minHeight: 30, paddingHorizontal: 12, borderRadius: 9, justifyContent: 'center', alignItems: 'center', backgroundColor: p.gold,
-    experimental_backgroundImage: 'linear-gradient(180deg, #F6D57E 0%, #D9A441 100%)' },
+    experimental_backgroundImage: 'linear-gradient(180deg, #F6D57E 0%, #E8BE70 100%)' },
   coinPriceText: { color: p.ink, fontSize: 12, fontWeight: '900' },
 
   restore: { color: p.gold, fontSize: 12, fontWeight: '800', textAlign: 'center', paddingVertical: 16, marginTop: 14 },

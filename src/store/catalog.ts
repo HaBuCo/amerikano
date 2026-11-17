@@ -41,11 +41,11 @@ export const CARD_BACKS = [
   { id: 'back-crimson', name: 'Kızıl', price: 2_500, accent: '#F2B36F' },
   { id: 'back-midnight', name: 'Gece', price: 5_000, accent: '#C9D4F0' },
   { id: 'back-royal', name: 'Kraliyet', price: 'premium', accent: '#E8C8FF' },
-  { id: 'back-gold', name: 'Altın Varak', price: 'premium', accent: '#F1C66D' },
+  { id: 'back-gold', name: 'Altın Varak', price: 'premium', accent: '#F3D493' },
 ] as const satisfies readonly { id: string; name: string; price: CosmeticPrice; accent: string }[];
 
 export const FELTS = [
-  { id: 'felt-classic', name: 'Klasik yeşil', price: 0, design: { inner: '#1F6E4B', middle: '#124A33', outer: '#0A2A1D' } },
+  { id: 'felt-classic', name: 'Klasik yeşil', price: 0, design: { inner: '#1B6450', middle: '#0F4838', outer: '#072A22' } },
   { id: 'felt-ocean', name: 'Okyanus', price: 3_000, design: { inner: '#1F5E7A', middle: '#123E52', outer: '#0A2230' } },
   { id: 'felt-burgundy', name: 'Bordo', price: 3_000, design: { inner: '#7A2635', middle: '#4F1822', outer: '#2A0C12' } },
   { id: 'felt-charcoal', name: 'Antrasit', price: 6_000, design: { inner: '#4A4F55', middle: '#2E3236', outer: '#17191B' } },

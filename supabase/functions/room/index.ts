@@ -184,7 +184,7 @@ Deno.serve(async (request) => {
       const [roomResult, membersResult, botsResult] = await Promise.all([
         Promise.resolve({ data: activeRoom, error: null }),
         admin.from('room_members').select('user_id, display_name, ready, seat, last_seen_at, joined_at').eq('room_id', roomId).order('seat'),
-        admin.from('room_bots').select('id, display_name, created_at').eq('room_id', roomId).order('created_at'),
+        admin.from('room_bots').select('id, display_name, avatar_key, created_at').eq('room_id', roomId).order('created_at'),
       ]);
       if (roomResult.error || membersResult.error || botsResult.error) throw new Error('Oda bilgisi alınamadı.');
       const { room_states: privateState, ...roomFields } = roomResult.data;
@@ -222,7 +222,7 @@ Deno.serve(async (request) => {
         name: bot.display_name,
         ready: true,
         connected: true,
-        avatarKey: 'gold',
+        avatarKey: bot.avatar_key ?? 'gold',
         level: 1,
         gamesPlayed: 0,
         wins: 0,
@@ -496,8 +496,8 @@ Deno.serve(async (request) => {
       const result = await admin.rpc('fill_quick_room_with_bots', {
         p_room_id: command.roomId, p_user_id: user.id, p_language: botNameLanguage(command.language),
       });
-      if (result.error) throw new Error(result.error.message.includes('wait 30 seconds')
-        ? 'Botlarla tamamlamak için 30 saniye beklemelisin.'
+      if (result.error) throw new Error(result.error.message.includes('wait 10 seconds')
+        ? 'Botlarla tamamlamak için 10 saniye beklemelisin.'
         : result.error.message.includes('enough players') ? 'Yeterli oyuncu bulundu; masa hazırlanıyor.' : 'Masa değişti; botlarla tamamlamayı yeniden dene.');
       return reply({ roomId: command.roomId, room: await roomView(command.roomId) });
     }

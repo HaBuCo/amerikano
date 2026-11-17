@@ -1,0 +1,29 @@
+New character avatars (v2) — match assets/avatars/character-{lara,kemal,emir,ada}.png
+Save each result as assets/avatars/character-<name>.png (transparent PNG, square).
+
+Shared style block (append to every character line):
+Head-and-shoulders portrait, slight head tilt, warm confident closed-mouth smile.
+Painterly semi-realistic animated-film illustration style, soft brush texture,
+warm golden rim light from the upper left, rich jewel-tone clothing with gold trim accents,
+centered, shoulders cropped by a soft rounded bottom edge, fully transparent background,
+square 1024x1024, no text, no frame.
+
+1) character-elif.png
+A young woman in her twenties with long wavy blonde hair and blue eyes, light skin,
+small gold stud earrings, wearing a sapphire-blue blouse with thin gold piping over a cream collar.
+
+2) character-can.png
+A young man in his twenties with short tousled blonde hair and green eyes, light skin,
+light stubble, wearing a deep teal knit sweater over a cream t-shirt.
+
+3) character-selin.png
+A woman in her thirties with copper-red hair in a high ponytail, freckles across her nose and cheeks,
+green-hazel eyes, wearing a mustard-gold tailored jacket over a cream blouse.
+
+4) character-murat.png
+A man in his forties with short black hair and a neatly trimmed full black beard, warm olive skin,
+dark brown eyes, wearing a burgundy waistcoat with gold buttons over a crisp cream shirt.
+
+5) character-nermin.png
+A kind older woman in her late sixties with silver hair in a neat bun, thin gold-rimmed reading glasses,
+soft smile lines, wearing an olive-green cardigan with a small gold brooch over a cream blouse.

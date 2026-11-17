@@ -75,7 +75,7 @@ const s = StyleSheet.create({
   labels: { alignItems: 'center', marginTop: 6, gap: 3 },
   name: { color: '#FFF8E9', fontSize: 20, fontWeight: '900' },
   statusSlot: { minHeight: 16 },
-  status: { color: '#F8F1DFB0', fontSize: 11, lineHeight: 16, fontWeight: '800' },
+  status: { color: '#F8F2E8B0', fontSize: 11, lineHeight: 16, fontWeight: '800' },
   statusLive: { color: '#A9F3CD' },
   statusLocked: { color: '#FFD7B0' },
 });

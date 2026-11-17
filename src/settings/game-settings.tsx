@@ -6,12 +6,13 @@ import { getLanguage, setLanguage } from '@/i18n/language';
 import { validLanguage, type Language } from '@/i18n/translate';
 import { CARD_BACKS, DEFAULT_CARD_BACK, DEFAULT_FELT, FELTS, type CardBackId, type FeltId } from '@/store/catalog';
 import type { GameVariant } from '@/game/types';
+import { validCardSize, type CardSize } from '@/game/hand-layout';
 
 type Settings = {
   language: Language;
   haptics: boolean;
   criticalTimer: boolean;
-  compactCards: boolean;
+  cardSize: CardSize;
   dragHints: boolean;
   showReactions: boolean;
   notifications: boolean;
@@ -32,7 +33,7 @@ type SettingsContextValue = {
   feedback: (kind?: Feedback) => void;
 };
 
-const defaults: Settings = { language: getLanguage(), haptics: true, criticalTimer: true, compactCards: false, dragHints: false, showReactions: true, notifications: true, cardBack: DEFAULT_CARD_BACK, felt: DEFAULT_FELT, variant: null };
+const defaults: Settings = { language: getLanguage(), haptics: true, criticalTimer: true, cardSize: 'normal', dragHints: false, showReactions: true, notifications: true, cardBack: DEFAULT_CARD_BACK, felt: DEFAULT_FELT, variant: null };
 const storageKey = 'amerikano:game-settings:v1';
 const SettingsContext = createContext<SettingsContextValue | null>(null);
 
@@ -45,9 +46,10 @@ export function GameSettingsProvider({ children }: { children: ReactNode }) {
     void AsyncStorage.getItem(storageKey).then((raw) => {
       if (!active || !raw || changedBeforeLoad.current) return;
       try {
-        const saved = JSON.parse(raw) as Partial<Settings>;
+        const { compactCards, ...saved } = JSON.parse(raw) as Partial<Settings> & { compactCards?: unknown };
         // Settings saved before English existed have no language and stay Turkish.
         const next = { ...defaults, ...saved, language: validLanguage(saved.language),
+          cardSize: validCardSize(saved.cardSize, compactCards),
           cardBack: CARD_BACKS.some(item => item.id === saved.cardBack) ? saved.cardBack! : DEFAULT_CARD_BACK,
           felt: FELTS.some(item => item.id === saved.felt) ? saved.felt! : DEFAULT_FELT,
           variant: saved.variant === 'rummy' || saved.variant === 'amerikano' || saved.variant === 'contract' ? saved.variant : null };

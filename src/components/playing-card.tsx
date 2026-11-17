@@ -4,11 +4,14 @@ import { memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { cardArt } from '@/constants/card-art';
 import { Card } from '@/game/types';
+import type { CardDims } from '@/game/hand-layout';
 import { useEquippedCosmetics } from '@/store/use-cosmetics';
 import { CardBack } from './card-back';
 
 const suits = { hearts: 'Kupa', diamonds: 'Karo', clubs: 'Sinek', spades: 'Maça' };
-type Props = { card?: Card; selected?: boolean; hidden?: boolean; compact?: boolean; small?: boolean; large?: boolean; tablet?: boolean; glow?: boolean; onPress?: () => void };
+type Props = { card?: Card; selected?: boolean; hidden?: boolean; compact?: boolean; small?: boolean; large?: boolean; tablet?: boolean; glow?: boolean;
+  /** An exact size (the table's card-size setting); overrides the size flags. */
+  dims?: CardDims; onPress?: () => void };
 export const CARD_WIDTH = 62;
 export const CARD_HEIGHT = 87;
 export const SMALL_CARD_WIDTH = 54;
@@ -18,7 +21,7 @@ export const TABLET_CARD_HEIGHT = 110;
 export const TABLET_SMALL_CARD_WIDTH = 66;
 export const TABLET_SMALL_CARD_HEIGHT = 93;
 
-export const PlayingCard = memo(function PlayingCard({ card, selected, hidden, compact, small, large, tablet, glow, onPress }: Props) {
+export const PlayingCard = memo(function PlayingCard({ card, selected, hidden, compact, small, large, tablet, glow, dims, onPress }: Props) {
   const { t } = useTranslations();
   const key = hidden || !card ? 'back' : card.isJoker ? 'joker' : `${card.rank}-${card.suit}`;
   const label = hidden || !card ? t("Kapalı kart") : card.isJoker ? t("Joker") : `${t(suits[card.suit!])} ${card.rank}`;
@@ -30,6 +33,7 @@ export const PlayingCard = memo(function PlayingCard({ card, selected, hidden, c
     tablet && !compact && !small && !large && styles.tablet,
     tablet && small && styles.tabletSmall,
     tablet && compact && styles.tabletCompact,
+    dims && { width: dims.width, height: dims.height, borderRadius: dims.radius },
     selected && styles.selected, glow && styles.glow];
   return <Pressable disabled={!onPress} accessibilityRole={onPress ? 'button' : 'image'} accessibilityLabel={label} accessibilityState={{ selected: !!selected }} onPress={onPress} style={({ pressed }) => [...style, pressed && { opacity: 0.85 }]}>{content}</Pressable>;
 });

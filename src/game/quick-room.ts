@@ -1,6 +1,6 @@
 export const QUICK_ROOM_TARGET = 4;
 export const QUICK_ROOM_MINIMUM = 3;
-export const QUICK_ROOM_BOT_WAIT_MS = 30_000;
+export const QUICK_ROOM_BOT_WAIT_MS = 12_000;
 
 export function localRoomDeadline(deadline: number | undefined, serverNow: number | undefined, receivedAt: number) {
   if (deadline === undefined) return undefined;

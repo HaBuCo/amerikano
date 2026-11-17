@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { AccessibilityInfo, Animated, Easing, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View, type ViewStyle } from 'react-native';
 import { useGameSounds } from '@/audio/game-sounds';
 import { cardArt } from '@/constants/card-art';
@@ -49,7 +49,7 @@ function Motes({ width, height }: { width: number; height: number }) {
       const value = values[index];
       const red = mote.suit === '♥' || mote.suit === '♦';
       return <Animated.Text key={index} style={[s.mote, {
-        left: mote.x, fontSize: mote.size, color: red ? '#F2A0A0' : '#F8F1DF',
+        left: mote.x, fontSize: mote.size, color: red ? '#F2A0A0' : '#F8F2E8',
         opacity: value.interpolate({ inputRange: [0, 0.2, 0.8, 1], outputRange: [0, 0.22, 0.22, 0] }),
         transform: [
           { translateY: value.interpolate({ inputRange: [0, 1], outputRange: [height * 0.9, height * 0.25] }) },
@@ -65,6 +65,21 @@ function Motes({ width, height }: { width: number; height: number }) {
  * splash: the monogram grows, a fan of aces opens behind it, the name lights up.
  * A tap skips it.
  */
+// Screens under the intro wait for it before starting their own entrance animation.
+let introFinished = false;
+const introListeners = new Set<() => void>();
+function finishIntro() {
+  introFinished = true;
+  introListeners.forEach(listener => listener());
+}
+/** True once the opening has faded out, or when it is not showing at all. */
+export function useIntroFinished() {
+  return useSyncExternalStore(
+    listener => { introListeners.add(listener); return () => { introListeners.delete(listener); }; },
+    () => introFinished, () => introFinished,
+  );
+}
+
 export function IntroSplash({ onDone }: { onDone: () => void }) {
   const { t } = useTranslations();
   const { width, height } = useWindowDimensions();
@@ -109,7 +124,7 @@ export function IntroSplash({ onDone }: { onDone: () => void }) {
   useEffect(() => {
     if (!leaving) return;
     const fade = Animated.timing(leave, { toValue: 0, duration: FADE_MS, easing: Easing.in(Easing.quad), useNativeDriver });
-    fade.start(({ finished }) => { if (finished) onDone(); });
+    fade.start(({ finished }) => { if (finished) { finishIntro(); onDone(); } });
     return () => fade.stop();
   }, [leave, leaving, onDone]);
 
@@ -177,7 +192,7 @@ export function IntroSplash({ onDone }: { onDone: () => void }) {
 const s = StyleSheet.create({
   root: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, zIndex: 1000, backgroundColor: p.felt },
   fill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
-  felt: { backgroundColor: p.felt, ...paint('radial-gradient(ellipse 90% 70% at 50% 42%, #1F6E4B 0%, #154631 45%, #0A2A1D 100%)') },
+  felt: { backgroundColor: p.felt, ...paint('radial-gradient(ellipse 90% 70% at 50% 42%, #1B6450 0%, #0F4838 45%, #072A22 100%)') },
   vignette: { ...paint('radial-gradient(ellipse 120% 90% at 50% 45%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.45) 100%)') },
   rays: { position: 'absolute', opacity: 0.55 },
   ray: {
@@ -191,19 +206,19 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: '#d2c6ad', boxShadow: '0 8px 18px rgba(0,0,0,0.45)',
   },
   cardFace: { width: '100%', height: '100%' },
-  glow: { position: 'absolute', ...paint('radial-gradient(circle at 50% 50%, rgba(246,213,126,0.45) 0%, rgba(217,164,65,0.12) 45%, rgba(217,164,65,0) 70%)') },
+  glow: { position: 'absolute', ...paint('radial-gradient(circle at 50% 50%, rgba(246,213,126,0.45) 0%, rgba(232,190,112,0.12) 45%, rgba(232,190,112,0) 70%)') },
   titleBlock: { position: 'absolute', left: 0, right: 0, alignItems: 'center', gap: 6 },
   wordmarkClip: { overflow: 'hidden', paddingHorizontal: 6 },
   wordmark: {
-    color: '#F1C66D', fontSize: 38, fontWeight: '900', letterSpacing: 5,
+    color: '#F3D493', fontSize: 38, fontWeight: '900', letterSpacing: 5,
     textShadowColor: 'rgba(0,0,0,0.45)', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 8,
   },
   shine: {
     position: 'absolute', top: -20, left: 0, width: 46, height: 90,
     ...paint('linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,246,214,0.7) 50%, rgba(255,255,255,0) 100%)'),
   },
-  tagline: { color: '#C8D7CD', fontSize: 12, fontWeight: '800', letterSpacing: 2.4 },
+  tagline: { color: '#D0DDD6', fontSize: 12, fontWeight: '800', letterSpacing: 2.4 },
   makerBlock: { position: 'absolute', left: 0, right: 0, alignItems: 'center', gap: 10 },
-  makerRule: { width: 28, height: 1, backgroundColor: '#F8F1DF55' },
-  maker: { color: '#F8F1DFB0', fontSize: 13, fontWeight: '700', letterSpacing: 4 },
+  makerRule: { width: 28, height: 1, backgroundColor: '#F8F2E855' },
+  maker: { color: '#F8F2E8B0', fontSize: 13, fontWeight: '700', letterSpacing: 4 },
 });

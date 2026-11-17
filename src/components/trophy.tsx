@@ -109,12 +109,12 @@ export function Trophy({ active }: { active: boolean }) {
   </View>;
 }
 
-const metal = { backgroundColor: '#D9A441', ...paint(GOLD) };
+const metal = { backgroundColor: '#E8BE70', ...paint(GOLD) };
 const s = StyleSheet.create({
   stage: { width: 220, height: 232, pointerEvents: 'none' },
   glow: {
     position: 'absolute', left: -30, top: -50, width: 280, height: 280, borderRadius: 140,
-    ...paint('radial-gradient(circle at 50% 50%, rgba(246,213,126,0.5) 0%, rgba(217,164,65,0.18) 38%, rgba(217,164,65,0) 66%)'),
+    ...paint('radial-gradient(circle at 50% 50%, rgba(246,213,126,0.5) 0%, rgba(232,190,112,0.18) 38%, rgba(232,190,112,0) 66%)'),
   },
   rays: { position: 'absolute', left: -50, top: -68, width: 320, height: 320 },
   ray: {

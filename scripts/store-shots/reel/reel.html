@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Amerikano nedir - Reels</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:1080px; height:1920px; overflow:hidden; background:#071D14; }
+#stage { position:relative; width:1080px; height:1920px; overflow:hidden; font-variant-numeric:lining-nums;
+  background:radial-gradient(ellipse 92% 62% at 50% 45%, #22744F 0%, #155138 40%, #0C3123 74%, #071D14 100%); }
+#bg, #cam, #fx { position:absolute; inset:0; }
+#cam { transform-origin:50% 46%; }
+.ray { position:absolute; left:-46px; top:-1700px; width:92px; height:3400px;
+  background:linear-gradient(180deg, rgba(255,227,154,0) 8%, rgba(255,227,154,.034) 36%, rgba(255,227,154,0) 50%, rgba(255,227,154,.034) 64%, rgba(255,227,154,0) 92%); }
+#rays { position:absolute; left:540px; top:860px; width:0; height:0; }
+.suit-bg { position:absolute; font-family:'Segoe UI Symbol'; color:#F8F1DF; opacity:.05; line-height:1; }
+#glow { position:absolute; left:40px; top:360px; width:1000px; height:1000px; border-radius:50%;
+  background:radial-gradient(circle, rgba(246,213,126,.26) 0%, rgba(217,164,65,.09) 42%, rgba(217,164,65,0) 70%); }
+#vignette { position:absolute; inset:0; background:radial-gradient(ellipse 100% 80% at 50% 46%, rgba(0,0,0,0) 56%, rgba(0,0,0,.46) 100%); }
+#grain { position:absolute; inset:0; opacity:.07; mix-blend-mode:overlay; }
+.dust { position:absolute; left:0; top:0; border-radius:50%; background:radial-gradient(circle, #FFEFC0 0%, rgba(243,206,106,.7) 38%, rgba(243,206,106,0) 72%); }
+
+/* Cards */
+.card { position:absolute; left:0; top:0; width:320px; height:448px; transform-origin:50% 50%; transform-style:preserve-3d; }
+.face { position:absolute; inset:0; border-radius:20px; overflow:hidden; backface-visibility:hidden; background:#fff; }
+.face img { width:100%; height:100%; display:block; }
+.face.back { transform:rotateY(180deg); }
+.stack { position:absolute; left:0; top:0; }
+.stack img { position:absolute; left:0; top:0; border-radius:6%; background:#fff; box-shadow:0 2px 3px rgba(0,0,0,.45); }
+
+/* Type */
+.abs { position:absolute; left:0; width:1080px; text-align:center; transform-origin:50% 50%; }
+.disp { font-family:Georgia; font-weight:700; color:#F8F1DF; line-height:1.06; text-shadow:0 .04em .2em rgba(0,0,0,.55); }
+.gold { background:linear-gradient(180deg, #FFEFBC 6%, #F3CE6A 46%, #C48D2C 100%); -webkit-background-clip:text; background-clip:text; color:transparent;
+  text-shadow:none; filter:drop-shadow(0 5px 14px rgba(0,0,0,.55)); }
+.sub { font-family:'Segoe UI'; font-weight:600; color:#EEF3EA; line-height:1.15; text-shadow:0 2px 14px rgba(0,0,0,.6); }
+.brand { font-family:Georgia; font-weight:700; color:#E2B351; letter-spacing:.42em; text-indent:.42em; }
+.suit { font-family:'Segoe UI Symbol'; font-weight:400; }
+.sub b { color:#F6D57E; font-weight:700; }
+.kicker { display:inline-block; padding:12px 34px 13px; border-radius:99px; border:3px solid #E2B351; background:rgba(7,29,20,.5);
+  font-family:'Segoe UI'; font-weight:700; color:#F3CE6A; font-size:37px; letter-spacing:.14em; }
+.chip { display:inline-flex; align-items:center; gap:18px; padding:16px 40px 18px; border-radius:99px; background:rgba(7,29,20,.72); border:2px solid rgba(226,179,81,.55);
+  font-family:'Segoe UI'; font-weight:700; font-size:52px; color:#F8F1DF; box-shadow:0 10px 26px rgba(0,0,0,.3); }
+.chip b { color:#F3CE6A; font-weight:800; }
+.plus { position:absolute; font-family:'Segoe UI'; font-weight:800; font-size:76px; color:#F3CE6A; text-shadow:0 3px 12px rgba(0,0,0,.6); line-height:1; }
+.vp { position:absolute; left:0; top:0; display:flex; align-items:center; justify-content:center; gap:8px; width:176px; height:96px; border-radius:48px; background:#F8F1DF;
+  font-family:Georgia; font-weight:700; font-size:64px; color:#17211C; box-shadow:0 10px 24px rgba(0,0,0,.42); line-height:1; }
+.vp .suit { font-size:60px; line-height:1; margin-top:-2px; }
+.arrow { position:absolute; left:0; top:0; width:80px; height:80px; font-family:'Segoe UI'; font-weight:800; font-size:62px; color:#F3CE6A; text-align:center; line-height:80px; text-shadow:0 3px 10px rgba(0,0,0,.6); }
+.done { display:inline-flex; align-items:center; gap:16px; padding:11px 36px 13px; border-radius:99px; background:linear-gradient(180deg,#F6D57E,#D9A441);
+  font-family:'Segoe UI'; font-weight:800; font-size:44px; color:#123D2B; box-shadow:0 10px 34px rgba(243,206,106,.4); }
+
+/* Contract ladder */
+.row { position:absolute; left:110px; width:860px; height:136px; border-radius:34px; display:flex; align-items:center; padding:0 26px; gap:26px;
+  background:rgba(7,29,20,.76); border:2px solid rgba(226,179,81,.36); box-shadow:0 14px 30px rgba(0,0,0,.3); }
+.row .el { flex:none; width:150px; height:82px; border-radius:22px; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#F6D57E,#D9A441);
+  font-family:'Segoe UI'; font-weight:800; font-size:39px; color:#123D2B; letter-spacing:.02em; }
+.row .ct { font-family:Georgia; font-weight:700; font-size:62px; color:#F8F1DF; white-space:nowrap; }
+.row .mini { margin-left:auto; display:flex; align-items:center; padding-right:6px; }
+.row .mini img { width:70px; height:98px; margin-left:-44px; border-radius:6px; background:#fff; box-shadow:-2px 3px 8px rgba(0,0,0,.45); }
+.row .mini img:first-child { margin-left:0; }
+.row.final { background:linear-gradient(90deg, rgba(243,206,106,.3), rgba(7,29,20,.8)); border:3px solid #F3CE6A; box-shadow:0 0 44px rgba(243,206,106,.36); }
+.dots { position:absolute; left:0; width:1080px; text-align:center; font-family:'Segoe UI'; font-weight:800; font-size:50px; line-height:50px; letter-spacing:.3em; text-indent:.3em; color:rgba(248,241,223,.72); }
+
+/* Turn */
+#oval { position:absolute; left:26px; top:636px; width:1028px; height:540px; border-radius:270px; border:12px solid #7E5F35;
+  background:radial-gradient(ellipse 80% 90% at 50% 42%, #1E6C49 0%, #155138 72%, #114532 100%);
+  box-shadow:0 24px 60px rgba(0,0,0,.45), inset 0 0 0 3px rgba(243,206,106,.25), inset 0 0 60px rgba(0,0,0,.25); }
+#oval .wm { position:absolute; left:0; width:100%; text-align:center; color:rgba(248,241,223,.2); font-family:Georgia; }
+.tlabel { position:absolute; top:398px; width:260px; text-align:center; font-family:'Segoe UI'; font-weight:800; font-size:31px; letter-spacing:.12em; color:#DCE9DA; }
+.step { position:absolute; top:356px; width:296px; height:128px; border-radius:36px; display:flex; align-items:center; justify-content:center; gap:16px; transform-origin:50% 50%;
+  font-family:Georgia; font-weight:700; font-size:78px; line-height:1; color:#F8F1DF; background:rgba(7,29,20,.72); border:2px solid rgba(226,179,81,.42); overflow:hidden; }
+.step .on { position:absolute; inset:0; background:linear-gradient(180deg,#F8DD8D,#D9A441); }
+.step .n { position:relative; width:52px; height:52px; border-radius:50%; border:3px solid currentColor; display:flex; align-items:center; justify-content:center; font-family:'Segoe UI'; font-weight:800; font-size:30px; }
+.step .v { position:relative; }
+
+/* Score */
+.brow { position:absolute; left:110px; width:860px; height:126px; border-radius:32px; display:flex; align-items:center; gap:24px; padding:0 34px 0 18px;
+  background:rgba(7,29,20,.74); border:2px solid rgba(226,179,81,.3); box-shadow:0 12px 28px rgba(0,0,0,.28); }
+.brow .hl { position:absolute; inset:-3px; border-radius:34px; border:4px solid #F3CE6A; background:linear-gradient(90deg, rgba(243,206,106,.32), rgba(243,206,106,.08)); box-shadow:0 0 54px rgba(243,206,106,.5); }
+.brow .av { position:relative; flex:none; width:96px; height:96px; border-radius:50%; overflow:hidden; background:#E7CE97; }
+.brow .av img { position:absolute; left:-6%; top:0; width:112%; height:112%; }
+.brow .nm { position:relative; font-family:'Segoe UI'; font-weight:700; font-size:52px; color:#F8F1DF; }
+.brow .tag { position:relative; padding:5px 18px 7px; border-radius:99px; background:#F3CE6A; color:#123D2B; font-family:'Segoe UI'; font-weight:800; font-size:27px; letter-spacing:.06em; }
+.brow .sc { position:relative; margin-left:auto; font-family:'Segoe UI'; font-weight:800; font-size:70px; color:#F8F1DF; font-variant-numeric:tabular-nums lining-nums; }
+
+.pen { position:absolute; left:0; top:0; width:148px; height:74px; border-radius:37px; display:flex; align-items:center; justify-content:center; background:#C94343; color:#fff; font-family:'Segoe UI'; font-weight:800; font-size:44px; box-shadow:0 8px 20px rgba(0,0,0,.45); transform-origin:50% 50%; }
+
+/* CTA */
+#icon { position:absolute; left:380px; top:330px; width:320px; height:320px; border-radius:72px; overflow:hidden; box-shadow:0 26px 70px rgba(0,0,0,.6), 0 0 0 3px rgba(243,206,106,.5); transform-origin:50% 50%; }
+#icon img { width:100%; height:100%; display:block; }
+#iconGlow { position:absolute; left:140px; top:90px; width:800px; height:800px; border-radius:50%;
+  background:radial-gradient(circle, rgba(246,213,126,.5) 0%, rgba(217,164,65,.14) 44%, rgba(217,164,65,0) 70%); }
+#btn { display:inline-flex; align-items:center; justify-content:center; width:680px; height:138px; border-radius:99px; position:relative; overflow:hidden;
+  background:linear-gradient(180deg,#F8DD8D 0%,#E2B351 55%,#C48D2C 100%); box-shadow:0 18px 44px rgba(0,0,0,.45), 0 0 54px rgba(243,206,106,.4);
+  font-family:'Segoe UI'; font-weight:800; font-size:70px; color:#0F3524; }
+#btnShine { position:absolute; top:-30px; bottom:-30px; width:150px; background:linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.75), rgba(255,255,255,0)); transform:skewX(-20deg); }
+.conf { position:absolute; left:0; top:0; border-radius:2px; }
+
+#sweep { position:absolute; left:0; top:-300px; width:380px; height:2520px; transform:skewX(-14deg);
+  background:linear-gradient(90deg, rgba(255,231,170,0), rgba(255,231,170,.16), rgba(255,240,205,.3), rgba(255,231,170,.16), rgba(255,231,170,0)); mix-blend-mode:screen; }
+#safe { position:absolute; inset:0; pointer-events:none; z-index:999; display:none; }
+#safe div { position:absolute; background:rgba(255,0,80,.2); border:2px dashed rgba(255,0,80,.8); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg">
+    <div id="rays"></div>
+    <div id="glow"></div>
+    <canvas id="grain" width="540" height="960" style="width:1080px;height:1920px"></canvas>
+    <div id="vignette"></div>
+  </div>
+  <div id="cam"></div>
+  <div id="fx"><div id="sweep"></div></div>
+  <div id="safe">
+    <div style="left:0;top:0;width:1080px;height:230px"></div>
+    <div style="left:0;top:1560px;width:1080px;height:360px"></div>
+    <div style="left:950px;top:1040px;width:130px;height:520px"></div>
+  </div>
+</div>
+
+<script>
+/* The whole video is one pure function of time: renderAt(t) never reads a clock,
+   so every frame can be drawn in any order, by any worker. */
+const qs = new URLSearchParams(location.search);
+const A = qs.get('assets') || '../../../assets';
+const stage = document.getElementById('stage');
+const cam = document.getElementById('cam');
+const bg = document.getElementById('bg');
+if (qs.get('safe')) document.getElementById('safe').style.display = 'block';
+
+const T = { hook:0, what:1.5, kut:3.5, seri:5, gorev:6.5, tur:8.25, puan:10.75, cta:13, end:15 };
+const CUTS = [T.what, T.kut, T.seri, T.gorev, T.tur, T.puan, T.cta];
+const BEAT = .5;
+
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, u) => a + (b - a) * u;
+const E = {
+  linear: u => u,
+  outCubic: u => 1 - Math.pow(1 - u, 3),
+  inCubic: u => u * u * u,
+  inOutCubic: u => u < .5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2,
+  outExpo: u => u >= 1 ? 1 : 1 - Math.pow(2, -10 * u),
+  outBack: u => { const c = 1.70158; return 1 + (c + 1) * Math.pow(u - 1, 3) + c * Math.pow(u - 1, 2); },
+  outBackBig: u => { const c = 2.6; return 1 + (c + 1) * Math.pow(u - 1, 3) + c * Math.pow(u - 1, 2); },
+};
+const prog = (t, a, d, e = E.linear) => e(clamp((t - a) / d));
+
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+
+function mk(tag, cls, css, html, parent = cam) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (css) e.style.cssText = css;
+  if (html !== undefined) e.innerHTML = html;
+  parent.appendChild(e);
+  return e;
+}
+
+/* Sound cues are written next to the motion they belong to; audio.py reads them. */
+const CUES = [];
+const cue = (t, s, g = 1, pan = 0) => CUES.push({ t: +t.toFixed(3), s, g, pan });
+
+/* ───────────── Background ───────────── */
+{
+  const rays = document.getElementById('rays');
+  for (let i = 0; i < 12; i++) mk('div', 'ray', `transform:rotate(${i * 15}deg)`, undefined, rays);
+  const canvas = document.getElementById('grain');
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(canvas.width, canvas.height);
+  const r = rng(77);
+  for (let i = 0; i < img.data.length; i += 4) { const v = 96 + r() * 64; img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255; }
+  ctx.putImageData(img, 0, 0);
+}
+const suitsBg = [['♠', .06, .1, 340], ['♥', .9, .2, 300], ['♦', .1, .7, 320], ['♣', .9, .62, 340], ['♥', .22, .42, 200], ['♠', .78, .9, 280]].map(([s, x, y, size], i) => {
+  const e = mk('div', 'suit-bg', `left:${x * 1080 - size / 2}px;top:${y * 1920 - size / 2}px;font-size:${size}px`, s, bg);
+  return { e, i };
+});
+const dustRng = rng(1234);
+const dust = Array.from({ length: 40 }, () => {
+  const size = 5 + dustRng() * 13;
+  return { e: mk('div', 'dust', `width:${size}px;height:${size}px`, undefined, bg), x: dustRng() * 1080, y: dustRng() * 1920, v: 22 + dustRng() * 60, p: dustRng() * 6.28, w: 1 + dustRng() * 3, drift: dustRng() * 30 };
+});
+
+/* ───────────── Cards ───────────── */
+const CARDS = [];
+function cardFile(code) {
+  if (code === 'JK') return 'joker';
+  const suit = { s: 'spades', h: 'hearts', d: 'diamonds', c: 'clubs' }[code.slice(-1)];
+  const rank = code.slice(0, -1);
+  return `${{ A: 'ace', K: 'king', Q: 'queen', J: 'jack' }[rank] || rank}-${suit}`;
+}
+const src = code => `${A}/cards/${cardFile(code)}.png`;
+class Card {
+  constructor(code, init, on = 0, off = 99) {
+    Object.assign(this, { code, on, off, moves: [] });
+    this.init = { x: 540, y: 960, w: 200, r: 0, f: 0, z: 20, lift: .1, o: 1, glow: 0, ...init };
+    this.e = mk('div', 'card', '', `<div class="face front"><img src="${src(code)}" decoding="sync"></div><div class="face back"><img src="${A}/cards/back.png" decoding="sync"></div>`);
+    this.faces = [this.e.children[0], this.e.children[1]];
+    CARDS.push(this);
+  }
+  go(t0, dur, to, ease = E.outCubic) { this.moves.push({ t0, dur, to, ease }); return this; }
+  state(t) {
+    const s = { ...this.init };
+    const m = this.moves;
+    for (let i = 0; i < m.length; i++) {
+      const a = m[i];
+      if (t < a.t0) break;
+      // A later move interrupts this one wherever it has reached.
+      const end = i + 1 < m.length ? Math.min(t, m[i + 1].t0) : t;
+      const u = a.ease(clamp((end - a.t0) / a.dur));
+      for (const k in a.to) { if (k === 'z') s.z = a.to.z; else s[k] = s[k] + (a.to[k] - s[k]) * u; }
+    }
+    return s;
+  }
+  draw(t) {
+    if (t < this.on || t >= this.off) { this.e.style.visibility = 'hidden'; return; }
+    const s = this.state(t);
+    const st = this.e.style;
+    st.visibility = s.o <= .002 ? 'hidden' : 'visible';
+    st.opacity = clamp(s.o);
+    st.zIndex = Math.round(s.z);
+    st.transform = `translate(${s.x - 160}px,${s.y - 224}px) perspective(1900px) rotateZ(${s.r}deg) rotateY(${s.f * 180}deg) scale(${s.w / 320})`;
+    const lift = clamp(s.lift), g = clamp(s.glow);
+    const sh = `0 ${6 + lift * 46}px ${16 + lift * 72}px rgba(0,0,0,${.42 + lift * .12}), 0 1px 3px rgba(0,0,0,.4)` + (g > .01 ? `, 0 0 0 ${5 * g}px rgba(255,226,140,${g}), 0 0 ${70 * g}px ${22 * g}px rgba(243,206,106,${.72 * g})` : '');
+    this.faces[0].style.boxShadow = sh; this.faces[1].style.boxShadow = sh;
+  }
+}
+function fan(i, n, o = {}) {
+  const { cx = 540, cy = 1498, w = 232, spread = 25, span = 900, lift = 78, z = 22 } = o;
+  const u = n > 1 ? (i - (n - 1) / 2) / ((n - 1) / 2) : 0;
+  return { x: cx + u * span / 2, y: cy + Math.pow(Math.abs(u), 1.7) * lift, r: u * spread, w, z: z + i, lift: .08, f: 0, glow: 0 };
+}
+const layout = (cards, t0, dur = .2, o = {}, ease = E.outCubic) => cards.forEach((c, i) => c.go(t0, dur, fan(i, cards.length, o), ease));
+
+function deckStack(x, y, w, layers = 6, parent = cam) {
+  const h = w * 1.4, e = mk('div', 'stack', `width:${w}px;height:${h}px`, undefined, parent);
+  for (let i = 0; i < layers; i++) mk('img', '', `width:${w}px;height:${h}px;left:${i * 1.7 - layers * .85}px;top:${-i * 2 + layers}px`, undefined, e).src = `${A}/cards/back.png`;
+  e.style.left = `${x - w / 2}px`; e.style.top = `${y - h / 2}px`;
+  return e;
+}
+
+/* ───────────── Text blocks: show between two times, with a pop in and a quick lift out ───────────── */
+const SHOW = [];
+function shown(e, tIn, tOut, o = {}) {
+  const base = o.base || '';
+  e.style.visibility = 'hidden';
+  SHOW.push({ e, tIn, tOut, dy: 70, dOut: -46, inDur: .3, outDur: .14, from: .93, ease: E.outBack, base, ...o });
+  return e;
+}
+function drawShown(t) {
+  for (const s of SHOW) {
+    if (t < s.tIn || t >= s.tOut + s.outDur) { s.e.style.visibility = 'hidden'; continue; }
+    const a = prog(t, s.tIn, s.inDur * .6, E.outCubic), b = s.ease(clamp((t - s.tIn) / s.inDur)), c = prog(t, s.tOut, s.outDur, E.inCubic);
+    s.e.style.visibility = 'visible';
+    s.e.style.opacity = a * (1 - c);
+    s.e.style.transform = `${s.base} translateY(${lerp(s.dy, 0, b) + s.dOut * c}px) scale(${lerp(s.from, 1, b)})`;
+    if (s.z) s.e.style.zIndex = s.z;
+  }
+}
+const textZ = 'z-index:60;';
+
+/* ───────────── Progress and brand, always above the explanation ───────────── */
+const SEGS = [[T.what, T.kut], [T.kut, T.seri], [T.seri, T.gorev], [T.gorev, T.tur], [T.tur, T.puan], [T.puan, T.cta]];
+const progEl = mk('div', '', 'position:absolute;left:220px;top:240px;width:640px;height:10px;display:flex;gap:8px;z-index:70');
+const segFill = SEGS.map(() => { const s = mk('div', '', 'flex:1;border-radius:5px;background:rgba(248,241,223,.24);overflow:hidden', undefined, progEl); return mk('i', '', 'display:block;height:100%;width:100%;background:linear-gradient(90deg,#E2B351,#FFEFBC);transform-origin:0 50%', undefined, s); });
+
+const brandTag = mk('div', 'abs brand', 'top:178px;font-size:32px;z-index:70', 'AMERİKANO');
+
+/* ───────────── 1. Hook ───────────── */
+shown(mk('div', 'abs', `top:266px;${textZ}`, '<span class="kicker">15 SANİYEDE ÖĞREN</span>'), -1, T.what - .2, { dy: 0, from: 1 });
+const hookTitle = mk('div', 'abs disp gold', `top:352px;font-size:164px;${textZ}`, 'Amerikano');
+shown(hookTitle, -1, T.what - .2, { dy: 0, from: 1, dOut: -70 });
+shown(mk('div', 'abs disp', `top:522px;font-size:164px;${textZ}`, 'nedir?'), -1, T.what - .2, { dy: 0, from: 1, dOut: -70 });
+shown(mk('div', 'abs disp', `top:708px;font-size:108px;${textZ}`, 'Nasıl oynanır?'), -1, T.what - .2, { dy: 0, from: 1, dOut: -70 });
+const heroFan = { cx: 540, cy: 1176, w: 296, spread: 24, span: 610, lift: 78 };
+const fanCodes = ['Jc', 'Qd', 'Kh', 'As', 'JK'];
+const hookCards = fanCodes.map((code, i) => {
+  const open = fan(i, 5, heroFan);
+  const u = (i - 2) / 2;
+  const c = new Card(code, { ...open, x: 540 + u * 205, y: open.y + 22, r: u * 15, w: 282, z: 30 + (i === 2 ? 5 : i), lift: .55 }, 0, T.what + .16);
+  // Starts one frame in: the very first frame is the preview image and must be sharp.
+  c.go(1 / 30, .42, { x: open.x, y: open.y, r: open.r, w: open.w }, E.outBack);
+  // Back into the two decks of the next scene.
+  c.go(T.what - .2, .3, { x: i < 3 ? 245 : 489, y: 742, w: 150, r: 0, f: 1, lift: .4 }, E.inCubic);
+  return c;
+});
+cue(0, 'deal', .75);
+
+/* ───────────── 2. What is it ───────────── */
+const whatIn = T.what, whatOut = T.kut - .15;
+shown(mk('div', 'abs disp', `top:286px;font-size:120px;${textZ}`, '<span class="gold">12 el</span> süren<br>bir kart oyunu'), whatIn, whatOut);
+const deckY = 742;
+const stacks = [245, 489].map((x, i) => {
+  const e = deckStack(x, deckY, 150);
+  e.style.zIndex = 12;
+  return shown(e, whatIn + .08, whatOut, { dy: 0, from: .86, inDur: .2 });
+});
+const plus1 = shown(mk('div', 'plus', `left:345px;top:${deckY - 42}px;width:44px;text-align:center;z-index:13`, '+'), whatIn + .16, whatOut, { dy: 0, from: .3, inDur: .2, ease: E.outBackBig });
+const plus2 = shown(mk('div', 'plus', `left:589px;top:${deckY - 42}px;width:44px;text-align:center;z-index:13`, '+'), whatIn + .22, whatOut, { dy: 0, from: .3, inDur: .2, ease: E.outBackBig });
+const jokers = [[735, -9], [835, 9]].map(([x, r], i) => {
+  const c = new Card('JK', { x, y: deckY + 50, w: 40, r: r * 3, o: 0, z: 14 + i, lift: .3 }, whatIn, T.kut + .05);
+  c.go(whatIn + .26 + i * .07, .28, { y: deckY, w: 150, r, o: 1 }, E.outBackBig);
+  c.go(whatOut, .15, { y: deckY - 70, o: 0 }, E.inCubic);
+  return c;
+});
+cue(whatIn + .26, 'joker', .34);
+shown(mk('div', 'abs', `top:906px;${textZ}`, '<span class="chip"><b>2 deste</b> + <b>2 joker</b></span>'), whatIn + .36, whatOut);
+const countEl = mk('b', '', 'display:inline-block;min-width:62px;text-align:center', '0');
+const countChip = mk('div', 'abs', `top:1050px;${textZ}`, '<span class="chip">Herkese <b data-c></b> kart</span>');
+countChip.querySelector('[data-c]').replaceWith(countEl);
+shown(countChip, whatIn + .46, whatOut);
+
+const handCodes = ['2c', '4h', '5h', '6h', '9s', '7s', '7h', '7d', 'Jd', 'Qc', 'Ks', 'Ad', 'JK'];
+const dealStart = whatIn + .42, dealStep = .054, dealFly = .25;
+const hand = handCodes.map((code, i) => {
+  const t0 = dealStart + i * dealStep;
+  const c = new Card(code, { x: 489, y: deckY, w: 150, f: 1, z: 22 + i, lift: .5 }, t0, T.tur + .14);
+  c.go(t0, dealFly, fan(i, handCodes.length), E.outCubic);
+  cue(t0 + dealFly * .62, `card-place-${1 + i % 4}`, .42, (i - 6) / 14);
+  return c;
+});
+cue(dealStart, 'riffle', .4);
+const dealtCount = t => clamp(Math.floor((t - dealStart - dealFly * .62) / dealStep) + 1, 0, 13);
+
+/* ───────────── 3 + 4. The two kinds of group ───────────── */
+const byCode = code => hand.find(c => c.code === code);
+const without = (list, gone) => list.filter(c => !gone.includes(c));
+const meldX = [222, 540, 858], meldY = 842, meldW = 292, meldR = [-4, 0, 4];
+const pillY = 1056;
+
+function meldScene({ tIn, tOut, word, sub, codes, labels, doneText, arrows, sound, removedBefore = [] }) {
+  shown(mk('div', 'abs disp gold', `top:268px;font-size:196px;${textZ}`, word), tIn, tOut);
+  shown(mk('div', 'abs sub', `top:490px;font-size:66px;${textZ}`, sub), tIn + .06, tOut);
+  const picked = codes.map(byCode);
+  let rest = hand.slice();
+  picked.forEach((c, i) => {
+    const land = tIn + .25 + i * .25, start = land - .23;
+    rest = without(rest, [c]);
+    c.go(start, .25, { x: meldX[i], y: meldY, w: meldW, r: meldR[i], z: 40 + i, lift: .22 }, E.outBack);
+    layout(rest, start, .2);
+    cue(land - .04, `card-place-${1 + (i + (arrows ? 2 : 0)) % 4}`, 1, (i - 1) * .22);
+    shown(mk('div', 'vp', `transform-origin:50% 50%;z-index:58`, `<span>${labels[i][0]}</span><span class="suit" style="color:${labels[i][2]}">${labels[i][1]}</span>`), land - .02, tOut, { base: `translate(${meldX[i] - 88}px,${pillY}px)`, dy: 26, from: .7, inDur: .22, ease: E.outBackBig });
+    if (arrows && i < 2) shown(mk('div', 'arrow', 'z-index:58', '→'), land + .22, tOut, { base: `translate(${(meldX[i] + meldX[i + 1]) / 2 - 40}px,${pillY + 7}px)`, dy: 0, from: .4, inDur: .2, ease: E.outBackBig });
+  });
+  const doneAt = tIn + .875;
+  shown(mk('div', 'abs', `top:1172px;${textZ}`, `<span class="done">✓ ${doneText}</span>`), doneAt, tOut, { dy: 30, from: .7, ease: E.outBackBig, inDur: .26 });
+  picked.forEach(c => { c.go(doneAt, .12, { glow: 1, w: meldW * 1.035 }, E.outCubic); });
+  picked.forEach(c => { c.go(doneAt + .12, .36, { glow: .32, w: meldW }, E.outCubic); });
+  cue(doneAt, 'meld-2', .7);
+  cue(doneAt, sound, .5);
+  return picked;
+}
+const RED = '#C2202B', INK = '#17211C';
+const kutCards = meldScene({
+  tIn: T.kut, tOut: T.seri - .15, word: 'KÜT', sub: 'Aynı <b>değer</b>, farklı <b>sembol</b>',
+  codes: ['7s', '7h', '7d'], labels: [['7', '♠', INK], ['7', '♥', RED], ['7', '♦', RED]],
+  doneText: '3’lü küt', sound: 'chime:E6,A6',
+});
+// Back to the hand just before the run comes up.
+{
+  const t0 = T.seri - .08;
+  kutCards.forEach(c => c.go(t0, .1, { glow: 0 }));
+  layout(hand, t0 + .001, .24);
+}
+const seriCards = meldScene({
+  tIn: T.seri, tOut: T.gorev - .15, word: 'SERİ', sub: 'Aynı <b>sembol</b>, <b>sıralı</b> kartlar',
+  codes: ['4h', '5h', '6h'], labels: [['4', '♥', RED], ['5', '♥', RED], ['6', '♥', RED]],
+  doneText: '3’lü seri', arrows: true, sound: 'chime:C6,E6',
+});
+// The hand closes again and stays under the contract list, then drops for the turn scene.
+{
+  const t0 = T.gorev - .08;
+  seriCards.forEach(c => c.go(t0, .1, { glow: 0 }));
+  layout(hand, t0 + .001, .24);
+  hand.forEach((c, i) => c.go(T.tur - .1, .22, { y: 2300 }, E.inCubic));
+}
+
+/* ───────────── 5. Contracts ───────────── */
+const gIn = T.gorev, gOut = T.tur - .14;
+shown(mk('div', 'abs disp', `top:282px;font-size:112px;${textZ}`, 'Her elin<br><span class="gold">görevi farklı</span>'), gIn, gOut);
+const miniImgs = codes => codes.map(c => `<img src="${src(c)}" decoding="sync">`).join('');
+const rows = [
+  { el: 'EL 1', ct: '3’lü küt', mini: ['7s', '7h', '7d'], y: 548, t: gIn + .25 },
+  { el: 'EL 2', ct: '3’lü seri', mini: ['4h', '5h', '6h'], y: 700, t: gIn + .5 },
+  { el: 'EL 11', ct: '5’li seri', mini: ['9c', '10c', 'Jc', 'Qc', 'Kc'], y: 912, t: gIn + .75 },
+  { el: 'EL 12', ct: 'Elden bit', mini: ['2c', '5h', '7s', '9s', 'Jd', 'Ks', 'Ad'], y: 1064, t: gIn + 1, final: true },
+];
+rows.forEach(r => {
+  const e = mk('div', `row${r.final ? ' final' : ''}`, `top:${r.y}px;z-index:50;${r.final ? '' : ''}`, `<div class="el">${r.el}</div><div class="ct${r.final ? ' gold' : ''}">${r.ct}</div><div class="mini">${miniImgs(r.mini)}</div>`);
+  shown(e, r.t, gOut, { dy: 56, from: .9, inDur: .26, ease: E.outBack });
+  cue(r.t, r.final ? 'turn' : 'tap', r.final ? .5 : .9);
+});
+shown(mk('div', 'dots', 'top:854px;z-index:50', '···'), gIn + .68, gOut, { dy: 16, inDur: .16 });
+
+/* ───────────── 6. A turn: draw, open, discard ───────────── */
+const tIn = T.tur, tOut = T.puan - .13;
+const stepT = [tIn + .25, tIn + 1, tIn + 1.75];
+shown(mk('div', 'abs disp', `top:272px;font-size:64px;${textZ}`, 'Sıran gelince'), tIn, tOut, { dy: 30 });
+const steps = [['1', 'Çek', 212], ['2', 'Aç', 540], ['3', 'At', 868]].map(([n, v, x]) => {
+  const e = mk('div', 'step', `left:${x - 148}px;z-index:60`, `<div class="on"></div><div class="n">${n}</div><div class="v">${v}</div>`);
+  return { e, on: e.querySelector('.on') };
+});
+steps.forEach((s, i) => shown(s.e, tIn + i * .05, tOut, { dy: 40, inDur: .24 }));
+[['Desteden ya da açık karttan', 0], ['Görevin tamamsa masaya', 1], ['Bir kart, sıran biter', 2]].forEach(([text, i]) => {
+  shown(mk('div', 'abs sub', `top:506px;font-size:60px;${textZ}`, text), stepT[i], i < 2 ? stepT[i + 1] - .1 : tOut, { dy: 20, from: .97, inDur: .18, outDur: .08, dOut: -14 });
+});
+const oval = mk('div', '', 'z-index:6;transform-origin:50% 50%', '<div class="wm" style="top:120px;font-size:150px;line-height:1">A</div><div class="wm" style="top:276px;font-size:27px;letter-spacing:.32em">AMERİKANO</div>' );
+oval.id = 'oval';
+const wmEls = [...oval.querySelectorAll('.wm')];
+mk('div', 'tlabel', 'left:50px', 'DESTE', oval);
+mk('div', 'tlabel', 'left:698px', 'AÇIK KART', oval);
+shown(oval, tIn, tOut, { dy: 80, from: .9, inDur: .26, dOut: 40 });
+const tDeckX = 208, tOpenX = 872, tPileY = 884, tPileW = 172;
+const tDeck = deckStack(tDeckX, tPileY, tPileW, 7); tDeck.style.zIndex = 12;
+shown(tDeck, tIn + .04, tOut, { dy: 80, from: .9, inDur: .24, dOut: 40 });
+new Card('Qd', { x: tOpenX, y: tPileY, w: tPileW, r: -3, z: 13, lift: .08, o: 0 }, tIn, T.puan + .02)
+  .go(tIn + .04, .16, { o: 1 }).go(tOut, .13, { o: 0, y: tPileY + 40 }, E.inCubic);
+
+const tHandCodes = ['2c', '4h', '5h', '6h', '9s', '7s', '7h', '7d', 'Jd', 'Qc', 'Ks', 'Ad', 'JK', '3c'];
+const before = tHandCodes.filter(c => c !== '7d');
+const tCards = Object.fromEntries(tHandCodes.map(code => {
+  const i = before.indexOf(code);
+  const p = i >= 0 ? fan(i, before.length) : { x: tDeckX, y: tPileY, w: tPileW, r: 0, f: 1, z: 40, lift: .3 };
+  const c = new Card(code, { ...p, y: code === '7d' ? tPileY : p.y + 620 }, code === '7d' ? stepT[0] - .01 : tIn, T.puan + .2);
+  if (i >= 0) c.go(tIn, .3, { y: p.y }, E.outCubic);
+  return [code, c];
+}));
+const inOrder = codes => codes.map(c => tCards[c]);
+// Draw: the third seven comes from the deck.
+const afterDraw = tHandCodes;
+layout(inOrder(afterDraw.filter(c => c !== '7d')), stepT[0] + .05, .22, {}, E.inOutCubic);
+tCards['7d'].go(stepT[0], .34, { ...fan(afterDraw.indexOf('7d'), afterDraw.length), glow: .9, z: 45 }, E.outCubic);
+cue(stepT[0] + .02, 'card-draw-1', .95);
+cue(stepT[0] + .22, 'card-place-1', .55);
+// Open: three sevens rise together and land on the felt.
+const sevens = ['7s', '7h', '7d'];
+sevens.forEach((code, i) => {
+  const c = tCards[code];
+  const p = fan(afterDraw.indexOf(code), afterDraw.length);
+  c.go(stepT[1] - .18, .14, { y: p.y - 74, glow: 1, z: 46 + i, r: p.r * .6 }, E.outCubic);
+  c.go(stepT[1] + .03 + i * .045, .27, { x: 540 + (i - 1) * 104, y: tPileY - 4, w: 150, r: (i - 1) * 3, glow: .25, lift: .14, z: 30 + i }, E.outBack);
+});
+const openLand = stepT[1] + .25;
+cue(openLand, 'meld-2', .7);
+cue(openLand, 'chime:E6,G6', .5);
+layout(inOrder(afterDraw.filter(c => !sevens.includes(c))), stepT[1] + .05, .24);
+shown(mk('div', 'abs', `top:694px;z-index:44`, '<span class="done" style="font-size:36px;padding:8px 28px 10px">✓ 3’lü küt</span>'), openLand, tOut, { dy: 22, from: .7, inDur: .2, ease: E.outBackBig, dOut: 40 });
+// Discard: the king goes to the open pile.
+const kingStart = stepT[2] - .02;
+{
+  const k = tCards.Ks;
+  const left = afterDraw.filter(c => !sevens.includes(c));
+  const p = fan(left.indexOf('Ks'), left.length);
+  k.go(kingStart - .1, .1, { y: p.y - 70, glow: .8, z: 47 }, E.outCubic);
+  k.go(kingStart, .24, { x: tOpenX + 2, y: tPileY, w: tPileW, r: 7, glow: 0, lift: .14, z: 34 }, E.outBack);
+  cue(kingStart + .15, 'card-place-3', 1, .3);
+  layout(inOrder(left.filter(c => c !== 'Ks')), kingStart + .04, .2);
+}
+// Everything leaves.
+Object.values(tCards).forEach(c => {
+  const isMeld = sevens.includes(c.code) || c.code === 'Ks';
+  c.go(tOut, .16, isMeld ? { o: 0, y: tPileY + 40 } : { y: 2300 }, E.inCubic);
+});
+
+/* ───────────── 7. Score ───────────── */
+const pIn = T.puan, pOut = T.cta - .12;
+shown(mk('div', 'abs disp', `top:268px;font-size:70px;${textZ}`, '12 el sonunda'), pIn, pOut, { dy: 30 });
+shown(mk('div', 'abs disp gold', `top:352px;font-size:110px;${textZ}`, 'en düşük puan'), pIn + .03, pOut);
+shown(mk('div', 'abs disp gold', `top:470px;font-size:110px;${textZ}`, 'kazanır'), pIn + .05, pOut);
+shown(mk('div', 'abs sub', `top:610px;font-size:54px;${textZ}`, 'Elde kalan kartlar ceza yazar'), pIn + .12, pOut);
+const boardData = [['Sen', 'lara', 92, true], ['Emir', 'emir', 148], ['Ada', 'ada', 176], ['Kemal', 'kemal', 233]];
+const countFrom = pIn + .18, countDur = .52, winAt = pIn + .75;
+const board = boardData.map(([name, av, score, win], i) => {
+  const e = mk('div', 'brow', `top:${712 + i * 140}px;z-index:50`, `${win ? '<div class="hl"></div>' : ''}<div class="av"><img src="${A}/avatars/character-${av}.png"></div><div class="nm">${name}</div>${win ? '<div class="tag">KAZANAN</div>' : ''}<div class="sc">0</div>`);
+  shown(e, pIn + .05 + i * .05, pOut, { dy: 60, from: .92, inDur: .26 });
+  return { e, score, win, sc: e.querySelector('.sc'), hl: e.querySelector('.hl'), tag: e.querySelector('.tag'), last: '' };
+});
+const leftovers = [['Ad', '+11', 330, -8], ['Ks', '+10', 540, 0], ['JK', '+25', 750, 8]];
+leftovers.forEach(([code, label, x, r], i) => {
+  const y = 1540 + Math.abs(i - 1) * 16;
+  new Card(code, { x, y: y + 620, w: 222, r, z: 30 + i, lift: .2 }, pIn)
+    .go(pIn + .12 + i * .04, .3, { y }, E.outBack)
+    .go(pOut, .14, { y: y + 620 }, E.inCubic);
+  shown(mk('div', 'pen', 'z-index:52', label), countFrom + .12 + i * .13, pOut, { base: `translate(${x - 74}px,${y - 216}px) rotate(${r}deg)`, dy: 30, from: .5, inDur: .22, ease: E.outBackBig });
+  cue(countFrom + .12 + i * .13, 'tap', .7);
+});
+for (let i = 0; i < 6; i++) cue(countFrom + i * .085, 'tick', .22);
+cue(winAt, 'win', .72);
+
+/* ───────────── 8. End card ───────────── */
+const cIn = T.cta;
+const iconGlow = mk('div', '', 'z-index:30'); iconGlow.id = 'iconGlow';
+shown(iconGlow, cIn, 99, { dy: 0, from: .4, inDur: .5, ease: E.outCubic });
+const icon = mk('div', '', 'z-index:60', `<img src="${A}/images/icon.png">`); icon.id = 'icon';
+shown(icon, cIn, 99, { dy: 30, from: .4, inDur: .36, ease: E.outBackBig });
+shown(mk('div', 'abs disp gold', `top:688px;font-size:104px;letter-spacing:.09em;text-indent:.09em;${textZ}`, 'AMERİKANO'), cIn + .08, 99);
+shown(mk('div', 'abs disp', `top:830px;font-size:68px;${textZ}`, 'Gerisini oynayarak öğren'), cIn + .2, 99, { dy: 40 });
+const btnWrap = mk('div', 'abs', `top:952px;${textZ}`, '<div id="btn">Ücretsiz indir<div id="btnShine"></div></div>');
+shown(btnWrap, cIn + .34, 99, { dy: 50, from: .8, ease: E.outBackBig, inDur: .32 });
+const btn = btnWrap.querySelector('#btn'), btnShine = btnWrap.querySelector('#btnShine');
+shown(mk('div', 'abs sub', `top:1118px;font-size:50px;color:#DDE7DA;${textZ}`, 'App Store · Google Play'), cIn + .48, 99, { dy: 30 });
+cue(cIn + .58, 'coins', .55);
+const endFan = { cx: 540, cy: 1486, w: 262, spread: 22, span: 560, lift: 60 };
+fanCodes.forEach((code, i) => {
+  const p = fan(i, 5, endFan);
+  new Card(code, { ...p, y: p.y + 620, z: 30 + (i === 2 ? 5 : i), lift: .4 }, cIn)
+    .go(cIn + .1 + Math.abs(i - 2) * .05, .42, { y: p.y }, E.outBack);
+});
+const confRng = rng(4242);
+const confColors = ['#F3CE6A', '#F8F1DF', '#C94343', '#3FBF83', '#E2B351', '#FFEFBC'];
+const confetti = Array.from({ length: 84 }, () => {
+  const w = 10 + confRng() * 12, h = 14 + confRng() * 18;
+  const angle = -Math.PI / 2 + (confRng() - .5) * 2.7, speed = 900 + confRng() * 1900;
+  return { e: mk('div', 'conf', `width:${w}px;height:${h}px;background:${confColors[Math.floor(confRng() * confColors.length)]};z-index:55`), vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, r0: confRng() * 360, w: (confRng() - .5) * 900, ph: confRng() * 6.28, fl: 5 + confRng() * 9 };
+});
+
+/* Whooshes on every cut; audio.py draws them. */
+CUTS.forEach(t => cue(t - .04, 'whoosh', 1));
+
+/* ───────────── The frame function ───────────── */
+function renderAt(t) {
+  // Background life
+  document.getElementById('rays').style.transform = `rotate(${t * 2.4}deg)`;
+  const beat = t / BEAT, pulse = Math.exp(-5 * (beat - Math.floor(beat)));
+  const glow = document.getElementById('glow');
+  glow.style.opacity = .78 + .22 * pulse;
+  glow.style.transform = `scale(${1 + .03 * pulse})`;
+  suitsBg.forEach(({ e, i }) => { e.style.transform = `translateY(${-t * (5 + i * 2)}px) rotate(${Math.sin(t * .5 + i) * 3}deg)`; });
+  dust.forEach(d => {
+    const y = ((d.y - d.v * t) % 1920 + 1920) % 1920;
+    d.e.style.transform = `translate(${d.x + Math.sin(t * .8 + d.p) * d.drift}px,${y}px)`;
+    d.e.style.opacity = .22 + .55 * (0.5 + .5 * Math.sin(t * d.w + d.p));
+  });
+
+  // Camera: a small kick on each cut, then a slow push in.
+  let last = 0; for (const c of CUTS) if (t >= c) last = c;
+  const local = t - last;
+  const kick = last === 0 && t < .4 ? 0 : .03 * Math.exp(-local * 9);
+  cam.style.transform = `scale(${1 + kick + local * .006})`;
+
+  // Gold sweep on each cut.
+  const sweep = document.getElementById('sweep');
+  let sw = -1; for (const c of CUTS) if (t >= c - .1 && t < c + .16) sw = (t - (c - .1)) / .26;
+  sweep.style.visibility = sw < 0 ? 'hidden' : 'visible';
+  if (sw >= 0) sweep.style.transform = `translateX(${lerp(-800, 1400, sw)}px) skewX(-14deg)`;
+
+  // Progress
+  const pv = prog(t, T.what, .2) * (1 - prog(t, T.cta - .1, .14));
+  progEl.style.opacity = pv; progEl.style.visibility = pv > 0 ? 'visible' : 'hidden';
+  brandTag.style.opacity = pv; brandTag.style.visibility = pv > 0 ? 'visible' : 'hidden';
+  SEGS.forEach(([a, b], i) => { segFill[i].style.transform = `scaleX(${clamp((t - a) / (b - a))})`; });
+
+  drawShown(t);
+  CARDS.forEach(c => c.draw(t));
+
+  // Shine across the hook title.
+  const shine = prog(t, .28, .8, E.inOutCubic);
+  hookTitle.style.backgroundImage = `linear-gradient(105deg, rgba(255,255,255,0) ${shine * 150 - 34}%, rgba(255,255,255,.95) ${shine * 150 - 22}%, rgba(255,255,255,0) ${shine * 150 - 10}%), linear-gradient(180deg, #FFEFBC 6%, #F3CE6A 46%, #C48D2C 100%)`;
+
+  // Deal counter
+  const n = dealtCount(t); const label = String(n);
+  if (countEl.textContent !== label) countEl.textContent = label;
+  countEl.style.transform = n ? `scale(${1 + .25 * Math.exp(-((t - dealStart - dealFly * .62) % dealStep) * 30)})` : '';
+
+  // Felt watermark gives way to the opened group.
+  wmEls.forEach(e => { e.style.opacity = 1 - prog(t, openLand - .25, .2); });
+
+  // Turn steps
+  steps.forEach((s, i) => {
+    const on = prog(t, stepT[i] - .02, .1);
+    const next = i < 2 ? prog(t, stepT[i + 1] - .02, .12) : 0;
+    const act = on * (1 - next);
+    s.on.style.opacity = on * (1 - .55 * next);
+    s.e.style.color = on > .5 ? (next > .5 ? '#F8F1DF' : '#123D2B') : (t < stepT[i] ? 'rgba(248,241,223,.62)' : '#F8F1DF');
+    s.e.style.boxShadow = `0 0 ${60 * act}px rgba(243,206,106,${.65 * act})`;
+    const pop = i < 3 && t >= stepT[i] ? .1 * Math.exp(-(t - stepT[i]) * 9) : 0;
+    const shownEntry = SHOW.find(x => x.e === s.e);
+    shownEntry.base = `scale(${1 + .03 * act + pop})`;
+  });
+
+  // Score counters
+  board.forEach(b => {
+    const v = Math.round(b.score * prog(t, countFrom, countDur, E.outCubic));
+    if (b.last !== v) { b.sc.textContent = v; b.last = v; }
+    if (b.hl) { const h = prog(t, winAt, .14, E.outCubic); b.hl.style.opacity = h; b.tag.style.opacity = h; b.tag.style.transform = `scale(${lerp(.4, 1, E.outBackBig(clamp((t - winAt) / .24)))})`; b.sc.style.color = h > .5 ? '#F3CE6A' : '#F8F1DF'; }
+  });
+
+  // End card life
+  const bp = t > cIn + .6 ? Math.exp(-4.5 * (beat - Math.floor(beat))) : 0;
+  btn.style.transform = `scale(${1 + .025 * bp})`;
+  const sh = (((t - cIn - .75) % 1.5) + 1.5) % 1.5;
+  btnShine.style.transform = `translateX(${lerp(-180, 780, clamp(sh / .55))}px) skewX(-20deg)`;
+  btnShine.style.visibility = t > cIn + .75 ? 'visible' : 'hidden';
+  const iconSwing = t > cIn ? Math.sin((t - cIn) * 1.6) * 1.4 : 0;
+  const ice = SHOW.find(x => x.e === icon); ice.base = `rotate(${iconSwing}deg)`;
+  confetti.forEach(c => {
+    const a = t - cIn;
+    if (a < 0 || a > 1.9) { c.e.style.visibility = 'hidden'; return; }
+    const k = 3.1, f = (1 - Math.exp(-k * a)) / k;
+    const x = 540 + c.vx * f, y = 500 + c.vy * f + .5 * 1500 * a * a;
+    c.e.style.visibility = 'visible';
+    c.e.style.opacity = 1 - prog(a, 1.25, .6);
+    c.e.style.transform = `translate(${x}px,${y}px) rotate(${c.r0 + c.w * a}deg) scaleX(${Math.cos(c.ph + c.fl * a)})`;
+  });
+}
+window.renderAt = renderAt;
+window.CUES = CUES;
+window.ready = Promise.all([...document.images].map(i => i.decode().catch(() => { throw new Error('image: ' + i.src); }))).then(() => document.fonts.ready).then(() => { renderAt(+qs.get('t') || 0); return true; });
+</script>
+</body>
+</html>

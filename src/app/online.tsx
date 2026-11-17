@@ -1,11 +1,12 @@
 import { useTranslations } from '@/i18n/language';
 import { useEffect, useRef, useState } from 'react';
 import { Href, router, useLocalSearchParams } from 'expo-router';
-import { AppState, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, AppState, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { connectRoom, enterQuickRoom, enterRoom, forgetRoom, forfeitRoom, leaveWaitingRoom, sendAction, sendReaction, sendRoom, suspendRoom, useReactions, useRoom } from '@/network/client';
-import { GameTable } from '@/components/game-table';
+import { GameTable, type FriendStatus } from '@/components/game-table';
+import { refreshSocial, requestFriend, respondFriend, socialError, useSocial } from '@/network/social';
 import { WaitingTable } from '@/components/waiting-table';
 import { RoomTierCard } from '@/components/room-tier-card';
 import { kit, Note, PrimaryButton, ScreenHeader, SecondaryButton } from '@/components/screen-kit';
@@ -26,7 +27,7 @@ import { recommendRoomFee } from '@/game/room-recommendation';
 import { fetchLobby, type RoomActivity, type TableHighlights } from '@/network/room-activity';
 import { selectedVariant, useGameSettings } from '@/settings/game-settings';
 import { cancelOpenTableReminder, remindOpenTable } from '@/notifications/notifications';
-import { scheduleReviewRequest } from '@/review/store-review';
+import { noteRoundFinished } from '@/review/store-review';
 
 const BIG_TIERS = ROOM_TIERS.filter(tier => tier.fee in TABLE_BADGES);
 
@@ -61,7 +62,7 @@ export default function OnlineScreen() {
   const defaultChosen = useRef(false);
   const [initialized, setInitialized] = useState(false);
   const [clock, setClock] = useState(() => Date.now());
-  const [continuedRoomCode, setContinuedRoomCode] = useState<string | null>(null);
+  const fillAttempts = useRef<{ code: string; count: number }>({ code: '', count: 0 });
   useEffect(() => {
     void connectRoom().then(() => { void refreshWallet(); return refreshPlayerProfile(); }).finally(() => setInitialized(true));
   }, []);
@@ -126,6 +127,17 @@ export default function OnlineScreen() {
     : null;
   const longWait = room?.visibility === 'public' && room.status === 'waiting' && Boolean(room.botFillAvailableAt && room.botFillAvailableAt <= clock);
   const connectedPlayers = room?.members.filter(member => member.connected).length ?? 0;
+  // Nobody joined within the wait: the table is topped up with bots on its own
+  // (paid tables still need two real players), without announcing it.
+  const realConnected = room?.members.filter(member => !member.isBot && member.connected).length ?? 0;
+  const mayFillWithBots = Boolean(room && longWait && connectedPlayers < 3 && (room.entryFee === 0 || realConnected >= 2));
+  useEffect(() => {
+    if (!room || !mayFillWithBots || state.busy || state.status !== 'online') return;
+    const tries = fillAttempts.current.code === room.code ? fillAttempts.current : { code: room.code, count: 0 };
+    if (tries.count >= 3) return;
+    fillAttempts.current = { code: room.code, count: tries.count + 1 };
+    sendRoom({ type: 'fill-bots', language });
+  }, [mayFillWithBots, room?.code, room?.revision, state.busy, state.status]);
   useEffect(() => {
     if (room?.status === 'finished') void refreshWallet();
   }, [room?.status, room?.revision]);
@@ -136,19 +148,23 @@ export default function OnlineScreen() {
     }
     void leaveWaitingRoom().finally(() => router.back());
   };
-  // An online win is the happiest moment to ask for a review. Wait out the win
-  // celebration first; the review policy decides whether the sheet really shows.
-  const reviewedMatch = useRef<string | null>(null);
-  const matchOver = room?.game?.phase === 'game-over';
-  const matchKey = room?.game ? `${room.code}:${room.game.scoreHistory?.length ?? 0}` : null;
-  const wonMatch = Boolean(room?.game && room.game.players.find(player => player.id === room.you)?.score === Math.min(...room.game.players.map(player => player.score)));
-  const onlineGames = profileState.profile?.gamesPlayed ?? 0;
+  // Every finished round counts towards the review prompt; going out or winning
+  // the match is the moment to ask. The policy decides whether the sheet shows.
+  const roundsSeen = useRef<{ code: string; rounds: number } | null>(null);
+  const roomGame = room?.game;
+  const finishedRounds = roomGame?.scoreHistory?.length ?? 0;
+  const wentOut = Boolean(roomGame && roomGame.roundWinnerId === room?.you);
+  const wonMatch = Boolean(roomGame?.phase === 'game-over' && roomGame.players.find(player => player.id === room?.you)?.score === Math.min(...roomGame.players.map(player => player.score)));
   useEffect(() => {
-    if (!matchOver || !matchKey || reviewedMatch.current === matchKey) return;
-    reviewedMatch.current = matchKey;
-    // Scheduled outside the screen, so leaving the table right away still asks.
-    scheduleReviewRequest(wonMatch, onlineGames + 1, 4_000);
-  }, [matchKey, matchOver, onlineGames, wonMatch]);
+    if (!room?.code || !roomGame) return;
+    const seen = roundsSeen.current;
+    roundsSeen.current = { code: room.code, rounds: finishedRounds };
+    // Joining or rejoining a table only sets the baseline.
+    if (!seen || seen.code !== room.code || finishedRounds <= seen.rounds) return;
+    // Scheduled outside the screen, so leaving the table right away still asks;
+    // a match win waits out the celebration.
+    noteRoundFinished(wentOut || wonMatch, wonMatch ? 4_000 : 2_000);
+  }, [finishedRounds, room?.code, roomGame, wentOut, wonMatch]);
 
   // A running game goes on without the player (a bot takes the seat): remind
   // them shortly after they leave the table, and drop the reminder once back.
@@ -166,8 +182,32 @@ export default function OnlineScreen() {
   const botCount = room?.members.filter(member => member.isBot).length ?? 0;
   const hostIsBot = room?.members.find(member => member.id === room.hostId)?.botControlled ?? false;
   const playerMeta = Object.fromEntries((room?.members ?? []).map((member) => {
-    return [member.id, { avatarKey: member.avatarKey, level: member.level, connected: member.connected, missedTurns: member.missedTurns, botControlled: member.botControlled }];
+    return [member.id, { avatarKey: member.avatarKey, level: member.level, connected: member.connected, missedTurns: member.missedTurns, botControlled: member.botControlled && !member.isBot }];
   }));
+  // Anyone met at the table can be added as a friend without searching for their username.
+  const social = useSocial();
+  const [socialReady, setSocialReady] = useState(false);
+  const inGame = Boolean(room?.game);
+  useEffect(() => {
+    if (!inGame) return;
+    let active = true;
+    void refreshSocial(true).then(() => { if (active) setSocialReady(true); });
+    return () => { active = false; };
+  }, [inGame]);
+  const relationOf = (userId: string): FriendStatus => social.friends.some(player => player.userId === userId) ? 'friend'
+    : social.outgoing.some(player => player.userId === userId) ? 'outgoing'
+    : social.incoming.some(player => player.userId === userId) ? 'incoming' : 'none';
+  // Until the friend list arrives no button shows, so an existing friend never reads as "add".
+  const friendStatus: Record<string, FriendStatus> | undefined = socialReady && room
+    ? Object.fromEntries(room.members.filter(member => !member.isBot && member.id !== room.you).map(member => [member.id, relationOf(member.id)]))
+    : undefined;
+  const addFriend = async (userId: string) => {
+    const done = friendStatus?.[userId] === 'incoming' ? await respondFriend(userId, true) : await requestFriend(userId);
+    if (done) return;
+    const message = socialError();
+    if (message) Alert.alert(t("Arkadaş eklenemedi"), localizeMessage(message));
+    void refreshSocial(true);
+  };
   // What stands between the player and the chosen table, and the pack that closes it.
   const gap = wallet.balance === null ? 0 : Math.max(0, selectedFee - wallet.balance);
   const gapPack = gap > 0 ? coinPackForGap(gap) : null;
@@ -187,7 +227,7 @@ export default function OnlineScreen() {
     <GameTable key={room.code + ':' + room.game.roundIndex} game={room.game} viewerId={room.you}
       modeLabel={`ÇEVRİM İÇİ · ${room.code}`} canAdvance={room.hostId === room.you || hostIsBot} canRematch={room.entryFee === 0 && (room.hostId === room.you || hostIsBot)}
       coinResult={room.entryFee > 0 ? { entryFee: room.entryFee, payout: room.coinSettled ? room.myPrize : null } : undefined}
-      playerMeta={playerMeta} reactions={reactions} reactionsReady={state.realtimeReady} onReact={sendReaction} onRematch={room.entryFee === 0 ? () => sendRoom({ type: 'rematch' }) : undefined}
+      playerMeta={playerMeta} friendStatus={friendStatus} onAddFriend={(userId) => void addFriend(userId)} friendBusy={social.busy} reactions={reactions} reactionsReady={state.realtimeReady} onReact={sendReaction} onRematch={room.entryFee === 0 ? () => sendRoom({ type: 'rematch' }) : undefined}
       botControlled={me?.botControlled} onReclaim={() => sendRoom({ type: 'reclaim' })}
       blocked={state.status !== 'online' || state.busy} onAction={(action: GameAction) => sendAction(action)}
       pendingDraw={state.pendingDraw}
@@ -357,17 +397,11 @@ export default function OnlineScreen() {
         </> : <View style={s.matchCard}>
           <Text style={s.matchTitle}>{quickSeconds === null ? t("{0}/{1} oyuncu bulundu", [connectedPlayers, QUICK_ROOM_TARGET]) : connectedPlayers >= QUICK_ROOM_TARGET ? t("Masa hazır · {0} saniye içinde başlıyor", [quickSeconds]) : t("4. oyuncu aranıyor · {0} saniye içinde başlıyor", [quickSeconds])}</Text>
           <Text style={s.hintCentered}>{quickSeconds === null ? t("{0} oyuncu aranıyor. Hızlı masa en az 3 kişiyle başlar.", [Math.max(0, QUICK_ROOM_TARGET - connectedPlayers)]) : connectedPlayers < QUICK_ROOM_TARGET ? t("Dördüncü oyuncu gelmezse 3 kişiyle başlayacaksınız.") : t("Masadan ayrılma; oyun otomatik başlayacak.")}</Text>
-          {botCount > 0 && <Text style={s.hintCentered}>{botCount}{t("bot masaya katıldı. Botlar koltuklarında işaretli.")}</Text>}
           {recommendedFee !== null && recommendedActivity && recommendedFee !== room.entryFee && recommendedActivity.closestTablePlayers > connectedPlayers && <>
             <Text style={s.waitNotice}>{t('{0} coin masasında {1} oyuncu bekliyor.', [recommendedFee, recommendedActivity.waitingPlayers])}</Text>
             <SecondaryButton label={t('Masa seçimine dön')} disabled={busyOffline} onPress={() => {
               void leaveWaitingRoom().then(() => { feeTouched.current = true; setSelectedFee(recommendedFee); });
             }} />
-          </>}
-          {longWait && (room.entryFee === 0 || room.members.filter(m => !m.isBot && m.connected).length >= 2) && <>
-            {continuedRoomCode !== room.code && <Text style={s.waitNotice}>{t("Bekleme uzadı. Masayı botlarla 4 kişiye tamamlayabilir veya gerçek oyuncuları bekleyebilirsin.")}</Text>}
-            <PrimaryButton label={t("Botlarla 4 kişiye tamamla")} disabled={busyOffline} onPress={() => sendRoom({ type: 'fill-bots', language })} />
-            {continuedRoomCode !== room.code && <SecondaryButton label={t("Aramaya devam et")} onPress={() => setContinuedRoomCode(room.code)} />}
           </>}
         </View>}
 
@@ -379,7 +413,7 @@ export default function OnlineScreen() {
 }
 
 const s = StyleSheet.create({
-  gameRoot: { flex: 1, backgroundColor: '#09271e' },
+  gameRoot: { flex: 1, backgroundColor: '#072a22' },
   content: { maxWidth: 620 },
   grow: { flex: 1, minWidth: 0 },
   body: { color: p.muted, fontSize: 14, lineHeight: 21 },
@@ -400,7 +434,7 @@ const s = StyleSheet.create({
   gapTitle: { color: p.cream, fontSize: 17, fontWeight: '900' },
   gapButton: { marginTop: 4 },
   bigWin: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 14 },
-  bigWinText: { flex: 1, color: '#C8D7CD', fontSize: 12, lineHeight: 17 },
+  bigWinText: { flex: 1, color: '#D0DDD6', fontSize: 12, lineHeight: 17 },
   bigWinName: { color: p.cream, fontWeight: '900' },
   bigWinPrize: { fontWeight: '900' },
   bigWinAge: { color: p.muted, fontSize: 11, fontWeight: '700' },

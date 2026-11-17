@@ -21,7 +21,7 @@ import { pickOpponentNames } from '@/game/opponent-names';
 import type { Language } from '@/i18n/translate';
 import { recordSinglePlayerResult } from '@/game/single-stats';
 import { registerRoundOver, showMatchEndInterstitial } from '@/ads/interstitial';
-import { maybeRequestReview } from '@/review/store-review';
+import { noteRoundFinished } from '@/review/store-review';
 import { MODAL_ORIENTATIONS } from '@/constants/orientation';
 
 function createSingleGame(options: SingleGameOptions, language: Language) {
@@ -88,12 +88,23 @@ export default function GameScreen() {
         const score = game.players[0]?.score ?? 0;
         const winningScore = Math.min(...game.players.map(player => player.score));
         const won = score === winningScore;
-        void recordSinglePlayerResult(score, won).then((stats) => {
-          // Let the final score settle on screen before the store sheet appears.
-          setTimeout(() => { void maybeRequestReview(won, stats.gamesPlayed); }, 1_500);
-        }).catch(() => undefined);
+        void recordSinglePlayerResult(score, won).catch(() => undefined);
       }
     } else void saveSingleGame(game);
+  }, [game, loadState, single]);
+  // Every finished round counts towards the review prompt; going out or winning the match is the moment to ask.
+  const roundsSeen = useRef<number | null>(null);
+  useEffect(() => {
+    if (!single || loadState !== 'ready') return;
+    const finished = game.scoreHistory?.length ?? 0;
+    // The first look (a resumed game) and a fresh match only set the baseline.
+    if (roundsSeen.current === null || finished < roundsSeen.current) { roundsSeen.current = finished; return; }
+    if (finished === roundsSeen.current) return;
+    roundsSeen.current = finished;
+    const me = game.players[0];
+    const matchWon = game.phase === 'game-over' && me.score === Math.min(...game.players.map(player => player.score));
+    // Let the round's score settle on screen before the store sheet appears.
+    noteRoundFinished(game.roundWinnerId === me.id || matchWon, 1_800);
   }, [game, loadState, single]);
   useEffect(() => {
     if (!single || loadState !== 'ready' || !tutorialChecked || tutorialOpen || introFinishedRound !== game.roundIndex || current.id === viewerId || !['draw', 'claim', 'play'].includes(game.phase)) return;
@@ -197,7 +208,7 @@ export default function GameScreen() {
   </View>;
 }
 const s = StyleSheet.create({
-  gameRoot: { flex: 1, backgroundColor: '#09271e' },
+  gameRoot: { flex: 1, backgroundColor: '#072a22' },
   curtain: { flex: 1, backgroundColor: '#071d17', padding: 32, justifyContent: 'center', alignItems: 'center', gap: 20 },
   eyebrow: { color: p.gold, letterSpacing: 3, fontSize: 11 }, name: { color: p.cream, fontSize: 34, fontWeight: '800' }, copy: { color: p.muted },
   button: { width: '100%', maxWidth: 400, backgroundColor: p.gold, padding: 18, borderRadius: 14, alignItems: 'center' }, buttonText: { color: p.ink, fontWeight: '800', fontSize: 17 },

@@ -10,14 +10,14 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useGameSounds } from '@/audio/game-sounds';
 import { AuthPanel } from '@/components/auth-panel';
 import { AccountActions } from '@/components/account-actions';
-import { Chevron, External, kit, Row, ScreenHeader, Section, ToggleRow } from '@/components/screen-kit';
+import { ChoiceRow, Chevron, External, kit, Row, ScreenHeader, Section, ToggleRow } from '@/components/screen-kit';
 import { PlayerAvatar } from '@/components/player-avatar';
 import { isAdsPrivacyOptionsRequired, manageAdsPrivacyChoices } from '@/ads/mobile-ads';
 import { deleteAccountUrl, privacyPolicyUrl, TERMS_LABEL, termsUrl } from '@/constants/legal';
 import { palette as p } from '@/constants/palette';
 import { useResponsiveLayout } from '@/hooks/use-responsive-layout';
 import { useAuth } from '@/network/auth';
-import { usePlayerProfile } from '@/network/profile';
+import { refreshPlayerProfile, usePlayerProfile } from '@/network/profile';
 import { useGameSettings } from '@/settings/game-settings';
 import { RemoveAdsCard } from '@/components/remove-ads-card';
 import { notificationPermission, requestNotificationPermission } from '@/notifications/notifications';
@@ -51,7 +51,7 @@ export default function SettingsScreen() {
     if (permission === 'undetermined') await requestNotificationPermission();
     else if (permission === 'denied') void Linking.openSettings();
   };
-  const toggle = (key: 'criticalTimer' | 'compactCards' | 'dragHints' | 'showReactions') => {
+  const toggle = (key: 'criticalTimer' | 'dragHints' | 'showReactions') => {
     feedback();
     updateSettings({ [key]: !settings[key] });
   };
@@ -61,9 +61,15 @@ export default function SettingsScreen() {
     void isAdsPrivacyOptionsRequired().then((required) => { if (active) setAdsPrivacyRequired(required); });
     return () => { active = false; };
   }, []);
+  // The account row shows the username, so it loads here too when Settings is the first stop.
+  useEffect(() => { if (auth.status === 'signed-in' || auth.status === 'anonymous') void refreshPlayerProfile(); }, [auth.status, auth.user?.id]);
 
-  const accountName = profileState.profile?.username || auth.user?.email || t("Misafir");
-  const accountDetail = auth.status === 'signed-in' ? auth.user?.email ?? t("Hesabın açık")
+  // Apple's private relay address is random; it never stands in for a name or a contact line.
+  const email = auth.user?.email ?? '';
+  const relayEmail = /@privaterelay\.appleid\.com$/i.test(email);
+  const ownProfile = profileState.profile?.userId === auth.user?.id ? profileState.profile : null;
+  const accountName = ownProfile?.username || (email && !relayEmail ? email : '') || (auth.status === 'signed-in' ? t("Hesabım") : t("Misafir"));
+  const accountDetail = auth.status === 'signed-in' ? (relayEmail ? t("Apple e-postan gizli tutuluyor") : email || t("Hesabın açık"))
     : auth.status === 'anonymous' ? t("Misafir hesap · ilerlemen bu cihazda") : t("Giriş yapılmadı");
 
   return <SafeAreaView edges={['top', 'bottom']} style={kit.page}>
@@ -72,7 +78,7 @@ export default function SettingsScreen() {
       <ScreenHeader title={t("Ayarlar")} />
 
       <Pressable accessibilityRole="button" accessibilityLabel={t("Profilim")} onPress={() => router.push('/profile' as Href)} style={({ pressed }) => [s.account, pressed && s.pressed]}>
-        <PlayerAvatar avatarKey={profileState.profile?.avatarKey ?? 'emerald'} size={52} />
+        <PlayerAvatar avatarKey={ownProfile?.avatarKey ?? 'emerald'} size={52} />
         <View style={s.rowCopy}>
           <Text numberOfLines={1} style={s.accountName}>{accountName}</Text>
           <Text numberOfLines={1} style={s.rowDetail}>{accountDetail}</Text>
@@ -94,7 +100,9 @@ export default function SettingsScreen() {
 
           <Section title={t("MASA VE KARTLAR")}>
             <ToggleRow icon="timer" label={t("Süre uyarısı")} detail={t("Son 10 saniyede uyarır.")} value={settings.criticalTimer} onPress={() => toggle('criticalTimer')} />
-            <ToggleRow icon="cards" label={t("Küçük kartlar")} detail={t("Kalabalık elleri daha sıkı gösterir.")} value={settings.compactCards} onPress={() => toggle('compactCards')} />
+            <ChoiceRow icon="cards" label={t("Kart boyutu")} detail={t("Büyük kartlar elini ve masayı daha kolay okutur.")} value={settings.cardSize}
+              choices={[{ value: 'small', label: t("Küçük") }, { value: 'normal', label: t("Normal") }, { value: 'large', label: t("Büyük") }]}
+              onChange={(cardSize) => { feedback(); updateSettings({ cardSize }); }} />
             <ToggleRow icon="drag" label={t("Sürükleme ipuçları")} detail={t("Uygun bırakma alanlarını vurgular.")} value={settings.dragHints} onPress={() => toggle('dragHints')} />
             <ToggleRow icon="reactions" label={t("Tepkiler")} detail={t("Diğer oyuncuların emoji ve hazır yazıları.")} value={settings.showReactions} onPress={() => toggle('showReactions')} last />
           </Section>
@@ -165,8 +173,8 @@ const s = StyleSheet.create({
   footer: { color: '#708f7d', fontSize: 9, fontWeight: '800', letterSpacing: 1.4, textAlign: 'center', marginTop: 12 },
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
   modalRootTablet: { justifyContent: 'center', padding: 32 },
-  modalBackdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: '#03110bc7' },
-  sheet: { maxHeight: '88%', borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: '#123d2b', borderWidth: 1, borderBottomWidth: 0, borderColor: p.line, paddingHorizontal: 22, paddingBottom: 30, paddingTop: 9 },
+  modalBackdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: '#021a14c7' },
+  sheet: { maxHeight: '88%', borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: '#0f4838', borderWidth: 1, borderBottomWidth: 0, borderColor: p.line, paddingHorizontal: 22, paddingBottom: 30, paddingTop: 9 },
   sheetTablet: { width: '100%', maxWidth: 620, alignSelf: 'center', borderRadius: 28, borderBottomWidth: 1 },
   sheetHandle: { width: 42, height: 4, borderRadius: 2, backgroundColor: '#ffffff36', alignSelf: 'center', marginBottom: 17 },
 });

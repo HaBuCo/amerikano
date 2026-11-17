@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Amerikano reklam filmi: Herkes ekti mi?</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { overflow:hidden; background:#2C040C; }
+#stage { position:relative; overflow:hidden; font-family:Inter, 'Segoe UI', sans-serif; font-variant-numeric:lining-nums;
+  background:radial-gradient(ellipse 85% 65% at 50% 42%, #A3172F 0%, #7E1024 38%, #4E0814 72%, #2C040C 100%); }
+#bg, #cam, #fx { position:absolute; inset:0; }
+#cam { transform-origin:50% 50%; }
+#pattern { position:absolute; left:0; top:0; }
+.suit { position:absolute; font-family:'Segoe UI Symbol'; color:#FFD9DF; line-height:1; }
+#spot { position:absolute; border-radius:50%; background:radial-gradient(circle, rgba(255,214,170,.22) 0%, rgba(255,170,140,.07) 45%, rgba(255,170,140,0) 70%); }
+#scrim { position:absolute; left:0; top:0; pointer-events:none; }
+#vignette { position:absolute; inset:0; background:radial-gradient(ellipse 100% 85% at 50% 45%, rgba(0,0,0,0) 55%, rgba(12,0,3,.55) 100%); }
+#grain { position:absolute; left:0; top:0; width:100%; height:100%; opacity:.06; mix-blend-mode:overlay; }
+.bokeh { position:absolute; left:0; top:0; border-radius:50%; background:radial-gradient(circle, rgba(255,226,170,.9) 0%, rgba(255,200,120,.35) 40%, rgba(255,200,120,0) 70%); }
+
+/* Chat */
+#chat { position:absolute; left:0; top:0; transform-origin:50% 40%; }
+.group { position:absolute; display:flex; align-items:center; gap:.5em; padding:.35em .9em .4em .45em; border-radius:99px; background:rgba(20,2,6,.45); border:2px solid rgba(255,220,200,.18);
+  color:#FFE9EC; font-weight:700; white-space:nowrap; transform-origin:50% 50%; }
+.group .avs { display:flex; }
+.group .avs span { width:1.5em; height:1.5em; border-radius:50%; overflow:hidden; margin-left:-.45em; border:2px solid #5A0A18; background:#F2D5B1; }
+.group .avs span:first-child { margin-left:0; }
+.group img, .av img { width:116%; height:116%; margin:-4% 0 0 -8%; display:block; }
+.msg { position:absolute; display:flex; align-items:flex-end; gap:16px; transform-origin:0% 100%; }
+.msg.me { flex-direction:row-reverse; transform-origin:100% 100%; }
+.av { flex:none; border-radius:50%; overflow:hidden; background:#F2D5B1; box-shadow:0 8px 20px rgba(0,0,0,.35), 0 0 0 3px rgba(255,236,220,.9); }
+.bubble { position:relative; padding:.42em .78em .5em; border-radius:1.05em 1.05em 1.05em .28em; background:#FFF4E2; color:#2A0710; font-weight:600; line-height:1.22;
+  box-shadow:0 12px 30px rgba(20,0,5,.35); white-space:nowrap; }
+.me .bubble { border-radius:1.05em 1.05em .28em 1.05em; background:linear-gradient(180deg,#FFE7A3,#F2B53A); color:#2A0710; font-weight:700; }
+.bubble .who { display:block; font-weight:800; font-size:.62em; letter-spacing:.02em; margin-bottom:.12em; }
+.bubble .time { font-weight:600; font-size:.5em; color:rgba(42,7,16,.45); margin-left:.6em; }
+.dots { display:inline-flex; gap:.22em; padding:.12em 0; }
+.dots i { width:.36em; height:.36em; border-radius:50%; background:#8E1328; display:block; }
+
+/* Type */
+.abs { position:absolute; text-align:center; transform-origin:50% 50%; white-space:nowrap; }
+.head { font-weight:900; color:#FFF4E2; letter-spacing:-.025em; line-height:1; text-shadow:0 .055em 0 #3A0610, 0 .1em .35em rgba(20,0,5,.45); }
+.gold { background:linear-gradient(180deg, #FFF0C4 5%, #FFD36A 45%, #E39A27 100%); -webkit-background-clip:text; background-clip:text; color:transparent;
+  text-shadow:none; filter:drop-shadow(0 .055em 0 #3A0610) drop-shadow(0 .1em .3em rgba(20,0,5,.45)); }
+.small { font-weight:700; color:#FFE3E8; letter-spacing:.01em; }
+.sticker { display:inline-block; padding:.12em .42em .16em; border-radius:.24em; background:#FFF4E2; color:#9B1530; font-weight:900; letter-spacing:-.02em; line-height:1.05;
+  box-shadow:0 .09em 0 #3A0610, 0 .2em .45em rgba(20,0,5,.4); }
+.sticker.goldbg { background:linear-gradient(180deg,#FFE7A3,#F2B53A); color:#3A0610; }
+.word { position:relative; text-align:center; transform-origin:50% 60%; }
+.chip { position:relative; display:flex; align-items:center; gap:.4em; padding:.28em .7em .3em .3em; border-radius:99px; background:#FFF4E2; color:#3A0610; font-weight:800;
+  box-shadow:0 .1em 0 #3A0610, 0 .25em .5em rgba(20,0,5,.35); white-space:nowrap; transform-origin:50% 50%; }
+.chip .ic { flex:none; width:1.45em; height:1.45em; border-radius:50%; background:#9B1530; color:#FFF4E2; display:flex; align-items:center; justify-content:center; }
+.chip .ic svg { width:62%; height:62%; }
+.pill { position:relative; padding:.3em .8em .34em; border-radius:99px; border:3px solid rgba(255,236,220,.55); color:#FFE9EC; font-weight:800; white-space:nowrap; transform-origin:50% 50%; }
+.pill .on { position:absolute; inset:-3px; border-radius:99px; background:#FFF4E2; }
+.pill span { position:relative; }
+.x { position:absolute; width:.9em; height:.9em; right:-.12em; bottom:-.08em; border-radius:50%; background:#E0283F; color:#fff; font-weight:900; font-size:.42em;
+  display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 .14em #FFF4E2; }
+
+/* Phone */
+.phone { position:absolute; left:0; top:0; transform-origin:50% 50%; }
+.phone .body { position:absolute; inset:0; background:linear-gradient(145deg,#3B3F3E 0%,#141716 20%,#070808 62%,#232726 100%);
+  box-shadow:0 60px 120px rgba(20,0,5,.6), 0 18px 40px rgba(20,0,5,.45), inset 0 0 0 2px rgba(255,255,255,.14), inset 0 0 0 6px #050505; }
+.phone .scr { position:absolute; overflow:hidden; background:#0B2D21; }
+.phone .scr img.feed { position:absolute; left:0; top:0; width:100%; height:100%; display:block; }
+.phone .island { position:absolute; border-radius:99px; background:#020202; z-index:4; }
+.phone .glare { position:absolute; pointer-events:none; z-index:5; background:linear-gradient(118deg, rgba(255,255,255,.12) 0%, rgba(255,255,255,.03) 25%, rgba(255,255,255,0) 38%); }
+.finger { position:absolute; left:0; top:0; border-radius:50%; z-index:6; background:radial-gradient(circle, rgba(255,255,255,.92) 0%, rgba(255,255,255,.72) 45%, rgba(255,255,255,.2) 70%, rgba(255,255,255,0) 72%);
+  box-shadow:0 6px 18px rgba(0,0,0,.35); }
+.ripple { position:absolute; left:0; top:0; border-radius:50%; z-index:6; border:4px solid rgba(255,255,255,.95); }
+.flash { position:absolute; z-index:6; border-radius:24px; border:5px solid #FFE07A; box-shadow:0 0 40px rgba(255,224,122,.9), inset 0 0 30px rgba(255,224,122,.5); }
+
+/* Cards and end card */
+.card { position:absolute; left:0; top:0; width:320px; height:448px; transform-origin:50% 50%; transform-style:preserve-3d; }
+.face { position:absolute; inset:0; border-radius:20px; overflow:hidden; backface-visibility:hidden; background:#fff; }
+.face img { width:100%; height:100%; display:block; }
+.face.back { transform:rotateY(180deg); }
+.icon { position:absolute; overflow:hidden; box-shadow:0 26px 70px rgba(20,0,5,.6), 0 0 0 4px rgba(255,236,220,.85); transform-origin:50% 50%; }
+.icon img { width:100%; height:100%; display:block; }
+.halo { position:absolute; border-radius:50%; background:radial-gradient(circle, rgba(255,214,140,.55) 0%, rgba(255,170,90,.16) 45%, rgba(255,170,90,0) 70%); }
+.btn { display:inline-flex; align-items:center; justify-content:center; border-radius:99px; position:relative; overflow:hidden;
+  background:linear-gradient(180deg,#FFE7A3 0%,#F2B53A 60%,#D98E1F 100%); color:#3A0610; font-weight:900; letter-spacing:-.01em;
+  box-shadow:0 .14em 0 #3A0610, 0 .4em .9em rgba(20,0,5,.45); }
+.shine { position:absolute; top:-30px; bottom:-30px; width:150px; background:linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.8), rgba(255,255,255,0)); }
+.conf { position:absolute; left:0; top:0; border-radius:2px; }
+#whip { position:absolute; left:0; transform:skewX(-12deg); background:linear-gradient(90deg, rgba(255,240,220,0), rgba(255,240,220,.22), rgba(255,250,240,.38), rgba(255,240,220,.22), rgba(255,240,220,0)); mix-blend-mode:screen; }
+#safe { position:absolute; inset:0; pointer-events:none; z-index:999; display:none; }
+#safe div { position:absolute; background:rgba(0,255,120,.18); border:2px dashed rgba(0,255,120,.8); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg">
+    <div id="pattern"></div>
+    <div id="spot"></div>
+    <canvas id="grain"></canvas>
+    <div id="vignette"></div>
+  </div>
+  <div id="cam"></div>
+  <div id="fx"><div id="whip"></div></div>
+  <div id="safe"></div>
+</div>
+
+<script>
+/* One pure function of time, like the first film, but the phone plays real gameplay filmed from the app
+   (capture-play.mjs), so renderAt(t) waits for that frame to decode before it returns. */
+const qs = new URLSearchParams(location.search);
+const A = qs.get('assets') || '../../../assets';
+const FOOT = qs.get('footage') || 'footage';
+if (qs.get('fonts')) { const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = qs.get('fonts'); document.head.appendChild(link); }
+const SIZES = { '9x16': [1080, 1920], '4x5': [1080, 1350], '1x1': [1080, 1080], '16x9': [1920, 1080] };
+const FMT = SIZES[qs.get('fmt')] ? qs.get('fmt') : '9x16';
+const [W, H] = SIZES[FMT];
+const WIDE = W > H;
+const stage = document.getElementById('stage');
+for (const e of [document.documentElement, document.body, stage]) { e.style.width = W + 'px'; e.style.height = H + 'px'; }
+const cam = document.getElementById('cam');
+const bg = document.getElementById('bg');
+
+/* 120 BPM, every cut on a beat. 20 s film. With ?cut=bumper the page plays the 6 s bumper instead:
+   the hook from 0.5 to 4 s, then the end card from 17 to 19.5 s, without the phone leaving through it. */
+const T = { hook: 0, slam: 2.75, reveal: 4, play: 6, rivals: 9.5, win: 11.5, games: 15, cta: 17, end: 20 };
+const BUMPER = qs.get('cut') === 'bumper';
+const filmTime = b => b < 3.5 ? b + .5 : b + 13.5;
+const CUTS = [T.reveal, T.play, T.rivals, T.win, T.games, T.cta];
+const BEAT = .5;
+
+/* ───────────── Layouts ───────────── */
+const LAYOUTS = {
+  '9x16': {
+    tx: 540, tw: 1000,
+    chat: { left: 60, right: 1020, font: 58, av: 112, group: [440, 38], ys: [548, 718, 930, 1142], scale: .86 },
+    slam: { lines: [[730, 196, 'HERKES', 'gold'], [940, 166, 'EKTİ Mİ?']], seats: { y: 1190, size: 140, gap: 42 } },
+    scrim: 650,
+    phone: { h: 1180, x: 540, y: 1185, ry: 0 }, focus: [540, 1150],
+    reveal: { sticker: [214, 60], lines: [[312, 128, 'Masa hep', ''], [440, 128, 'kurulu!', 'gold']] },
+    words: { y: 236, size: 92 },
+    rivals: { line: [214, 88, 'Rakip hep hazır'], chips: { y: 350, size: 42 } },
+    win: { lines: [[214, 74, 'Son elde hepsini aç,', 'small2'], [312, 124, 'kupayı kaldır!', 'gold']] },
+    games: { line: [214, 88, '3 oyun, tek uygulama'], pills: { y: 340, size: 32 } },
+    cta: { icon: [388, 300], brand: [742, 112], tag: [890, 62], btn: [1010, 700, 142, 72], stores: [1196, 46], fan: { cx: 540, cy: 1560, w: 250, span: 560, spread: 22, lift: 60 } },
+    ctaPhone: null,
+    safe: [[0, 1440, 1080, 480], [944, 880, 136, 560]],
+  },
+  '4x5': {
+    tx: 540, tw: 1000,
+    chat: { left: 60, right: 1020, font: 50, av: 96, group: [104, 34], ys: [196, 350, 538, 726], scale: .86 },
+    slam: { lines: [[470, 168, 'HERKES', 'gold'], [650, 142, 'EKTİ Mİ?']], seats: { y: 880, size: 120, gap: 36 } },
+    scrim: 400,
+    phone: { h: 900, x: 540, y: 875, ry: 0 }, focus: [540, 860],
+    reveal: { sticker: [44, 52], lines: [[126, 104, 'Masa hep', ''], [232, 104, 'kurulu!', 'gold']] },
+    words: { y: 56, size: 80 },
+    rivals: { line: [44, 76, 'Rakip hep hazır'], chips: { y: 160, size: 38 } },
+    win: { lines: [[46, 62, 'Son elde hepsini aç,', 'small2'], [128, 106, 'kupayı kaldır!', 'gold']] },
+    games: { line: [44, 76, '3 oyun, tek uygulama'], pills: { y: 160, size: 30 } },
+    cta: { icon: [130, 250], brand: [420, 96], tag: [548, 54], btn: [650, 640, 128, 64], stores: [812, 42], fan: { cx: 540, cy: 1150, w: 220, span: 500, spread: 22, lift: 54 } },
+    ctaPhone: null,
+    safe: [],
+  },
+  '1x1': {
+    tx: 540, tw: 1020,
+    chat: { left: 90, right: 990, font: 44, av: 86, group: [58, 30], ys: [128, 266, 430, 594], scale: .86 },
+    slam: { lines: [[360, 142, 'HERKES', 'gold'], [514, 122, 'EKTİ Mİ?']], seats: { y: 700, size: 104, gap: 32 } },
+    scrim: 310,
+    phone: { h: 760, x: 540, y: 690, ry: 0 }, focus: [540, 690],
+    reveal: { sticker: [30, 44], lines: [[96, 86, 'Masa hep', ''], [184, 86, 'kurulu!', 'gold']] },
+    words: { y: 36, size: 68 },
+    rivals: { line: [30, 64, 'Rakip hep hazır'], chips: { y: 120, size: 32 } },
+    win: { lines: [[32, 52, 'Son elde hepsini aç,', 'small2'], [100, 90, 'kupayı kaldır!', 'gold']] },
+    games: { line: [30, 64, '3 oyun, tek uygulama'], pills: { y: 120, size: 26 } },
+    cta: { icon: [80, 220], brand: [330, 86], tag: [442, 46], btn: [528, 580, 116, 58], stores: [672, 38], fan: { cx: 540, cy: 932, w: 178, span: 440, spread: 22, lift: 44 } },
+    ctaPhone: null,
+    safe: [],
+  },
+  '16x9': {
+    tx: 560, tw: 1000, hookX: 960,
+    chat: { left: 470, right: 1450, font: 54, av: 104, group: [66, 34], ys: [150, 298, 484, 670], scale: .86 },
+    slam: { lines: [[320, 196, 'HERKES', 'gold'], [536, 166, 'EKTİ Mİ?']], seats: { y: 790, size: 128, gap: 40 } },
+    phone: { h: 960, x: 1450, y: 548, ry: -7 }, focus: [1450, 560],
+    reveal: { sticker: [330, 56], lines: [[430, 136, 'Masa hep', ''], [570, 136, 'kurulu!', 'gold']] },
+    words: { y: 240, size: 132, stack: true, gap: 30 },
+    rivals: { line: [330, 104, 'Rakip hep hazır'], chips: { y: 480, size: 48, stack: true } },
+    win: { lines: [[338, 76, 'Son elde hepsini aç,', 'small2'], [436, 128, 'kupayı kaldır!', 'gold']] },
+    games: { line: [300, 96, '3 oyun,'], line2: [404, 96, 'tek uygulama'], pills: { y: 540, size: 40, stack: true } },
+    cta: { icon: [150, 240], brand: [420, 104], tag: [546, 58], btn: [646, 640, 134, 68], stores: [812, 44], x: 600, fan: null },
+    ctaPhone: { x: 1460, y: 560, s: .92 },
+    safe: [[0, 900, 760, 180], [1580, 880, 340, 130]],
+  },
+};
+const L = LAYOUTS[FMT];
+const TX = L.cta.x ?? W / 2;
+
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, u) => a + (b - a) * u;
+const E = {
+  linear: u => u,
+  outCubic: u => 1 - Math.pow(1 - u, 3),
+  inCubic: u => u * u * u,
+  inOutCubic: u => u < .5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2,
+  inOutQuad: u => u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2,
+  outBack: u => { const c = 1.70158; return 1 + (c + 1) * Math.pow(u - 1, 3) + c * Math.pow(u - 1, 2); },
+  outBackBig: u => { const c = 2.8; return 1 + (c + 1) * Math.pow(u - 1, 3) + c * Math.pow(u - 1, 2); },
+};
+const prog = (t, a, d, e = E.linear) => e(clamp((t - a) / d));
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+function mk(tag, cls, css, html, parent = cam) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (css) e.style.cssText = css;
+  if (html !== undefined) e.innerHTML = html;
+  parent.appendChild(e);
+  return e;
+}
+const CUES = [];
+const cue = (t, s, g = 1, pan = 0) => CUES.push({ t: +t.toFixed(3), s, g, pan: +pan.toFixed(3) });
+
+if (qs.get('safe')) {
+  const box = document.getElementById('safe');
+  box.style.display = 'block';
+  L.safe.forEach(([x, y, w, h]) => mk('div', '', `left:${x}px;top:${y}px;width:${w}px;height:${h}px`, undefined, box));
+}
+
+/* ───────────── Background: crimson, a drifting field of suits, a moving light ───────────── */
+const unit = Math.min(W, H) / 1080;
+const pattern = document.getElementById('pattern');
+{
+  const step = 170 * unit, cols = Math.ceil(W / step) + 3, rows = Math.ceil(H / step) + 3;
+  pattern.style.width = `${cols * step}px`; pattern.style.height = `${rows * step}px`;
+  const glyphs = ['♠', '♥', '♦', '♣'];
+  for (let r = 0; r < rows; r += 1) for (let c = 0; c < cols; c += 1) {
+    const g = glyphs[(r + c * 3) % 4];
+    mk('div', 'suit', `left:${c * step + (r % 2) * step / 2}px;top:${r * step}px;font-size:${step * .38}px;opacity:${g === '♥' || g === '♦' ? .075 : .05};transform:rotate(${(r * 7 + c * 13) % 30 - 15}deg)`, g, pattern);
+  }
+  const spot = document.getElementById('spot'), ss = Math.max(W, H) * 1.05;
+  Object.assign(spot.style, { width: `${ss}px`, height: `${ss}px` });
+  const canvas = document.getElementById('grain');
+  canvas.width = W / 2; canvas.height = H / 2;
+  const ctx = canvas.getContext('2d'), img = ctx.createImageData(canvas.width, canvas.height), r = rng(5);
+  for (let i = 0; i < img.data.length; i += 4) { const v = 96 + r() * 64; img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255; }
+  ctx.putImageData(img, 0, 0);
+  document.getElementById('whip').style.cssText += `top:-300px;height:${H + 600}px;width:${W * .5}px`;
+}
+const bokehRng = rng(808);
+const bokeh = Array.from({ length: 22 }, () => {
+  const size = (14 + bokehRng() * 40) * unit;
+  return { e: mk('div', 'bokeh', `width:${size}px;height:${size}px`, undefined, bg), x: bokehRng() * W, y: bokehRng() * H, v: 10 + bokehRng() * 30, p: bokehRng() * 6.28, a: .12 + bokehRng() * .3 };
+});
+
+/* ───────────── Motion helpers ───────────── */
+function stateAt(init, moves, t) {
+  const s = { ...init };
+  for (let i = 0; i < moves.length; i += 1) {
+    const a = moves[i];
+    if (t < a.t0) break;
+    const end = i + 1 < moves.length ? Math.min(t, moves[i + 1].t0) : t;
+    const u = a.ease(clamp((end - a.t0) / a.dur));
+    for (const k in a.to) { if (k === 'z') s.z = a.to.z; else s[k] = s[k] + (a.to[k] - s[k]) * u; }
+  }
+  return s;
+}
+const MOVERS = [];
+class Mover {
+  constructor(e, w, h, init, on = -9, off = 99) {
+    Object.assign(this, { e, w, h, on, off, moves: [], wobble: null });
+    this.init = { x: 0, y: 0, s: 1, r: 0, rx: 0, ry: 0, o: 1, ...init };
+    MOVERS.push(this);
+  }
+  go(t0, dur, to, ease = E.outCubic) { this.moves.push({ t0, dur, to, ease }); return this; }
+  state(t) { return stateAt(this.init, this.moves, t); }
+  draw(t) {
+    if (t < this.on || t >= this.off) { this.e.style.visibility = 'hidden'; return; }
+    const s = this.state(t), w = this.wobble ? this.wobble(t) : {};
+    const st = this.e.style;
+    st.visibility = s.o <= .002 ? 'hidden' : 'visible';
+    st.opacity = clamp(s.o);
+    st.transform = `translate(${s.x - this.w / 2}px,${s.y - this.h / 2}px) perspective(2800px) rotateX(${s.rx + (w.rx || 0)}deg) rotateY(${s.ry + (w.ry || 0)}deg) rotateZ(${s.r + (w.r || 0)}deg) scale(${s.s})`;
+  }
+}
+const SHOW = [];
+function shown(e, tIn, tOut, o = {}) {
+  e.style.visibility = 'hidden';
+  SHOW.push({ e, tIn, tOut, dy: 60, dOut: -40, inDur: .3, outDur: .14, from: .9, rot: 0, ease: E.outBack, base: '', ...o });
+  return e;
+}
+function drawShown(t) {
+  for (const s of SHOW) {
+    if (t < s.tIn || t >= s.tOut + s.outDur) { s.e.style.visibility = 'hidden'; continue; }
+    const a = prog(t, s.tIn, s.inDur * .5, E.outCubic), b = s.ease(clamp((t - s.tIn) / s.inDur)), c = prog(t, s.tOut, s.outDur, E.inCubic);
+    s.e.style.visibility = 'visible';
+    s.e.style.opacity = a * (1 - c);
+    s.e.style.transform = `${s.base} translateY(${lerp(s.dy, 0, b) + s.dOut * c}px) rotate(${lerp(s.rot, 0, b)}deg) scale(${lerp(s.from, 1, b)})`;
+  }
+}
+// Kinetic slam: big and tilted, landing with a bounce.
+const SLAM = { dy: 0, from: 2.1, rot: -8, inDur: .32, ease: E.outBackBig };
+const column = `left:${L.tx - L.tw / 2}px;width:${L.tw}px;`;
+const HX = L.hookX ?? W / 2;
+const hookColumn = `left:${HX - 700}px;width:1400px;`;
+function lineEl(top, size, html, cls, z = 60, col = column) {
+  const kind = cls === 'small2' ? 'small' : 'head' + (cls === 'gold' ? ' gold' : '');
+  return mk('div', `abs ${kind}`, `${col}top:${top}px;font-size:${size}px;z-index:${z}`, html);
+}
+// A centred row (or column) whose children appear one by one; their places are fixed from the start.
+const row = (spec, col = column) => mk('div', '', `position:absolute;${col}top:${spec.y}px;display:flex;${spec.stack ? 'flex-direction:column;' : ''}justify-content:center;align-items:center;gap:${spec.gap ?? Math.round(spec.size * .4)}px;z-index:62`);
+const avatarSrc = name => `${A}/avatars/character-${name}.png`;
+
+/* ───────────── 1. Hook: you ask, everyone bails ───────────── */
+const C = L.chat;
+const chat = mk('div', '', `width:${W}px;height:${H}px;z-index:40`); chat.id = 'chat';
+const chatOut = T.reveal - .14;
+const groupPill = mk('div', 'group', `left:${(C.left + C.right) / 2}px;top:${C.group[0]}px;font-size:${C.group[1]}px`,
+  `<span class="avs">${['ada', 'emir', 'kemal'].map(n => `<span><img src="${avatarSrc(n)}" decoding="sync"></span>`).join('')}</span>Amerikano Ekibi`, chat);
+shown(groupPill, -1, chatOut, { dy: 0, from: 1, base: 'translateX(-50%)' });
+const MESSAGES = [
+  { who: null, text: 'Bu akşam Amerikano? 🃏', t: -1, time: '20:41' },
+  { who: 'ada', name: 'Ada', color: '#A0168C', text: 'Ben yokum 😕', t: .5, time: '20:42' },
+  { who: 'emir', name: 'Emir', color: '#D35A12', text: 'Bu akşam olmaz 🙈', t: 1.15, time: '20:42' },
+  { who: 'kemal', name: 'Kemal', color: '#2A62A8', text: 'Haftaya? 🙏', t: 2.2, typing: 1.62, time: '20:43' },
+];
+MESSAGES.forEach((m, i) => {
+  const me = !m.who;
+  const pos = me ? `right:${W - C.right}px` : `left:${C.left}px`;
+  const av = me ? '' : `<span class="av" style="width:${C.av}px;height:${C.av}px"><img src="${avatarSrc(m.who)}" decoding="sync"></span>`;
+  const body = me ? `${m.text}<span class="time">${m.time} ✓✓</span>` : `<span class="who" style="color:${m.color}">${m.name}</span>${m.text}<span class="time">${m.time}</span>`;
+  const e = mk('div', `msg${me ? ' me' : ''}`, `${pos};top:${C.ys[i]}px;font-size:${C.font}px`, `${av}<span class="bubble">${body}</span>`, chat);
+  shown(e, m.t, chatOut, m.t < 0 ? { dy: 0, from: 1 } : { dy: 40, from: .6, inDur: .28, ease: E.outBackBig });
+  if (m.t >= 0) cue(m.t, 'pop', .8, me ? .3 : -.3);
+  if (m.typing) {
+    const typing = mk('div', 'msg', `${pos};top:${C.ys[i]}px;font-size:${C.font}px`, `${av}<span class="bubble"><span class="who" style="color:${m.color}">${m.name}</span><span class="dots"><i></i><i></i><i></i></span></span>`, chat);
+    shown(typing, m.typing, m.t - .02, { dy: 30, from: .7, inDur: .22, outDur: .04, dOut: 0 });
+    m.dots = [...typing.querySelectorAll('.dots i')];
+    cue(m.typing, 'tick', .25, -.3);
+  }
+});
+const dotsOf = MESSAGES.find(m => m.dots).dots;
+// The slam: the chat sinks back, the question lands.
+const S = L.slam;
+S.lines.forEach(([top, size, html, cls], i) => shown(lineEl(top, size, html, cls, 62, hookColumn), T.slam + i * .25, chatOut, SLAM));
+cue(T.slam, 'impact', .9); cue(T.slam + .25, 'impact', .7);
+{
+  const n = 3, sz = S.seats.size, total = n * sz + (n - 1) * S.seats.gap;
+  ['ada', 'emir', 'kemal'].forEach((name, i) => {
+    const x = HX - total / 2 + i * (sz + S.seats.gap);
+    const e = mk('div', '', `position:absolute;left:${x}px;top:${S.seats.y}px;width:${sz}px;height:${sz}px;z-index:61;font-size:${sz}px`,
+      `<div class="av" style="width:100%;height:100%;filter:grayscale(.55) brightness(.92)"><img src="${avatarSrc(name)}" decoding="sync"></div><div class="x">✕</div>`);
+    shown(e, T.slam + .45 + i * .09, chatOut, { dy: 30, from: .4, inDur: .26, ease: E.outBackBig });
+    cue(T.slam + .45 + i * .09, 'tap', .55, (i - 1) * .4);
+  });
+}
+
+/* ───────────── The phone, with the real game in it ───────────── */
+const SCREEN = { w: 360, h: 780 };                 // CSS pixels of the captured screen
+const ASPECT = SCREEN.w / SCREEN.h;
+const BEZEL = .034;
+function makePhone(h) {
+  const sh = h / (1 + 2 * BEZEL * ASPECT), sw = sh * ASPECT, b = BEZEL * sw;
+  const w = sw + 2 * b, sr = sw * .125;
+  const e = mk('div', 'phone', `width:${w}px;height:${h}px;z-index:20`);
+  e.innerHTML = `<div class="body" style="border-radius:${sr + b}px"></div>
+    <div class="scr" style="left:${b}px;top:${b}px;width:${sw}px;height:${sh}px;border-radius:${sr}px">
+      <img class="feed" decoding="sync">
+    </div>
+    <div class="glare" style="left:${b}px;top:${b}px;width:${sw}px;height:${sh}px;border-radius:${sr}px"></div>`;
+  const scr = e.querySelector('.scr');
+  return { e, w, h, sw, sh, b, k: sw / SCREEN.w, scr, feed: scr.querySelector('.feed') };
+}
+const PH = L.phone;
+const phone = makePhone(PH.h);
+const full = (s = 1) => ({ x: PH.x, y: PH.y, s, rx: 0, ry: PH.ry, r: 0 });
+// Put screen point (u, v) at the focus position, magnified s times.
+// `lift` raises the focus by that share of the frame, for points high on the screen.
+const aim = (u, v, s, lift = 0) => {
+  const px = phone.b + u * phone.k, py = phone.b + v * phone.k;
+  return { x: L.focus[0] - (px - phone.w / 2) * s, y: L.focus[1] - H * lift - (py - phone.h / 2) * s, s, rx: 0, ry: PH.ry * .5, r: 0 };
+};
+const below = { x: PH.x, y: H + PH.h * .62, s: .82, rx: 24, ry: PH.ry, r: WIDE ? 0 : -6 };
+const rig = new Mover(phone.e, phone.w, phone.h, below, T.reveal - .1, BUMPER ? 16.9 : 99);
+rig.go(T.reveal - .04, .6, full(), E.outBack);
+rig.go(6.0, .38, aim(176, 205, 1.55, .1), E.inOutCubic);     // the stock: draw
+rig.go(6.86, .42, aim(180, 655, 1.36), E.inOutCubic);         // the hand: smart arrange
+rig.go(7.92, .4, aim(250, 476, 1.5), E.inOutCubic);           // your set and run land on the table
+rig.go(9.42, .34, aim(214, 430, 1.12), E.inOutCubic);         // follow the discard up
+rig.go(9.86, .6, full(), E.inOutCubic);                       // the bots play
+rig.go(11.42, .42, aim(214, 640, 1.34), E.inOutCubic);        // the final hand
+rig.go(12.08, .34, aim(212, 320, 1.26), E.inOutCubic);        // the last card goes to the pile
+rig.go(12.46, .5, full(), E.outBack);                         // the trophy
+rig.go(14.9, .42, aim(180, 250, 1.3), E.inOutCubic);          // the game switcher
+rig.go(16.86, .5, L.ctaPhone ? { ...L.ctaPhone, rx: 0, ry: PH.ry, r: 0 } : { ...below, y: H + PH.h * .7 }, L.ctaPhone ? E.inOutCubic : E.inCubic);
+rig.wobble = t => ({ ry: Math.sin(t * 1.25) * 2.2, rx: Math.sin(t * .9 + 1) * 1.2 });
+
+// Which captured frame the screen shows at time t; straight lines between these keys, within one clip.
+const CLIP_FRAMES = { home: 237, open: 353, final: 353 };
+const FOOTAGE = [
+  [T.reveal, 'home', 0], [T.play, 'home', 60],
+  [T.play, 'open', 84], [6.25, 'open', 96], [7.25, 'open', 138], [8.25, 'open', 177], [9.5, 'open', 225], [9.767, 'open', 233], [11.5, 'open', 300],
+  [11.5, 'final', 114], [12.15, 'final', 135], [12.417, 'final', 143], [15.0, 'final', 220],
+  [15.0, 'home', 118], [15.25, 'home', 138], [15.75, 'home', 171], [16.25, 'home', 204], [17.0, 'home', 236],
+];
+function footageAt(t) {
+  let i = FOOTAGE.length - 1;
+  while (i > 0 && FOOTAGE[i][0] > t) i -= 1;
+  const a = FOOTAGE[i], b = FOOTAGE[i + 1];
+  let f = a[2];
+  if (b && b[1] === a[1] && t > a[0]) f = a[2] + (b[2] - a[2]) * clamp((t - a[0]) / (b[0] - a[0]));
+  return { clip: a[1], frame: Math.max(0, Math.min(CLIP_FRAMES[a[1]] - 1, Math.round(f))) };
+}
+const footSrc = ({ clip, frame }) => `${FOOT}/${clip}/f${String(frame).padStart(5, '0')}.jpg`;
+
+// A finger on the glass: it comes down just before each tap, and follows each drag.
+const TAPS = [[6.25, 135, 191], [7.25, 220, 423], [8.25, 180, 548], [15.25, 180, 193], [15.75, 273, 193], [16.25, 87, 193]];
+const DRAGS = [[9.5, 275, 727, 208, 191], [12.15, 237, 727, 208, 191]];
+const DRAG_TIME = 8 / 30;
+const finger = mk('div', 'finger', '', undefined, phone.scr);
+const ripple = mk('div', 'ripple', '', undefined, phone.scr);
+const flash = mk('div', 'flash', '', undefined, phone.scr);
+TAPS.forEach(([t], i) => cue(t, i < 3 ? 'tap' : 'tick', i < 3 ? .9 : .6, .15));
+cue(6.25 + .12, 'card-draw-1', .9, .1);
+cue(7.25 + .05, 'riffle', .55);
+cue(8.25 + .04, 'meld-2', .8); cue(8.25 + .04, 'chime:D6,G6', .6);
+DRAGS.forEach(([t]) => { cue(t, 'card-draw-2', .7, .2); cue(t + DRAG_TIME, 'card-place-3', .9, .1); });
+// Where the set and the run land, to light them up.
+const MELDS = { x: 160, y: 444, w: 182, h: 60 };
+
+/* ───────────── 2-5. Supers over the phone ───────────── */
+const scrim = L.scrim ? mk('div', '', `width:${W}px;height:${L.scrim}px;z-index:50;background:linear-gradient(180deg, rgba(58,5,16,.96) 0%, rgba(58,5,16,.9) 55%, rgba(58,5,16,0) 100%)`) : null;
+if (scrim) scrim.id = 'scrim';
+const R = L.reveal;
+shown(mk('div', 'abs', `${column}top:${R.sticker[0]}px;z-index:62`, `<span class="sticker" style="font-size:${R.sticker[1]}px;transform:rotate(-3deg)">DERT ETME!</span>`), T.reveal + .02, T.play - .14, SLAM);
+R.lines.forEach(([top, size, html, cls], i) => shown(lineEl(top, size, html, cls), T.reveal + .3 + i * .12, T.play - .14, { dy: 50, from: .8, inDur: .3 }));
+cue(T.reveal, 'impact', 1);
+
+// Draw. Arrange. Open.
+const WD = L.words;
+const wordRow = row(WD);
+const words = ['Çek.', 'Diz.', 'Aç!'].map((text, i) => {
+  const t = [6.25, 7.25, 8.25][i];
+  const e = mk('div', 'word', '', `<span class="sticker${i === 2 ? ' goldbg' : ''}" style="font-size:${WD.size}px">${text}</span>`, wordRow);
+  shown(e, t, T.rivals - .14, { ...SLAM, from: 1.9, rot: i % 2 ? 7 : -7 });
+  return { e, t };
+});
+const RV = L.rivals;
+shown(lineEl(RV.line[0], RV.line[1], RV.line[2], ''), T.rivals + .05, T.win - .14, { dy: 40, from: .85 });
+const ICONS = {
+  robot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="8" width="15" height="11.5" rx="3"/><path d="M12 8V4.6"/><circle cx="12" cy="3.4" r="1.2"/><circle cx="9.3" cy="13.4" r="1.3" fill="currentColor" stroke="none"/><circle cx="14.7" cy="13.4" r="1.3" fill="currentColor" stroke="none"/><path d="M9.8 16.6h4.4"/></svg>',
+  globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3.4 9h17.2M3.4 15h17.2"/><path d="M12 3c2.6 2.6 3.8 5.6 3.8 9s-1.2 6.4-3.8 9c-2.6-2.6-3.8-5.6-3.8-9S9.4 5.6 12 3z"/></svg>',
+  people: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.2" r="3.3"/><path d="M2.8 20.2c0-3.6 2.8-6.2 6.2-6.2s6.2 2.6 6.2 6.2"/><circle cx="17.2" cy="9.2" r="2.6"/><path d="M16.4 14.3c2.9.3 5 2.5 5 5.9"/></svg>',
+};
+const chipRow = row(RV.chips);
+[['robot', 'Botlar'], ['globe', 'Online'], ['people', 'Arkadaşlar']].forEach(([icon, label], i) => {
+  const e = mk('div', 'chip', `font-size:${RV.chips.size}px`, `<span class="ic">${ICONS[icon]}</span>${label}`, chipRow);
+  shown(e, T.rivals + .3 + i * .2, T.win - .14, { dy: 30, from: .5, inDur: .28, ease: E.outBackBig });
+  cue(T.rivals + .3 + i * .2, 'pop', .55, (i - 1) * .3);
+});
+const WN = L.win;
+shown(lineEl(WN.lines[0][0], WN.lines[0][1], WN.lines[0][2], WN.lines[0][3]), T.win + .1, T.games - .14, { dy: 30, from: .9 });
+const trophyAt = 12.5;
+shown(lineEl(WN.lines[1][0], WN.lines[1][1], WN.lines[1][2], WN.lines[1][3]), trophyAt, T.games - .14, SLAM);
+cue(trophyAt, 'impact', 1); cue(trophyAt, 'chime:D6,A6', .8); cue(trophyAt + .05, 'meld-1', .6);
+const GM = L.games;
+shown(lineEl(GM.line[0], GM.line[1], GM.line[2], ''), T.games + .05, T.cta - .14, { dy: 40, from: .85 });
+if (GM.line2) shown(lineEl(GM.line2[0], GM.line2[1], GM.line2[2], 'gold'), T.games + .15, T.cta - .14, { dy: 40, from: .85 });
+// In the app's own order; each lights up when its tab is tapped (Rummy, Contract, then back to Amerikano).
+const pillRow = row(GM.pills);
+const gamePills = [['Amerikano', 16.25], ['Klasik Rummy', 15.25], ['Contract Rummy', 15.75]].map(([label, t], i) => {
+  const e = mk('div', 'pill', `font-size:${GM.pills.size}px`, `<i class="on"></i><span>${label}</span>`, pillRow);
+  shown(e, T.games + .2 + i * .1, T.cta - .14, { dy: 26, from: .7, inDur: .26 });
+  return { e, on: e.querySelector('.on'), text: e.querySelector('span'), t };
+});
+const pillOrder = [...gamePills].sort((a, b) => a.t - b.t);
+
+/* ───────────── 6. End card ───────────── */
+const CT = L.cta;
+const cIn = T.cta;
+const [iconTop, iconSize] = CT.icon;
+const halo = mk('div', 'halo', `left:${TX - iconSize * 1.4}px;top:${iconTop + iconSize / 2 - iconSize * 1.4}px;width:${iconSize * 2.8}px;height:${iconSize * 2.8}px;z-index:30`);
+shown(halo, cIn, 99, { dy: 0, from: .4, inDur: .5, ease: E.outCubic });
+const icon = mk('div', 'icon', `left:${TX - iconSize / 2}px;top:${iconTop}px;width:${iconSize}px;height:${iconSize}px;border-radius:${iconSize * .23}px;z-index:64`, `<img src="${A}/images/icon.png" decoding="sync">`);
+shown(icon, cIn, 99, { dy: 30, from: .3, inDur: .38, ease: E.outBackBig });
+const ctaCol = `left:${TX - 520}px;width:1040px;`;
+shown(mk('div', 'abs head gold', `${ctaCol}top:${CT.brand[0]}px;font-size:${CT.brand[1]}px;letter-spacing:.04em;z-index:64`, 'AMERİKANO'), cIn + .08, 99, { dy: 40, from: .85 });
+shown(mk('div', 'abs head', `${ctaCol}top:${CT.tag[0]}px;font-size:${CT.tag[1]}px;z-index:64`, 'Bu akşam masa senin!'), cIn + .2, 99, { dy: 40, from: .85 });
+const [btnTop, btnW, btnH, btnFont] = CT.btn;
+const btnWrap = mk('div', 'abs', `${ctaCol}top:${btnTop}px;z-index:64`, `<div class="btn" style="width:${btnW}px;height:${btnH}px;font-size:${btnFont}px">Ücretsiz indir<div class="shine"></div></div>`);
+shown(btnWrap, cIn + .34, 99, { dy: 50, from: .7, ease: E.outBackBig, inDur: .34 });
+const btn = btnWrap.querySelector('.btn'), btnShine = btnWrap.querySelector('.shine');
+shown(mk('div', 'abs small', `${ctaCol}top:${CT.stores[0]}px;font-size:${CT.stores[1]}px;z-index:64`, 'App Store · Google Play'), cIn + .46, 99, { dy: 30 });
+cue(cIn, 'impact', .9); cue(cIn + .02, 'chime:D6,F#6', .8); cue(cIn + .34, 'pop', .6);
+
+const CARDS = [];
+function cardFile(code) {
+  if (code === 'JK') return 'joker';
+  const suit = { s: 'spades', h: 'hearts', d: 'diamonds', c: 'clubs' }[code.slice(-1)];
+  const rank = code.slice(0, -1);
+  return `${{ A: 'ace', K: 'king', Q: 'queen', J: 'jack' }[rank] || rank}-${suit}`;
+}
+class Card {
+  constructor(code, init, on = 0) {
+    Object.assign(this, { code, on, moves: [] });
+    this.init = { x: W / 2, y: H / 2, w: 200, r: 0, z: 20, o: 1, ...init };
+    this.e = mk('div', 'card', '', `<div class="face"><img src="${A}/cards/${cardFile(code)}.png" decoding="sync"></div>`);
+    this.face = this.e.children[0];
+    this.face.style.boxShadow = '0 18px 40px rgba(20,0,5,.5), 0 1px 3px rgba(0,0,0,.4)';
+    CARDS.push(this);
+  }
+  go(t0, dur, to, ease = E.outCubic) { this.moves.push({ t0, dur, to, ease }); return this; }
+  draw(t) {
+    if (t < this.on) { this.e.style.visibility = 'hidden'; return; }
+    const s = stateAt(this.init, this.moves, t);
+    this.e.style.visibility = 'visible';
+    this.e.style.zIndex = Math.round(s.z);
+    this.e.style.transform = `translate(${s.x - 160}px,${s.y - 224}px) rotateZ(${s.r}deg) scale(${s.w / 320})`;
+  }
+}
+function fan(i, n, o) {
+  const u = n > 1 ? (i - (n - 1) / 2) / ((n - 1) / 2) : 0;
+  return { x: o.cx + u * o.span / 2, y: o.cy + Math.pow(Math.abs(u), 1.7) * o.lift, r: u * o.spread, w: o.w, z: 32 + i };
+}
+if (CT.fan) ['Qd', 'Qs', 'Qh', 'JK', 'Ad'].forEach((code, i) => {
+  const p = fan(i, 5, CT.fan);
+  new Card(code, { ...p, y: p.y + 640, z: 30 + (i === 2 ? 5 : i) }, cIn).go(cIn + .12 + Math.abs(i - 2) * .05, .44, { y: p.y }, E.outBack);
+});
+const confRng = rng(2026);
+const confColors = ['#FFD36A', '#FFF4E2', '#FF5470', '#3FBF83', '#F2B53A', '#FFE7A3'];
+const makeConfetti = (n, seed) => { const r = rng(seed); return Array.from({ length: n }, () => {
+  const w = 10 + r() * 12, h = 14 + r() * 18, angle = -Math.PI / 2 + (r() - .5) * 2.9, speed = (900 + r() * 1900) * Math.max(.75, unit);
+  return { e: mk('div', 'conf', `width:${w}px;height:${h}px;background:${confColors[Math.floor(r() * confColors.length)]};z-index:63`), vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, r0: r() * 360, w: (r() - .5) * 900, ph: r() * 6.28, fl: 5 + r() * 9 };
+}); };
+const bursts = [
+  { at: trophyAt, x: PH.x, y: PH.y - PH.h * .18, parts: makeConfetti(WIDE ? 70 : 60, 31) },
+  { at: cIn, x: TX, y: iconTop + iconSize / 2, parts: makeConfetti(WIDE ? 100 : 84, 77) },
+];
+
+CUTS.forEach(t => cue(t - .04, 'whoosh', 1));
+
+/* ───────────── The frame function ───────────── */
+let shownSrc = '';
+async function renderAt(t) {
+  if (BUMPER) t = filmTime(t);
+  // Background
+  const drift = t * 14;
+  pattern.style.transform = `translate(${-170 * unit + (drift % (170 * unit))}px,${-170 * unit + ((drift * .6) % (170 * unit))}px)`;
+  const spot = document.getElementById('spot'), ss = parseFloat(spot.style.width);
+  spot.style.transform = `translate(${W / 2 - ss / 2 + Math.sin(t * .45) * W * .18}px,${H * .42 - ss / 2 + Math.cos(t * .37) * H * .08}px)`;
+  const beat = t / BEAT, pulse = Math.exp(-5 * (beat - Math.floor(beat)));
+  spot.style.opacity = .8 + .2 * pulse;
+  bokeh.forEach(b => {
+    const y = ((b.y - b.v * t) % H + H) % H;
+    b.e.style.transform = `translate(${b.x + Math.sin(t * .6 + b.p) * 20}px,${y}px)`;
+    b.e.style.opacity = b.a * (.6 + .4 * Math.sin(t * 1.3 + b.p));
+  });
+
+  // Camera: a kick on each cut, a shake on the slams, a slow push.
+  let last = 0; for (const c of CUTS) if (t >= c) last = c;
+  const local = t - last, kick = last === 0 ? 0 : .035 * Math.exp(-local * 9);
+  let sx = 0, sy = 0;
+  for (const s of [T.slam, T.slam + .25, trophyAt]) {
+    const a = t - s;
+    if (a >= 0 && a < .35) { const k = 16 * unit * Math.exp(-a * 12); sx += Math.sin(a * 90) * k; sy += Math.cos(a * 77) * k; }
+  }
+  cam.style.transform = `translate(${sx}px,${sy}px) scale(${1 + kick + local * .005})`;
+
+  // Whip of light on each cut.
+  const whip = document.getElementById('whip');
+  let sw = -1; for (const c of CUTS) if (t >= c - .12 && t < c + .14) sw = (t - (c - .12)) / .26;
+  whip.style.visibility = sw < 0 ? 'hidden' : 'visible';
+  if (sw >= 0) whip.style.transform = `translateX(${lerp(-W * .6, W * 1.1, sw)}px) skewX(-12deg)`;
+
+  // Chat sinks back for the slam.
+  const sink = prog(t, T.slam - .05, .3, E.outCubic);
+  chat.style.transform = `translateY(${-H * .03 * sink}px) scale(${1 - (1 - C.scale) * sink})`;
+  chat.style.opacity = 1 - .72 * sink;
+  chat.style.filter = sink > .01 ? `blur(${3 * sink}px)` : '';
+  dotsOf.forEach((d, i) => { d.style.transform = `translateY(${-Math.max(0, Math.sin(t * 9 - i * .8)) * 8}px)`; d.style.opacity = .45 + .55 * Math.max(0, Math.sin(t * 9 - i * .8)); });
+
+  if (scrim) { const v = prog(t, T.reveal + .2, .3) * (1 - prog(t, T.cta - .1, .25)); scrim.style.opacity = v; scrim.style.visibility = v > 0 ? 'visible' : 'hidden'; }
+  drawShown(t);
+  MOVERS.forEach(m => m.draw(t));
+  CARDS.forEach(c => c.draw(t));
+
+  // Draw / arrange / open: the newest word is the big one.
+  words.forEach(({ e, t: at }, i) => {
+    const next = words[i + 1]?.t ?? 99;
+    const settle = prog(t, next, .2, E.outCubic);
+    SHOW.find(x => x.e === e).base = `scale(${1 - .12 * settle})`;
+    e.style.filter = settle > .01 ? `saturate(${1 - .5 * settle}) brightness(${1 - .12 * settle})` : '';
+  });
+  // The game being shown lights its pill.
+  pillOrder.forEach((p, i) => {
+    const on = prog(t, p.t, .12) * (1 - (pillOrder[i + 1] ? prog(t, pillOrder[i + 1].t, .12) : 0));
+    p.on.style.opacity = on;
+    p.text.style.color = on > .5 ? '#9B1530' : '#FFE9EC';
+    SHOW.find(x => x.e === p.e).base = `scale(${1 + .08 * on})`;
+  });
+
+  // The real game on the phone.
+  const src = footSrc(footageAt(t));
+  if (src !== shownSrc) { phone.feed.src = src; shownSrc = src; await phone.feed.decode().catch(() => { throw new Error('footage: ' + src); }); }
+
+  // Finger and ripple, in screen pixels scaled to the phone.
+  const k = phone.k, fd = 30 * k;
+  let fv = 0, fx = 0, fy = 0, press = 0;
+  for (const [at, x, y] of TAPS) {
+    const a = t - at;
+    if (a > -.22 && a < .28) { fv = a < 0 ? prog(a, -.22, .12) : 1 - prog(a, .1, .18); fx = x; fy = y; press = a >= 0 && a < .12 ? 1 - a / .12 : 0; }
+  }
+  for (const [at, x0, y0, x1, y1] of DRAGS) {
+    const a = t - at;
+    if (a > -.22 && a < DRAG_TIME + .25) {
+      const u = clamp(a / DRAG_TIME), e = E.inOutQuad(u);
+      fv = a < 0 ? prog(a, -.22, .12) : 1 - prog(a, DRAG_TIME + .05, .2);
+      fx = x0 + (x1 - x0) * e; fy = y0 + (y1 - y0) * e - Math.sin(u * Math.PI) * 40;
+    }
+  }
+  finger.style.visibility = fv > 0 ? '' : 'hidden';
+  finger.style.opacity = fv * .9;
+  finger.style.width = finger.style.height = `${fd}px`;
+  finger.style.transform = `translate(${fx * k - fd / 2}px,${fy * k - fd / 2}px) scale(${1 - .18 * press})`;
+  let rv = 0, rx = 0, ry = 0, rd = 0;
+  for (const [at, x, y] of TAPS) { const a = t - at; if (a >= 0 && a < .45) { rv = 1 - a / .45; rx = x; ry = y; rd = (24 + 90 * E.outCubic(a / .45)) * k; } }
+  ripple.style.visibility = rv > 0 ? '' : 'hidden';
+  ripple.style.opacity = rv;
+  ripple.style.width = ripple.style.height = `${rd}px`;
+  ripple.style.transform = `translate(${rx * k - rd / 2}px,${ry * k - rd / 2}px)`;
+  // Your set and run light up as they land.
+  const fl = t >= 8.28 && t < 9.4 ? Math.exp(-(t - 8.28) * 2.2) * (1 - prog(t, 9.2, .2)) : 0;
+  flash.style.visibility = fl > .01 ? '' : 'hidden';
+  flash.style.opacity = fl;
+  Object.assign(flash.style, { left: `${(MELDS.x - 8) * k}px`, top: `${(MELDS.y - 8) * k}px`, width: `${(MELDS.w + 16) * k}px`, height: `${(MELDS.h + 16) * k}px` });
+
+  // End card life
+  const bp = t > cIn + .6 ? Math.exp(-4.5 * (beat - Math.floor(beat))) : 0;
+  btn.style.transform = `scale(${1 + .03 * bp})`;
+  const sh = (((t - cIn - .8) % 1.5) + 1.5) % 1.5;
+  btnShine.style.transform = `translateX(${lerp(-180, btnW + 100, clamp(sh / .55))}px) skewX(-20deg)`;
+  btnShine.style.visibility = t > cIn + .8 ? 'visible' : 'hidden';
+  SHOW.find(x => x.e === icon).base = `rotate(${t > cIn ? Math.sin((t - cIn) * 1.6) * 1.6 : 0}deg)`;
+  for (const b of bursts) b.parts.forEach(c => {
+    const a = t - b.at;
+    if (a < 0 || a > 2) { c.e.style.visibility = 'hidden'; return; }
+    const kk = 3.1, f = (1 - Math.exp(-kk * a)) / kk;
+    c.e.style.visibility = 'visible';
+    c.e.style.opacity = 1 - prog(a, 1.3, .6);
+    c.e.style.transform = `translate(${b.x + c.vx * f}px,${b.y + c.vy * f + .5 * 1500 * a * a}px) rotate(${c.r0 + c.w * a}deg) scaleX(${Math.cos(c.ph + c.fl * a)})`;
+  });
+}
+window.renderAt = renderAt;
+window.CUES = CUES;
+window.FILM = { fmt: FMT, width: W, height: H, end: BUMPER ? 6 : T.end };
+window.ready = Promise.all([...document.images].filter(i => i.getAttribute('src')).map(i => i.decode().catch(() => { throw new Error('image: ' + i.src); })))
+  .then(() => document.fonts.load('900 64px Inter')).then(() => document.fonts.load('700 64px Inter')).then(() => document.fonts.ready)
+  .then(() => renderAt(+qs.get('t') || 0)).then(() => true);
+</script>
+</body>
+</html>

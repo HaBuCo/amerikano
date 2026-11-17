@@ -15,7 +15,9 @@ try {
   const signIn = await guest.auth.signInAnonymously();
   if (signIn.error) throw signIn.error;
   const userId = signIn.data.user.id;
-  for (const key of ['character-lara', 'character-kemal', 'character-emir', 'character-ada']) {
+  const keys = ['character-lara', 'character-kemal', 'character-emir', 'character-ada',
+    'character-elif', 'character-can', 'character-selin', 'character-murat', 'character-nermin'];
+  for (const key of keys) {
     const { data, error } = await guest.from('profiles').update({ avatar_key: key })
       .eq('user_id', userId).select('avatar_key').single();
     if (error) throw error;
@@ -24,7 +26,7 @@ try {
   const invalid = await guest.from('profiles').update({ avatar_key: 'invalid-portrait' })
     .eq('user_id', userId).select('avatar_key');
   assert.ok(invalid.error, 'unknown avatar keys must remain blocked');
-  console.log('Four character avatars saved; unknown key rejected.');
+  console.log(`${keys.length} character avatars saved; unknown key rejected.`);
 } finally {
   const { data } = await guest.auth.getSession();
   if (data.session) {

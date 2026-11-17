@@ -198,7 +198,7 @@ export function GameTutorial({ visible, onDone, variant = 'amerikano', openingMi
 }
 
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: '#09271e', paddingHorizontal: 22, paddingTop: 14, paddingBottom: 18 },
+  page: { flex: 1, backgroundColor: '#072a22', paddingHorizontal: 22, paddingTop: 14, paddingBottom: 18 },
   topRow: { width: '100%', maxWidth: 720, alignSelf: 'center', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   eyebrow: { color: p.gold, fontSize: 11, letterSpacing: 2.2, fontWeight: '900' }, topCaption: { color: p.muted, fontSize: 11, marginTop: 5 }, skip: { color: p.cream, fontSize: 14, padding: 10 },
   progress: { width: '100%', maxWidth: 720, alignSelf: 'center', flexDirection: 'row', gap: 6, marginTop: 14 }, progressItem: { flex: 1, height: 4, borderRadius: 2, backgroundColor: '#ffffff20' }, progressActive: { backgroundColor: p.gold },
@@ -209,7 +209,7 @@ const s = StyleSheet.create({
   scroll: { flex: 1 }, content: { width: '100%', maxWidth: 720, alignSelf: 'center', paddingVertical: 20, gap: 13 },
   visualBox: { minHeight: 150, borderRadius: 22, borderWidth: 1, borderColor: p.line, backgroundColor: '#ffffff08', padding: 16, alignItems: 'center', justifyContent: 'center' },
   counter: { color: p.gold, fontSize: 10, fontWeight: '900', letterSpacing: 1.5 }, title: { color: p.cream, fontSize: 30, lineHeight: 35, fontWeight: '900', letterSpacing: -0.5 },
-  body: { color: '#c4d2c9', fontSize: 15, lineHeight: 23 }, points: { gap: 9 }, pointRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 }, pointNumber: { width: 23, height: 23, borderRadius: 12, textAlign: 'center', paddingTop: 3, overflow: 'hidden', backgroundColor: '#d9a44124', color: p.gold, fontSize: 11, fontWeight: '900' }, pointText: { color: p.cream, fontSize: 14, lineHeight: 21, flex: 1 },
+  body: { color: '#c4d2c9', fontSize: 15, lineHeight: 23 }, points: { gap: 9 }, pointRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 }, pointNumber: { width: 23, height: 23, borderRadius: 12, textAlign: 'center', paddingTop: 3, overflow: 'hidden', backgroundColor: '#e8be7024', color: p.gold, fontSize: 11, fontWeight: '900' }, pointText: { color: p.cream, fontSize: 14, lineHeight: 21, flex: 1 },
   tip: { borderLeftWidth: 3, borderLeftColor: p.gold, paddingLeft: 12, paddingVertical: 4 }, tipLabel: { color: p.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1.3 }, tipText: { color: p.muted, fontSize: 12, lineHeight: 18, marginTop: 3 },
   actions: { flexDirection: 'row', gap: 10, width: '100%', maxWidth: 720, alignSelf: 'center', paddingTop: 10 },
   primary: { flex: 2, minHeight: 54, borderRadius: 14, backgroundColor: p.gold, alignItems: 'center', justifyContent: 'center' }, primaryText: { color: p.ink, fontSize: 16, fontWeight: '900' },

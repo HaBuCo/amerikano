@@ -43,6 +43,8 @@ const subscribe = (listener: () => void) => {
   return () => { listeners.delete(listener); };
 };
 export const useSocial = () => useSyncExternalStore(subscribe, () => snapshot, () => snapshot);
+/** The last failed friend action's message, read right after an awaited action resolves to false. */
+export const socialError = () => snapshot.error;
 
 async function functionError(error: unknown) {
   if (error && typeof error === 'object' && 'context' in error) {

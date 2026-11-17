@@ -248,7 +248,7 @@ const s = StyleSheet.create({
   pressed: { opacity: 0.8 },
   table: { borderWidth: 1, borderColor: p.line, borderRadius: 18, overflow: 'hidden', backgroundColor: p.surface },
   row: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: p.line },
-  rowCurrent: { backgroundColor: '#d9a44118' },
+  rowCurrent: { backgroundColor: '#e8be7018' },
   roundCell: { width: 72, paddingHorizontal: 10, paddingVertical: 7, justifyContent: 'center' },
   headerCell: { paddingVertical: 11 },
   headerText: { color: p.gold, fontSize: 10, letterSpacing: 0.8, fontWeight: '900' },

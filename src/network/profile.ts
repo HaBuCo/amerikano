@@ -10,8 +10,14 @@ export const AVATAR_OPTIONS = [
   { key: 'character-kemal', label: 'Kemal', color: '#a77b39', symbol: '', image: avatarPortraits.kemal },
   { key: 'character-emir', label: 'Emir', color: '#a75b37', symbol: '', image: avatarPortraits.emir },
   { key: 'character-ada', label: 'Ada', color: '#795083', symbol: '', image: avatarPortraits.ada },
+  // Needs migration 202611090001_more_character_avatars on the server before release.
+  { key: 'character-elif', label: 'Elif', color: '#376b9a', symbol: '', image: avatarPortraits.elif },
+  { key: 'character-can', label: 'Can', color: '#247b83', symbol: '', image: avatarPortraits.can },
+  { key: 'character-selin', label: 'Selin', color: '#b8862f', symbol: '', image: avatarPortraits.selin },
+  { key: 'character-murat', label: 'Murat', color: '#8a3540', symbol: '', image: avatarPortraits.murat },
+  { key: 'character-nermin', label: 'Nermin', color: '#6b7a3a', symbol: '', image: avatarPortraits.nermin },
   { key: 'emerald', label: 'Zümrüt', color: '#2d8b65', symbol: 'A', image: null },
-  { key: 'gold', label: 'Altın', color: '#d9a441', symbol: '♛', image: null },
+  { key: 'gold', label: 'Altın', color: '#e8be70', symbol: '♛', image: null },
   { key: 'ruby', label: 'Yakut', color: '#a64048', symbol: '♥', image: null },
   { key: 'sapphire', label: 'Safir', color: '#376b9a', symbol: '♠', image: null },
   { key: 'plum', label: 'Mürdüm', color: '#795083', symbol: '♦', image: null },
@@ -78,10 +84,13 @@ export function refreshPlayerProfile() {
   loading = (async () => {
     update({ loading: true, error: '' });
     const local = await AsyncStorage.getItem(storageKey);
-    const cached = local ? JSON.parse(local) as PlayerProfile : null;
-    if (cached) update({ profile: { ...cached, displayName: cached.username || cached.displayName } });
-
+    // An existing session is read from the device, so this stays instant; the cache
+    // only stands in for the same account, never one that signed out on this phone.
     const session = await ensureSession();
+    const stored = local ? JSON.parse(local) as PlayerProfile : null;
+    const cached = stored?.userId === session.user.id ? stored : null;
+    update({ profile: cached ? { ...cached, displayName: cached.username || cached.displayName } : null });
+
     const { data, error } = await supabase!.from('profiles')
       .select('*')
       .eq('user_id', session.user.id).maybeSingle();
@@ -133,6 +142,15 @@ export async function savePlayerProfile(username: string, avatarKey: AvatarKey) 
 
 export function profileLevel(experience: number) {
   return Math.floor(Math.sqrt(Math.max(0, experience) / 100)) + 1;
+}
+
+/** How far the player is through the current level: level L spans 100·(L−1)² to 100·L² XP. */
+export function levelProgress(experience: number) {
+  const xp = Math.max(0, experience);
+  const level = profileLevel(xp);
+  const start = 100 * (level - 1) ** 2;
+  const needed = 100 * level ** 2 - start;
+  return { level, current: xp - start, needed, ratio: (xp - start) / needed };
 }
 
 export function avatarFor(key: AvatarKey | string) {
